@@ -1,0 +1,96 @@
+services:
+  journal-db:
+    container_name: journal-db
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-journal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-journal-internal-db}
+      POSTGRES_DB: ${POSTGRES_DB:-journal}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  journal-api:
+    container_name: journal-api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      network: host
+    expose:
+      - "4010"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.journal-api-web.rule: "Host(`journal.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.journal-api-web.entrypoints: web
+      traefik.http.routers.journal-api-web.middlewares: redirect-to-https@file
+      traefik.http.routers.journal-api-web.service: journal-api-svc
+      traefik.http.routers.journal-api-secure.rule: "Host(`journal.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.journal-api-secure.entrypoints: websecure
+      traefik.http.routers.journal-api-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.journal-api-secure.middlewares: journal-strip-api
+      traefik.http.routers.journal-api-secure.service: journal-api-svc
+      traefik.http.middlewares.journal-strip-api.stripprefix.prefixes: /api
+      traefik.http.services.journal-api-svc.loadbalancer.server.port: "4010"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-journal}:${POSTGRES_PASSWORD:-journal-internal-db}@journal-db:5432/${POSTGRES_DB:-journal}?sslmode=disable
+      PORT: "4010"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      INGEST_TOKEN: ${INGEST_TOKEN:-change-me}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4010/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      journal-db:
+        condition: service_healthy
+
+  journal-client:
+    container_name: journal-client
+    build:
+      context: apps/client
+      dockerfile: Dockerfile
+      network: host
+    expose:
+      - "3000"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.journal-client-web.rule: "Host(`journal.facile.studio`)"
+      traefik.http.routers.journal-client-web.entrypoints: web
+      traefik.http.routers.journal-client-web.middlewares: redirect-to-https@file
+      traefik.http.routers.journal-client-web.service: journal-client-svc
+      traefik.http.routers.journal-client-secure.rule: "Host(`journal.facile.studio`)"
+      traefik.http.routers.journal-client-secure.entrypoints: websecure
+      traefik.http.routers.journal-client-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.journal-client-secure.service: journal-client-svc
+      traefik.http.services.journal-client-svc.loadbalancer.server.port: "3000"
+    environment:
+      API_URL: http://journal-api:4010
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
+    depends_on:
+      journal-api:
+        condition: service_healthy
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  db_data:
+    name: journal_db_data

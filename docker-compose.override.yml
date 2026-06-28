@@ -1,0 +1,12 @@
+services:
+  journal-db:
+    ports:
+      - "5432:5432"
+
+  journal-api:
+    ports:
+      - "4010:4010"
+
+  journal-client:
+    ports:
+      - "3000:3000"

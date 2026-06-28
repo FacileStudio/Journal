@@ -1,0 +1,18 @@
+# Go
+/apps/api/vendor/
+/apps/api/tmp/
+
+# Node
+node_modules/
+.svelte-kit/
+build/
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Data
+*.db
