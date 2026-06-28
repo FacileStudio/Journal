@@ -10,9 +10,15 @@ requests to the Go API internally. Postgres is an internal Docker service with h
 credentials.
 
 ```
-Facile apps ──POST /ingest──▶ Go API (:4010) ──▶ Postgres
-Browser ──▶ SvelteKit (:3000) ──/api/*──▶ Go API (:4010)
+Facile apps ──POST /ingest (Bearer INGEST_TOKEN)──▶ Go API (:4010) ──▶ Postgres
+Browser ──login──▶ SvelteKit (:3000) ──/api/* (Bearer session)──▶ Go API (:4010)
 ```
+
+The dashboard is behind email/password login (mirrors the Nuage pattern: Argon2id passwords,
+DB-backed sessions). `/logs` and `/apps` require a valid session; `/ingest` keeps its separate
+machine token. The first account created becomes admin — set `ALLOW_REGISTRATION=false` to lock
+sign-ups once your accounts exist (the first account is always allowed, so you can't lock
+yourself out).
 
 ## Stack
 
@@ -29,7 +35,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` and create the first account — it becomes the admin.
 
 ### Local development
 
@@ -116,6 +122,7 @@ app down with it.
 |---|---|---|
 | `ORIGIN` | Public URL of the SvelteKit app (CSRF) | `http://localhost:3000` |
 | `INGEST_TOKEN` | Bearer token required to POST `/ingest` | `change-me` |
+| `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
 | `ALLOWED_ORIGINS` / `DOMAINS` | Allowed frontend origins for CORS | — |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, or `error` | `info` |
 | `DATABASE_URL` | Postgres connection string | internal Docker default |

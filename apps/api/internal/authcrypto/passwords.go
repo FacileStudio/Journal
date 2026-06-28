@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -60,4 +61,23 @@ func VerifyPassword(password, encoded string) bool {
 
 	got := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+var (
+	dummyOnce sync.Once
+	dummyHash string
+)
+
+// EqualizeTiming runs a verification against a fixed throwaway hash so that a
+// login attempt for an unknown account costs about as much as one for a known
+// account, mitigating user enumeration via response timing.
+func EqualizeTiming(password string) {
+	dummyOnce.Do(func() {
+		if h, err := HashPassword("timing-equalizer-not-a-secret"); err == nil {
+			dummyHash = h
+		}
+	})
+	if dummyHash != "" {
+		VerifyPassword(password, dummyHash)
+	}
 }

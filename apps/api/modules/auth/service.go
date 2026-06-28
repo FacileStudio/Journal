@@ -89,6 +89,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*schemas.U
 	err := s.orm.WithContext(ctx).Where("email = ?", email).First(&user).Error
 	if err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			authcrypto.EqualizeTiming(password)
 			return nil, "", errors.Unauthorized("invalid email or password")
 		}
 		return nil, "", errors.Internal("failed to load user", err)
