@@ -1,0 +1,99 @@
+package auth
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Journal/apps/api/internal/errors"
+	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
+	"github.com/FacileStudio/Journal/apps/api/schemas"
+)
+
+type Handler struct {
+	service           *Service
+	allowRegistration bool
+}
+
+func newHandler(service *Service, allowRegistration bool) *Handler {
+	return &Handler{service: service, allowRegistration: allowRegistration}
+}
+
+func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
+	httpjson.WriteJSON(w, http.StatusOK, ConfigResponse{AllowRegistration: h.allowRegistration})
+}
+
+func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
+	if !h.allowRegistration {
+		hasUsers, err := h.service.HasUsers(r.Context())
+		if err != nil {
+			httpjson.WriteError(w, err)
+			return
+		}
+		if hasUsers {
+			httpjson.WriteError(w, errors.Forbidden("registration is disabled"))
+			return
+		}
+	}
+
+	var req RegisterRequest
+	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+
+	user, token, err := h.service.Register(r.Context(), req.Email, req.Name, req.Password)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusCreated, AuthResponse{Token: token, User: toUserResponse(*user)})
+}
+
+func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+
+	user, token, err := h.service.Login(r.Context(), req.Email, req.Password)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, AuthResponse{Token: token, User: toUserResponse(*user)})
+}
+
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
+	if err := h.service.Logout(r.Context(), r.Header.Get("Authorization")); err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
+	identity, ok := authcontext.From(r.Context())
+	if !ok {
+		httpjson.WriteError(w, errors.Unauthorized("not authenticated"))
+		return
+	}
+
+	user, err := h.service.UserByID(r.Context(), identity.UserID)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, MeResponse{User: toUserResponse(*user)})
+}
+
+func toUserResponse(user schemas.User) UserResponse {
+	return UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		IsAdmin:   user.IsAdmin,
+		CreatedAt: user.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}

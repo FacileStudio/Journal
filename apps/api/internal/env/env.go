@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	DatabaseURL    string
-	Port           string
-	LogLevel       string
-	IngestToken    string
-	AllowedOrigins []string
+	DatabaseURL       string
+	Port              string
+	LogLevel          string
+	IngestToken       string
+	AllowRegistration bool
+	AllowedOrigins    []string
 }
 
 func Load() (Config, error) {
@@ -20,7 +21,8 @@ func Load() (Config, error) {
 		DatabaseURL: valueOrDefault("DATABASE_URL", "postgres://journal:journal@localhost:5432/journal?sslmode=disable"),
 		Port:        valueOrDefault("PORT", "4010"),
 		LogLevel:    valueOrDefault("LOG_LEVEL", "info"),
-		IngestToken: os.Getenv("INGEST_TOKEN"),
+		IngestToken:       os.Getenv("INGEST_TOKEN"),
+		AllowRegistration: boolOrDefault("ALLOW_REGISTRATION", true),
 	}
 
 	port, err := strconv.Atoi(cfg.Port)
@@ -52,6 +54,17 @@ func valueOrDefault(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func boolOrDefault(key string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateLogLevel(level string) error {

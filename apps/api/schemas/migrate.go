@@ -3,7 +3,7 @@ package schemas
 import "gorm.io/gorm"
 
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &Session{}); err != nil {
 		return err
 	}
 

@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { backend, type AppSummary, type LogEntry, type LogLevel, type ListLogsParams } from '$lib/backend';
+	import { getContext, onMount } from 'svelte';
+	import { backend, type AppSummary, type AuthUser, type LogEntry, type LogLevel, type ListLogsParams } from '$lib/backend';
+
+	const auth = getContext<{ user: AuthUser | null; logout: () => void }>('auth');
 
 	const levels: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
@@ -198,9 +200,25 @@
 				class="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium transition-colors {liveTail ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}"
 				onclick={() => (liveTail = !liveTail)}
 			>
-				<span class="inline-block h-2 w-2 rounded-full {liveTail ? 'animate-pulse bg-primary-foreground' : 'bg-muted-foreground'}"></span>
+				<span class="inline-block h-2 w-2 rounded-full {liveTail ? 'animate-pulse bg-green-500' : 'bg-muted-foreground'}"></span>
 				Live tail
 			</button>
+
+			<div class="ml-1 flex items-center gap-2 border-l border-border pl-3">
+				{#if auth?.user}
+					<span class="hidden max-w-[12rem] truncate text-sm text-muted-foreground sm:inline" title={auth.user.email}>
+						{auth.user.name || auth.user.email}
+					</span>
+				{/if}
+				<button
+					class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
+					title="Sign out"
+					aria-label="Sign out"
+					onclick={() => auth?.logout()}
+				>
+					<iconify-icon icon="solar:logout-2-linear" width="16"></iconify-icon>
+				</button>
+			</div>
 		</header>
 
 		{#if error}

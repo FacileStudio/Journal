@@ -1,6 +1,31 @@
+import { browser } from '$app/environment';
+import { goto } from '$app/navigation';
+import { clearToken, getToken } from './auth';
+
 const backendBaseUrl = '/api';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export type AuthUser = {
+	id: number;
+	email: string;
+	name: string;
+	is_admin: boolean;
+	created_at: string;
+};
+
+export type AuthResponse = {
+	token: string;
+	user: AuthUser;
+};
+
+export type MeResponse = {
+	user: AuthUser;
+};
+
+export type AuthConfig = {
+	allow_registration: boolean;
+};
 
 export type LogEntry = {
 	id: number;
@@ -46,7 +71,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 	if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
 		headers.set('Content-Type', 'application/json');
 	}
+	const token = getToken();
+	if (token) headers.set('Authorization', `Bearer ${token}`);
+
 	const response = await fetch(`${backendBaseUrl}${path}`, { ...options, headers });
+	if (response.status === 401 && !path.startsWith('/auth/')) {
+		clearToken();
+		if (browser) goto('/login');
+	}
 	if (!response.ok) {
 		let payload: ApiErrorPayload | undefined;
 		try {
@@ -63,6 +95,32 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
 export const backend = {
 	baseUrl: backendBaseUrl,
+
+	authConfig() {
+		return apiFetch<AuthConfig>('/auth/config');
+	},
+
+	login(email: string, password: string) {
+		return apiFetch<AuthResponse>('/auth/login', {
+			method: 'POST',
+			body: JSON.stringify({ email, password })
+		});
+	},
+
+	register(email: string, password: string, name = '') {
+		return apiFetch<AuthResponse>('/auth/register', {
+			method: 'POST',
+			body: JSON.stringify({ email, password, name })
+		});
+	},
+
+	logout() {
+		return apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' });
+	},
+
+	me() {
+		return apiFetch<MeResponse>('/auth/me');
+	},
 
 	listLogs(params: ListLogsParams = {}) {
 		const qs = new URLSearchParams();

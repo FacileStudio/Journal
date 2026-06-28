@@ -15,6 +15,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Journal/apps/api/internal/logger"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
+	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
@@ -57,6 +58,7 @@ func main() {
 
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
+	authService := auth.NewService(db)
 
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
@@ -80,8 +82,13 @@ func main() {
 		httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
+	auth.RegisterRoutes(router, authService, appEnv.AllowRegistration)
 	ingest.RegisterRoutes(router, ingestService, appEnv.IngestToken)
-	logs.RegisterRoutes(router, logsService)
+
+	router.Group(func(protected chi.Router) {
+		protected.Use(middleware.RequireAuth(authService))
+		logs.RegisterRoutes(protected, logsService)
+	})
 
 	addr := ":" + appEnv.Port
 	server := &http.Server{

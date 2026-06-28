@@ -46,6 +46,7 @@ services:
       PORT: "4010"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       INGEST_TOKEN: ${INGEST_TOKEN:-change-me}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4010/health || exit 1"]

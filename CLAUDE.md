@@ -10,7 +10,7 @@ Docker-deployed.
 |-------|------|
 | API | Go 1.24, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-node |
-| Auth | Static Bearer token (`INGEST_TOKEN`) on `/ingest` only |
+| Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: static Bearer `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
 ## Key Commands
@@ -72,17 +72,23 @@ Journal/
         httpjson/                  # JSON decode/encode + error helpers
         errors/                    # typed errors -> HTTP status mapping
         logger/                    # structured slog logging
-        middleware/                # CORS, security headers, request logging, ingest token
-      schemas/                     # GORM models + Migrate (AutoMigrate + raw SQL indexes)
+        authcrypto/                # Argon2id password hashing + session token gen/hash
+        authcontext/               # request-scoped authenticated identity
+        middleware/                # CORS, security headers, request logging, ingest token, RequireAuth
+      schemas/                     # GORM models (log_entry, user, session) + Migrate
       modules/
+        auth/                      # /auth/{config,register,login,logout,me} — sessions
         ingest/                    # POST /ingest (single + batch), token-protected
-        logs/                      # GET /logs (search/filter/cursor), GET /apps
+        logs/                      # GET /logs (search/filter/cursor), GET /apps — session-protected
     client/
       src/
-        lib/backend.ts             # typed API client (listLogs, listApps)
+        lib/backend.ts             # typed API client (auth, listLogs, listApps)
+        lib/auth.ts                # localStorage session token (journal.token)
         routes/
-          +page.svelte             # logs dashboard (filters, search, live tail, expand)
-          api/[...path]/           # reverse proxy to Go API
+          login/+page.svelte       # sign in / register
+          (app)/+layout.svelte     # auth guard — redirects to /login, exposes user via context
+          (app)/+page.svelte       # logs dashboard (filters, search, live tail, expand)
+          api/[...path]/           # reverse proxy to Go API (forwards Authorization)
       static/                      # favicon, logo, fonts
 ```
 
@@ -105,6 +111,7 @@ prefix before the API and routes the rest to the client.
 | `PORT` | API listen port | `4010` |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `INGEST_TOKEN` | Bearer token required to POST `/ingest` | — (empty rejects all ingest) |
+| `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
 | `ALLOWED_ORIGINS` / `DOMAINS` | Comma-separated CORS origins | — |
 | `ORIGIN` | Public client URL (CSRF) | `http://localhost:3000` |
 
@@ -128,6 +135,22 @@ Extra indexes: GIN on `search`, composite `(app, created_at DESC)`. `schemas.Mig
 `tsvector` column or a `DESC` composite index).
 
 ## API Contract
+
+### Auth (`/auth/*`)
+
+Dashboard accounts. DB-backed sessions: a random 32-byte token is returned to the client and
+stored SHA256-hashed in `sessions`; passwords are Argon2id. The first account created becomes
+admin. The token is sent as `Authorization: Bearer <token>` and the client keeps it in
+`localStorage` (`journal.token`).
+
+- `GET /auth/config` → `{ "allow_registration": bool }` (drives the register tab)
+- `POST /auth/register` → `{ token, user }` (201). Body `{ email, name?, password }`, password ≥ 12 chars. Locked once accounts exist if `ALLOW_REGISTRATION=false` (first account always allowed).
+- `POST /auth/login` → `{ token, user }`. Body `{ email, password }`.
+- `POST /auth/logout` (Bearer) → deletes the session.
+- `GET /auth/me` (Bearer) → `{ user }`.
+
+`GET /logs` and `GET /apps` require a valid Bearer session token. `/ingest` is unchanged
+(machine-to-machine `INGEST_TOKEN`). `/health` and `/ready` stay public.
 
 ### `POST /ingest` (Bearer `INGEST_TOKEN`)
 
