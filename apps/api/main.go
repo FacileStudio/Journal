@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,13 +12,16 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/database"
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
+	"github.com/FacileStudio/Journal/apps/api/internal/errors"
 	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Journal/apps/api/internal/logger"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
+	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
+	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
 	"github.com/go-chi/chi/v5"
@@ -64,15 +67,22 @@ func main() {
 	if appEnv.RetentionDays > 0 {
 		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
 	}
+	go alerts.RunEvaluator(shutdownSignal, db, appLogger)
 
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
 	authService := auth.NewService(db)
 	apiKeysService := apikeys.NewService(db)
+	queriesService := queries.NewService(db)
+	alertsService := alerts.NewService(db)
 
-	credentialLimiter := httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint))
-	sessionLimiter := httprate.LimitByIP(300, time.Minute)
-	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash))
+	rateLimitExceeded := httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
+	})
+	credentialLimiter := httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint), rateLimitExceeded)
+	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
+	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
@@ -102,9 +112,11 @@ func main() {
 		protected.Use(sessionLimiter)
 		protected.Use(middleware.RequireAuth(authService))
 		logs.RegisterRoutes(protected, logsService)
+		queries.RegisterRoutes(protected, queriesService)
 		protected.Group(func(admin chi.Router) {
 			admin.Use(middleware.RequireAdmin)
 			apikeys.RegisterRoutes(admin, apiKeysService)
+			alerts.RegisterRoutes(admin, alertsService)
 		})
 	})
 
@@ -125,7 +137,7 @@ func main() {
 	appLogger.Info("server starting", slog.String("addr", addr))
 	select {
 	case err := <-serverErrCh:
-		if !errors.Is(err, http.ErrServerClosed) {
+		if !stderrors.Is(err, http.ErrServerClosed) {
 			appLogger.Error("server stopped", slog.Any("error", err))
 			os.Exit(1)
 		}

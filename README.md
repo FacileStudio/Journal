@@ -120,7 +120,18 @@ shipLog('info', 'app started', { version: '1.2.3' });
 ```
 
 The `.catch(() => {})` keeps logging best-effort — Journal being down should never take an
-app down with it.
+app down with it. A smarter shipper should buffer and retry on `429` (honor `Retry-After`)
+and `5xx`, and drop the batch on any other `4xx`. Batches accept gzip bodies
+(`Content-Encoding: gzip`) and cap at 1000 entries.
+
+### Zero-code collection from Docker
+
+Apps that only write to stdout/stderr can be captured by the collector sidecar
+(`apps/collector`): it tails every container on the host via the Docker socket and ships to
+`/ingest`. Enable it by setting `COMPOSE_PROFILES=collector` in the deploy environment — it
+requires the legacy `INGEST_TOKEN` (it ships many apps, so per-app keys don't fit). Label a
+container `journal.ignore=true` to skip it, or `journal.app=<name>` to rename it. See
+[`apps/collector/README.md`](apps/collector/README.md).
 
 ## Configuration
 

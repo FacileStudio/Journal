@@ -116,6 +116,60 @@ export type CreateApiKeyResponse = {
 	token: string;
 };
 
+export type SavedQueryParams = {
+	app?: string;
+	levels?: string[];
+	q?: string;
+	request_id?: string;
+};
+
+export type SavedQuery = {
+	id: number;
+	name: string;
+	params: SavedQueryParams;
+	created_at: string;
+};
+
+export type ListSavedQueriesResponse = {
+	queries: SavedQuery[];
+};
+
+export type SavedQueryResponse = {
+	query: SavedQuery;
+};
+
+export type AlertRule = {
+	id: number;
+	name: string;
+	saved_query_id: number;
+	query_name: string;
+	threshold: number;
+	window_minutes: number;
+	webhook_url: string;
+	webhook_header: string;
+	enabled: boolean;
+	last_fired_at: string | null;
+	created_at: string;
+};
+
+export type ListAlertsResponse = {
+	alerts: AlertRule[];
+};
+
+export type AlertResponse = {
+	alert: AlertRule;
+};
+
+export type CreateAlertParams = {
+	name: string;
+	saved_query_id: number;
+	threshold: number;
+	window_minutes: number;
+	webhook_url: string;
+	webhook_header?: string;
+	webhook_secret?: string;
+};
+
 type ApiErrorPayload = {
 	error?: { message?: string };
 };
@@ -229,5 +283,42 @@ export const backend = {
 
 	revokeApiKey(id: number) {
 		return apiFetch<Record<string, never>>(`/apikeys/${id}`, { method: 'DELETE' });
+	},
+
+	listQueries() {
+		return apiFetch<ListSavedQueriesResponse>('/queries');
+	},
+
+	createQuery(name: string, params: SavedQueryParams) {
+		return apiFetch<SavedQueryResponse>('/queries', {
+			method: 'POST',
+			body: JSON.stringify({ name, params })
+		});
+	},
+
+	deleteQuery(id: number) {
+		return apiFetch<Record<string, never>>(`/queries/${id}`, { method: 'DELETE' });
+	},
+
+	listAlerts() {
+		return apiFetch<ListAlertsResponse>('/alerts');
+	},
+
+	createAlert(params: CreateAlertParams) {
+		return apiFetch<AlertResponse>('/alerts', {
+			method: 'POST',
+			body: JSON.stringify(params)
+		});
+	},
+
+	updateAlert(id: number, params: { enabled: boolean }) {
+		return apiFetch<AlertResponse>(`/alerts/${id}`, {
+			method: 'PATCH',
+			body: JSON.stringify(params)
+		});
+	},
+
+	deleteAlert(id: number) {
+		return apiFetch<Record<string, never>>(`/alerts/${id}`, { method: 'DELETE' });
 	}
 };

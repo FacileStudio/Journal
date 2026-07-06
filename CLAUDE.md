@@ -76,12 +76,15 @@ Journal/
         authcrypto/                # Argon2id password hashing + session/API token gen/hash, strict Bearer parsing
         authcontext/               # request-scoped authenticated identity + ingest key scope
         middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAuth, RequireAdmin
-      schemas/                     # GORM models (log_entry, user, session, api_key) + Migrate
+      schemas/                     # GORM models (log_entry, user, session, api_key, saved_query, alert_rule) + Migrate
       modules/
         auth/                      # /auth/{config,register,login,logout,me} — sessions
-        ingest/                    # POST /ingest (single + batch), per-app key or legacy token
+        ingest/                    # POST /ingest (single + batch, gzip), per-app key or legacy token
         logs/                      # GET /logs, /logs/histogram, /logs/{id}/context, GET /apps — session-protected
         apikeys/                   # /apikeys CRUD — session + admin only
+        queries/                   # /queries CRUD (saved filter sets) — session-protected
+        alerts/                    # /alerts CRUD + 60s webhook evaluator — session + admin only
+    collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /ingest
     client/
       src/
         hooks.server.ts            # security headers on all responses (CSP lives in svelte.config.js)
@@ -90,8 +93,9 @@ Journal/
         routes/
           login/+page.svelte       # sign in / register (redirects authed users to /)
           (app)/+layout.svelte     # auth guard — redirects to /login, exposes user via context
-          (app)/+page.svelte       # dashboard: filters, time range, histogram, live tail, request_id pivot, context panel
+          (app)/+page.svelte       # dashboard: filters, saved queries, time range, histogram, live tail (pause/gap markers), pivots, context panel
           (app)/keys/+page.svelte  # API key management (admin only)
+          (app)/alerts/+page.svelte # alert rules management (admin only)
           api/[...path]/           # reverse proxy to Go API (dev plumbing — prod bypasses it, see Architecture)
       static/                      # favicon, logo, fonts, vendored iconify-icon script
 ```
@@ -176,10 +180,12 @@ Auth: Bearer token, either a **per-app API key** (`journal_<app>_…`) or the le
 (filled with the key's app) or equal to it, else 400. Legacy token is unscoped (`app`
 required per entry). No valid credential → 401.
 
-Single entry **or** batch. Entry fields: `app` (see above), `level` (optional, default `info`),
-`message` (required, truncated at 64KB on a rune boundary with `" [truncated]"` appended),
-`ts` (optional RFC3339 → `created_at`; more than 5 min in the future → server receipt time),
-`meta` (optional object).
+Single entry **or** batch (max 1000 entries, else 400). `Content-Encoding: gzip` accepted
+(8MB raw cap, 32MB decompressed cap → 413). Entry fields: `app` (see above), `level`
+(optional, default `info`), `message` (required, truncated at 64KB on a rune boundary with
+`" [truncated]"` appended), `ts` (optional RFC3339 → `created_at`; more than 5 min in the
+future → server receipt time), `meta` (optional object). Rate-limited responses are 429 with
+`Retry-After: 60` — shippers should buffer and retry on 429/5xx and drop on other 4xx.
 
 ```jsonc
 { "app": "nuage", "level": "error", "message": "boom", "meta": { "k": "v" } }
@@ -217,6 +223,29 @@ Unfiltered stream around one entry (defaults 50, max 200 each; 404 unknown id). 
 - `GET /apikeys` → `{ "keys": [ { "id", "app", "prefix", "created_at", "revoked_at" } ] }`
 - `POST /apikeys` body `{ "app" }` (`^[a-z0-9][a-z0-9-]{0,63}$`) → 201 `{ "key", "token" }` — full token shown once, only its SHA256 stored. Multiple active keys per app allowed (zero-downtime rotation: add new → redeploy app → revoke old).
 - `DELETE /apikeys/{id}` → 204, sets `revoked_at` (idempotent).
+
+### `/queries` (session)
+
+Saved filter sets: `params` = `{ app?, levels? (string[]), q?, request_id? }` — no time fields.
+
+- `GET /queries` → `{ "queries": [ { "id", "name", "params", "created_at" } ] }` ordered by name
+- `POST /queries` body `{ "name", "params" }` → 201 `{ "query" }`; duplicate name → 409
+- `DELETE /queries/{id}` → 204; referenced by alert rules → 409 "delete dependent alert rules first"
+
+### `/alerts` (session + admin)
+
+Rules reference a saved query (FK `ON DELETE RESTRICT`) and fire a webhook when the query
+matches ≥ `threshold` entries in the last `window_minutes`. A 60s evaluator goroutine skips
+rules fired within their window (re-arm after a full window); `last_fired_at` is set only on
+a 2xx webhook response, so failures retry next tick. Payload:
+`{ alert, query, count, threshold, window_minutes, since, until, entries[≤5 newest] }`,
+optionally with a custom auth header (`webhook_header: webhook_secret` — secret is write-only,
+never returned).
+
+- `GET /alerts` → `{ "alerts": [ { "id", "name", "saved_query_id", "query_name", "threshold", "window_minutes", "webhook_url", "webhook_header", "enabled", "last_fired_at", "created_at" } ] }`
+- `POST /alerts` body `{ "name", "saved_query_id", "threshold", "window_minutes", "webhook_url", "webhook_header"?, "webhook_secret"? }` → 201 `{ "alert" }`
+- `PATCH /alerts/{id}` body `{ "enabled" }` → 200 `{ "alert" }`
+- `DELETE /alerts/{id}` → 204 idempotent
 
 ### `GET /apps`
 
@@ -258,14 +287,20 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
 - CSP is configured in `svelte.config.js` (`kit.csp`, auto nonces); the other security headers
   live in `src/hooks.server.ts`. The Go API sets its own headers for `/api/*` (the prod path).
 
-## Pass 2 (not yet built — see ROADMAP.md)
+## Collector sidecar
 
-- **Alerting rules**: saved queries evaluated every N minutes, firing to Nook webhooks when a
-  count threshold is crossed.
-- **Ingest hardening**: gzip request bodies, batch entry-count cap, 429 + `Retry-After`.
-- **Docker log auto-collector**: a sidecar tailing container stdout/json-file logs and shipping
-  to `/ingest`, so apps that only `console.log` are captured with zero code change.
+`apps/collector` (stdlib-only Go) tails every Docker container on the host via
+`/var/run/docker.sock` and ships lines to `/ingest` — zero code change for apps that only
+write stdout/stderr. Opt-in via compose profile: set `COMPOSE_PROFILES=collector` in the
+deploy env. It ships many apps, so it needs the **legacy unscoped `INGEST_TOKEN`** (per-app
+keys won't work). Container labels: `journal.ignore=true` to skip, `journal.app=<name>` to
+override the app name. On restart it resumes from "now" (small loss accepted). See
+`apps/collector/README.md`.
+
+## Later drawer (see ROADMAP.md §3 for triggers)
+
 - **Partitioning**: monthly partitions + drop-partition retention once `log_entries` reaches
   ~10GB (the `RETENTION_DAYS` delete job covers current volume).
+- **OTLP `/v1/logs`** when a real OTel-instrumented app needs it.
 - **ClickHouse/VictoriaLogs migration path**: once volume outgrows Postgres (~100M rows), keep
   the same HTTP contract so the client and shippers don't change.

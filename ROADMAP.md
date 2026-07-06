@@ -92,19 +92,19 @@ Found in review; none require design work.
 
 ## 2. v1.2 — comfort and robustness
 
-- [ ] **Saved queries** — tiny `saved_queries` table (name, filter params), a dropdown in the
+- [x] **Saved queries** — tiny `saved_queries` table (name, filter params), a dropdown in the
       dashboard. Prerequisite for alerting.
-- [ ] **Webhook alerts** — evaluate saved queries every N minutes; if count > threshold, POST
+- [x] **Webhook alerts** — evaluate saved queries every N minutes; if count > threshold, POST
       to a webhook (Nook). Skip Alertmanager-style routing; one URL per rule.
-- [ ] **Ingest hardening** — accept `Content-Encoding: gzip` (stdlib `gzip.NewReader`), cap
+- [x] **Ingest hardening** — accept `Content-Encoding: gzip` (stdlib `gzip.NewReader`), cap
       batches at 1000 entries → 400, return 429 + `Retry-After` under pressure. Document
       retryable statuses (429/5xx) in the shipper snippet.
-- [ ] **Tail ergonomics over transport** — pause button, filter-while-tailing, "may have
+- [x] **Tail ergonomics over transport** — pause button, filter-while-tailing, "may have
       missed logs" marker when a poll returns a full page (100), clickable fields (app, level,
       request_id) that pivot the filter. Polling at 2.5s is fine for one user — VictoriaLogs
       polls its own storage at 1s internally. If upgrading anyway: SSE (`http.Flusher` +
       `EventSource`), never WebSocket.
-- [ ] **Docker log collector sidecar** — tail container json-file logs on la ruche and ship to
+- [x] **Docker log collector sidecar** — tail container json-file logs on la ruche and ship to
       `/ingest`, so apps that only `console.log` are captured with zero code change.
 
 ## 3. Later drawer (open only on trigger)

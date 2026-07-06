@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/errors"
+	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
 	"gorm.io/gorm"
@@ -20,38 +21,14 @@ func NewService(orm *gorm.DB) *Service {
 }
 
 type ListParams struct {
-	App       string
-	Levels    []string
-	Query     string
-	RequestID string
-	Since     *time.Time
-	Until     *time.Time
-	Limit     int
-	BeforeTs  *time.Time
-	BeforeID  *int64
+	logfilter.Params
+	Limit    int
+	BeforeTs *time.Time
+	BeforeID *int64
 }
 
 func (s *Service) filtered(ctx context.Context, params ListParams) *gorm.DB {
-	query := s.orm.WithContext(ctx).Model(&schemas.LogEntry{})
-	if params.App != "" {
-		query = query.Where("app = ?", params.App)
-	}
-	if len(params.Levels) > 0 {
-		query = query.Where("level IN ?", params.Levels)
-	}
-	if params.Query != "" {
-		query = query.Where("search @@ websearch_to_tsquery('simple', ?)", params.Query)
-	}
-	if params.RequestID != "" {
-		query = query.Where("meta->>'request_id' = ?", params.RequestID)
-	}
-	if params.Since != nil {
-		query = query.Where("created_at >= ?", *params.Since)
-	}
-	if params.Until != nil {
-		query = query.Where("created_at <= ?", *params.Until)
-	}
-	return query
+	return logfilter.Apply(s.orm.WithContext(ctx).Model(&schemas.LogEntry{}), params.Params)
 }
 
 func (s *Service) List(ctx context.Context, params ListParams) ([]schemas.LogEntry, error) {

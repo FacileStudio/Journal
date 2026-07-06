@@ -3,6 +3,7 @@ package ingest
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -13,9 +14,11 @@ import (
 )
 
 const (
-	maxMessageBytes    = 64 * 1024
-	truncationSuffix   = " [truncated]"
-	maxFutureTimestamp = 5 * time.Minute
+	maxMessageBytes      = 64 * 1024
+	truncationSuffix     = " [truncated]"
+	maxFutureTimestamp   = 5 * time.Minute
+	maxBatchEntries      = 1000
+	maxDecompressedBytes = 32 << 20
 )
 
 var validLevels = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
@@ -30,8 +33,19 @@ func newHandler(service *Service) *Handler {
 
 func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 	var req IngestRequest
-	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
-		httpjson.WriteError(w, err)
+	var decodeErr error
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Content-Encoding")), "gzip") {
+		decodeErr = httpjson.DecodeGzipJSON(w, r, &req, maxDecompressedBytes)
+	} else {
+		decodeErr = httpjson.DecodeJSON(w, r, &req)
+	}
+	if decodeErr != nil {
+		httpjson.WriteError(w, decodeErr)
+		return
+	}
+
+	if len(req.Entries) > maxBatchEntries {
+		httpjson.WriteError(w, errors.Invalid(fmt.Sprintf("batch exceeds the maximum of %d entries", maxBatchEntries)))
 		return
 	}
 

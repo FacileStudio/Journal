@@ -98,6 +98,27 @@ services:
       journal-api:
         condition: service_healthy
 
+  journal-collector:
+    container_name: journal-collector
+    profiles: ["collector"]
+    restart: unless-stopped
+    build:
+      context: apps/collector
+      dockerfile: Dockerfile
+      network: host
+    networks:
+      - default
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      JOURNAL_URL: http://journal-api:4010
+      JOURNAL_TOKEN: ${INGEST_TOKEN:-}
+    labels:
+      journal.ignore: "true"
+    depends_on:
+      journal-api:
+        condition: service_healthy
+
 networks:
   dokploy-network:
     external: true

@@ -1,6 +1,11 @@
 package ingest
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +32,59 @@ func TestClampTimestamp(t *testing.T) {
 				t.Fatalf("clampTimestamp(%v) = %v, want %v", tc.parsed, got, tc.want)
 			}
 		})
+	}
+}
+
+func batchBody(t *testing.T, size int) []byte {
+	t.Helper()
+	entries := make([]IngestEntry, size)
+	for i := range entries {
+		entries[i] = IngestEntry{App: "nuage", Message: "boom"}
+	}
+	body, err := json.Marshal(IngestRequest{Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal batch: %v", err)
+	}
+	return body
+}
+
+func TestBatchCap(t *testing.T) {
+	handler := newHandler(nil)
+
+	request := httptest.NewRequest(http.MethodPost, "/ingest", bytes.NewReader(batchBody(t, maxBatchEntries+1)))
+	recorder := httptest.NewRecorder()
+	handler.ingest(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "1000") {
+		t.Fatalf("error body %q does not name the limit", recorder.Body.String())
+	}
+}
+
+func TestBatchCapGzip(t *testing.T) {
+	handler := newHandler(nil)
+
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(batchBody(t, maxBatchEntries+1)); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/ingest", &compressed)
+	request.Header.Set("Content-Encoding", "gzip")
+	recorder := httptest.NewRecorder()
+	handler.ingest(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "1000") {
+		t.Fatalf("error body %q does not name the limit", recorder.Body.String())
 	}
 }
 

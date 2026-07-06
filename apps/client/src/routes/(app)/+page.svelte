@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from 'svelte';
-	import { backend, type AppSummary, type AuthUser, type HistogramCounts, type HistogramResponse, type ListLogsParams, type LogCursor, type LogEntry, type LogLevel } from '$lib/backend';
+	import { backend, type AppSummary, type AuthUser, type HistogramCounts, type HistogramResponse, type ListLogsParams, type LogCursor, type LogEntry, type LogLevel, type SavedQuery, type SavedQueryParams } from '$lib/backend';
 
 	const auth = getContext<{ user: AuthUser | null; logout: () => void }>('auth');
 
@@ -35,9 +35,16 @@
 	let loading = $state(false);
 	let loadingMore = $state(false);
 	let liveTail = $state(false);
+	let tailPaused = $state(false);
+	let gapIds = $state<number[]>([]);
 	let expandedId = $state<number | null>(null);
 	let error = $state('');
 	let hist = $state<Histogram | null>(null);
+
+	let savedQueries = $state<SavedQuery[]>([]);
+	let savedQueryError = $state('');
+	let savingQuery = $state(false);
+	let deletingQueryId = $state<number | null>(null);
 
 	let contextOpen = $state(false);
 	let contextEntries = $state<LogEntry[]>([]);
@@ -89,6 +96,7 @@
 			if (gen !== loadGen) return;
 			entries = res.entries;
 			nextBefore = res.next_before;
+			gapIds = [];
 		} catch (err) {
 			if (gen !== loadGen) return;
 			error = err instanceof Error ? err.message : 'Failed to load logs';
@@ -120,10 +128,15 @@
 		if (pollCount % 4 === 0) loadHistogram();
 		try {
 			const res = await backend.listLogs({ ...filterParams(), limit: 100 });
-			if (gen !== loadGen || !liveTail) return;
+			if (gen !== loadGen || !liveTail || tailPaused) return;
 			const maxId = entries.reduce((max, entry) => Math.max(max, entry.id), 0);
 			const fresh = res.entries.filter((entry) => entry.id > maxId);
-			if (fresh.length) entries = [...fresh, ...entries].slice(0, MAX_ENTRIES);
+			if (fresh.length) {
+				if (fresh.length === 100 && entries.length > 0) {
+					gapIds = [...gapIds, fresh[fresh.length - 1].id];
+				}
+				entries = [...fresh, ...entries].slice(0, MAX_ENTRIES);
+			}
 		} catch {
 			/* keep tailing silently */
 		}
@@ -225,6 +238,89 @@
 	function selectApp(name: string) {
 		selectedApp = selectedApp === name ? null : name;
 		applyFilters();
+	}
+
+	async function loadSavedQueries() {
+		try {
+			const res = await backend.listQueries();
+			savedQueries = res.queries;
+		} catch {
+			savedQueries = [];
+		}
+	}
+
+	function savedQuerySummary(saved: SavedQuery): string {
+		const parts: string[] = [];
+		if (saved.params.app) parts.push(`app:${saved.params.app}`);
+		if (saved.params.levels?.length) parts.push(`levels:${saved.params.levels.join(',')}`);
+		if (saved.params.q) parts.push(`q:${saved.params.q}`);
+		if (saved.params.request_id) parts.push(`req:${saved.params.request_id}`);
+		return parts.length ? parts.join(' · ') : 'no filters';
+	}
+
+	function applySavedQuery(saved: SavedQuery) {
+		selectedApp = saved.params.app || null;
+		selectedLevels = levels.filter((level) => saved.params.levels?.includes(level));
+		query = saved.params.q ?? '';
+		requestId = saved.params.request_id || null;
+		savedQueryError = '';
+		applyFilters();
+	}
+
+	async function saveCurrentQuery() {
+		if (savingQuery) return;
+		const name = prompt('Name for this saved query:')?.trim();
+		if (!name) return;
+		const params: SavedQueryParams = {};
+		if (selectedApp) params.app = selectedApp;
+		if (selectedLevels.length) params.levels = selectedLevels;
+		if (query.trim()) params.q = query.trim();
+		if (requestId) params.request_id = requestId;
+		savingQuery = true;
+		savedQueryError = '';
+		try {
+			await backend.createQuery(name, params);
+			await loadSavedQueries();
+		} catch (err) {
+			savedQueryError = err instanceof Error ? err.message : 'Failed to save query';
+		} finally {
+			savingQuery = false;
+		}
+	}
+
+	async function deleteSavedQuery(saved: SavedQuery) {
+		if (deletingQueryId != null) return;
+		if (!confirm(`Delete saved query "${saved.name}"?`)) return;
+		deletingQueryId = saved.id;
+		savedQueryError = '';
+		try {
+			await backend.deleteQuery(saved.id);
+			await loadSavedQueries();
+		} catch (err) {
+			savedQueryError = err instanceof Error ? err.message : 'Failed to delete saved query';
+		} finally {
+			deletingQueryId = null;
+		}
+	}
+
+	function toggleLiveTail() {
+		liveTail = !liveTail;
+		if (!liveTail) tailPaused = false;
+	}
+
+	function toggleTailPause() {
+		tailPaused = !tailPaused;
+		if (!tailPaused) applyFilters();
+	}
+
+	function pivotApp(name: string, event: Event) {
+		event.stopPropagation();
+		selectApp(name);
+	}
+
+	function pivotLevel(level: LogLevel, event: Event) {
+		event.stopPropagation();
+		toggleLevel(level);
 	}
 
 	function toggleLevel(level: LogLevel) {
@@ -341,6 +437,7 @@
 
 	onMount(() => {
 		loadApps();
+		loadSavedQueries();
 		load();
 		loadHistogram();
 	});
@@ -350,7 +447,7 @@
 	});
 
 	$effect(() => {
-		if (!liveTail) return;
+		if (!liveTail || tailPaused) return;
 		const interval = setInterval(poll, 2500);
 		return () => clearInterval(interval);
 	});
@@ -374,6 +471,45 @@
 		</div>
 
 		<div class="flex-1 overflow-y-auto px-3 py-4">
+			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Saved queries</div>
+			<div class="mb-5 flex flex-col gap-1">
+				{#if savedQueryError}
+					<p class="px-2 py-1 text-xs text-destructive">{savedQueryError}</p>
+				{/if}
+				{#if savedQueries.length === 0}
+					<p class="px-2 py-1.5 text-sm text-muted-foreground">No saved queries yet.</p>
+				{:else}
+					{#each savedQueries as saved (saved.id)}
+						<div class="flex items-center gap-1">
+							<button
+								class="flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+								title={savedQuerySummary(saved)}
+								onclick={() => applySavedQuery(saved)}
+							>
+								<span class="truncate font-medium">{saved.name}</span>
+							</button>
+							<button
+								class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+								title="Delete saved query"
+								aria-label="Delete saved query {saved.name}"
+								onclick={() => deleteSavedQuery(saved)}
+								disabled={deletingQueryId != null}
+							>
+								<iconify-icon icon="solar:trash-bin-trash-linear" width="14"></iconify-icon>
+							</button>
+						</div>
+					{/each}
+				{/if}
+				<button
+					class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+					onclick={saveCurrentQuery}
+					disabled={savingQuery}
+				>
+					<iconify-icon icon="solar:add-circle-linear" width="16"></iconify-icon>
+					{savingQuery ? 'Saving…' : 'Save current filters'}
+				</button>
+			</div>
+
 			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Levels</div>
 			<div class="mb-5 flex flex-col gap-1">
 				{#each levels as level (level)}
@@ -470,11 +606,21 @@
 			{/if}
 			<button
 				class="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium transition-colors {liveTail ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}"
-				onclick={() => (liveTail = !liveTail)}
+				onclick={toggleLiveTail}
 			>
-				<span class="inline-block h-2 w-2 rounded-full {liveTail ? 'animate-pulse bg-green-500 motion-reduce:animate-none' : 'bg-muted-foreground'}"></span>
+				<span class="inline-block h-2 w-2 rounded-full {liveTail && !tailPaused ? 'animate-pulse bg-green-500 motion-reduce:animate-none' : 'bg-muted-foreground'}"></span>
 				Live tail
 			</button>
+			{#if liveTail}
+				<button
+					class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium transition-colors {tailPaused ? 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20' : 'bg-background hover:bg-accent'}"
+					title={tailPaused ? 'Resume live tail' : 'Pause live tail'}
+					onclick={toggleTailPause}
+				>
+					<iconify-icon icon={tailPaused ? 'solar:play-linear' : 'solar:pause-linear'} width="14"></iconify-icon>
+					{tailPaused ? 'Resume' : 'Pause'}
+				</button>
+			{/if}
 
 			<div class="ml-1 flex items-center gap-2 border-l border-border pl-3">
 				{#if auth?.user}
@@ -490,6 +636,14 @@
 						aria-label="API keys"
 					>
 						<iconify-icon icon="solar:key-linear" width="16"></iconify-icon>
+					</a>
+					<a
+						href="/alerts"
+						class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
+						title="Alerts"
+						aria-label="Alerts"
+					>
+						<iconify-icon icon="solar:bell-linear" width="16"></iconify-icon>
 					</a>
 				{/if}
 				<button
@@ -567,10 +721,34 @@
 							>
 								<td class="whitespace-nowrap px-5 py-2 font-mono text-xs text-muted-foreground">{formatTime(entry.created_at)}</td>
 								<td class="px-3 py-2">
-									<span class="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">{entry.app}</span>
+									<span
+										role="button"
+										tabindex="0"
+										class="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground outline-none ring-ring transition-colors hover:bg-accent focus-visible:ring-2"
+										title="Filter by app {entry.app}"
+										onclick={(event) => pivotApp(entry.app, event)}
+										onkeydown={(event) => {
+											if (event.key === 'Enter' || event.key === ' ') {
+												event.preventDefault();
+												pivotApp(entry.app, event);
+											}
+										}}
+									>{entry.app}</span>
 								</td>
 								<td class="px-3 py-2">
-									<span class="rounded-md px-1.5 py-0.5 text-xs font-medium uppercase {levelClass(entry.level)}">{entry.level}</span>
+									<span
+										role="button"
+										tabindex="0"
+										class="rounded-md px-1.5 py-0.5 text-xs font-medium uppercase outline-none ring-ring transition-opacity hover:opacity-80 focus-visible:ring-2 {levelClass(entry.level)}"
+										title="Toggle level {entry.level}"
+										onclick={(event) => pivotLevel(entry.level, event)}
+										onkeydown={(event) => {
+											if (event.key === 'Enter' || event.key === ' ') {
+												event.preventDefault();
+												pivotLevel(entry.level, event);
+											}
+										}}
+									>{entry.level}</span>
 								</td>
 								<td class="max-w-0 truncate px-3 py-2 font-mono text-xs">{entry.message}</td>
 							</tr>
@@ -604,6 +782,16 @@
 											{/if}
 										</div>
 										<div class="mt-2 text-xs text-muted-foreground">received {formatTime(entry.received_at)}</div>
+									</td>
+								</tr>
+							{/if}
+							{#if gapIds.includes(entry.id)}
+								<tr class="border-b border-border/60 bg-muted/40">
+									<td colspan="4" class="px-5 py-1.5 text-center text-xs text-muted-foreground">
+										<span class="inline-flex items-center gap-1.5">
+											<iconify-icon icon="solar:danger-triangle-linear" width="14"></iconify-icon>
+											possible gap — some logs may not be shown
+										</span>
 									</td>
 								</tr>
 							{/if}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/errors"
 	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
+	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
 	"github.com/go-chi/chi/v5"
@@ -123,11 +124,13 @@ func (h *Handler) apps(w http.ResponseWriter, r *http.Request) {
 func parseListParams(r *http.Request) (ListParams, error) {
 	q := r.URL.Query()
 	params := ListParams{
-		App:       q.Get("app"),
-		Query:     q.Get("q"),
-		RequestID: q.Get("request_id"),
-		Limit:     100,
-		Levels:    parseLevels(q["level"]),
+		Params: logfilter.Params{
+			App:       q.Get("app"),
+			Query:     q.Get("q"),
+			RequestID: q.Get("request_id"),
+			Levels:    parseLevels(q["level"]),
+		},
+		Limit: 100,
 	}
 
 	if raw := q.Get("limit"); raw != "" {

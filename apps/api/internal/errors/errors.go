@@ -30,6 +30,7 @@ func NotFound(message string) *Error     { return New("not_found", message, nil)
 func Conflict(message string) *Error     { return New("already_exists", message, nil) }
 func Failed(message string) *Error       { return New("failed_precondition", message, nil) }
 func TooLarge(message string) *Error     { return New("resource_exhausted", message, nil) }
+func RateLimited(message string) *Error  { return New("rate_limited", message, nil) }
 
 func Internal(message string, cause error) *Error {
 	return New("internal", message, cause)
@@ -56,6 +57,8 @@ func Status(err error) int {
 		return http.StatusPreconditionFailed
 	case "resource_exhausted":
 		return http.StatusRequestEntityTooLarge
+	case "rate_limited":
+		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}
