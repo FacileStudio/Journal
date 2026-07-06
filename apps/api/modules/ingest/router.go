@@ -1,12 +1,12 @@
 package ingest
 
 import (
-	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func RegisterRoutes(router chi.Router, service *Service, token string) {
+func RegisterRoutes(router chi.Router, service *Service, limiter, ingestAuth func(http.Handler) http.Handler) {
 	handler := newHandler(service)
-	router.With(middleware.RequireToken(token)).Post("/ingest", handler.ingest)
+	router.With(limiter, ingestAuth).Post("/ingest", handler.ingest)
 }

@@ -2,6 +2,7 @@ services:
   journal-db:
     container_name: journal-db
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-journal}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-journal-internal-db}
@@ -11,13 +12,14 @@ services:
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U journal"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-journal}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   journal-api:
     container_name: journal-api
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -45,9 +47,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-journal}:${POSTGRES_PASSWORD:-journal-internal-db}@journal-db:5432/${POSTGRES_DB:-journal}?sslmode=disable
       PORT: "4010"
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      INGEST_TOKEN: ${INGEST_TOKEN:-change-me}
+      INGEST_TOKEN: ${INGEST_TOKEN:-}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4010/health || exit 1"]
       interval: 10s
@@ -60,6 +63,7 @@ services:
 
   journal-client:
     container_name: journal-client
+    restart: unless-stopped
     build:
       context: apps/client
       dockerfile: Dockerfile
@@ -84,6 +88,12 @@ services:
     environment:
       API_URL: http://journal-api:4010
       ORIGIN: ${ORIGIN:-http://localhost:3000}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       journal-api:
         condition: service_healthy

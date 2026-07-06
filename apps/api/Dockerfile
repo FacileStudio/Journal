@@ -14,7 +14,6 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH:-amd64} go build -o bin/a
 
 FROM alpine:3.20
 
-RUN apk add --no-cache wget
 RUN addgroup -S journal && adduser -S journal -G journal
 
 WORKDIR /app

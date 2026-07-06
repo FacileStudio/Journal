@@ -3,7 +3,7 @@ package schemas
 import "gorm.io/gorm"
 
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}, &User{}, &Session{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &Session{}, &APIKey{}); err != nil {
 		return err
 	}
 
@@ -11,6 +11,8 @@ func Migrate(db *gorm.DB) error {
 		`ALTER TABLE log_entries ADD COLUMN IF NOT EXISTS search tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(message, ''))) STORED`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_search ON log_entries USING GIN(search)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_log_entries_created_at_id ON log_entries (created_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_request_id ON log_entries ((meta->>'request_id')) WHERE meta ? 'request_id'`,
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {

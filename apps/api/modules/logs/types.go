@@ -10,9 +10,14 @@ type LogResponse struct {
 	ReceivedAt string         `json:"received_at"`
 }
 
+type Cursor struct {
+	Ts string `json:"ts"`
+	ID int64  `json:"id"`
+}
+
 type ListResponse struct {
 	Entries    []LogResponse `json:"entries"`
-	NextBefore *int64        `json:"next_before"`
+	NextBefore *Cursor       `json:"next_before"`
 }
 
 type AppSummary struct {
@@ -23,4 +28,19 @@ type AppSummary struct {
 
 type AppsResponse struct {
 	Apps []AppSummary `json:"apps"`
+}
+
+type HistogramBucket struct {
+	Ts     string           `json:"ts"`
+	Counts map[string]int64 `json:"counts"`
+}
+
+type HistogramResponse struct {
+	BucketSeconds int64             `json:"bucket_seconds"`
+	Buckets       []HistogramBucket `json:"buckets"`
+}
+
+type ContextResponse struct {
+	Entries  []LogResponse `json:"entries"`
+	AnchorID int64         `json:"anchor_id"`
 }

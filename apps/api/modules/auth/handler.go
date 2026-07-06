@@ -24,25 +24,13 @@ func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	if !h.allowRegistration {
-		hasUsers, err := h.service.HasUsers(r.Context())
-		if err != nil {
-			httpjson.WriteError(w, err)
-			return
-		}
-		if hasUsers {
-			httpjson.WriteError(w, errors.Forbidden("registration is disabled"))
-			return
-		}
-	}
-
 	var req RegisterRequest
 	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}
 
-	user, token, err := h.service.Register(r.Context(), req.Email, req.Name, req.Password)
+	user, token, err := h.service.Register(r.Context(), req.Email, req.Name, req.Password, h.allowRegistration)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return

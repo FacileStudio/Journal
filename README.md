@@ -5,20 +5,22 @@ to Journal over HTTP; a SvelteKit dashboard lets you search, filter, and live-ta
 
 ## Architecture
 
-Single public endpoint: the SvelteKit client serves the dashboard and proxies `/api/*`
-requests to the Go API internally. Postgres is an internal Docker service with hardcoded
-credentials.
+The SvelteKit client serves the dashboard; in production Traefik routes `/api/*` directly to
+the Go API (the client's reverse proxy covers local dev). Postgres is an internal Docker
+service with hardcoded credentials and no published ports.
 
 ```
-Facile apps ──POST /ingest (Bearer INGEST_TOKEN)──▶ Go API (:4010) ──▶ Postgres
+Facile apps ──POST /ingest (Bearer per-app key)──▶ Go API (:4010) ──▶ Postgres
 Browser ──login──▶ SvelteKit (:3000) ──/api/* (Bearer session)──▶ Go API (:4010)
 ```
 
 The dashboard is behind email/password login (mirrors the Nuage pattern: Argon2id passwords,
-DB-backed sessions). `/logs` and `/apps` require a valid session; `/ingest` keeps its separate
-machine token. The first account created becomes admin — set `ALLOW_REGISTRATION=false` to lock
-sign-ups once your accounts exist (the first account is always allowed, so you can't lock
-yourself out).
+DB-backed sessions). `/logs` and `/apps` require a valid session; `/ingest` takes a per-app
+API key created on the dashboard's Keys page (admin only) — or the legacy shared
+`INGEST_TOKEN` if you set one. The first account created becomes admin — set
+`ALLOW_REGISTRATION=false` to lock sign-ups once your accounts exist (the first account is
+always allowed, so you can't lock yourself out). Log entries older than `RETENTION_DAYS`
+(default 90) are deleted hourly.
 
 ## Stack
 
@@ -32,17 +34,19 @@ yourself out).
 
 ```sh
 cp .env.example .env
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Open `http://localhost:3000` and create the first account — it becomes the admin.
+Open `http://localhost:3000` and create the first account — it becomes the admin. Then create
+a per-app API key on the Keys page for each app that will ship logs. (Plain
+`docker compose up` is the production shape: no host ports published.)
 
 ### Local development
 
 1. Start PostgreSQL:
 
 ```sh
-docker compose up journal-db -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up journal-db -d
 ```
 
 2. Start the API (port 4010):
@@ -63,9 +67,11 @@ bun run dev
 
 ## Shipping a test log
 
+Create a key on the dashboard's Keys page (or set the legacy `INGEST_TOKEN`), then:
+
 ```sh
 curl -X POST http://localhost:4010/ingest \
-  -H "Authorization: Bearer change-me" \
+  -H "Authorization: Bearer journal_nuage_..." \
   -H "Content-Type: application/json" \
   -d '{
     "app": "nuage",
@@ -79,7 +85,7 @@ Batch ingest:
 
 ```sh
 curl -X POST http://localhost:4010/ingest \
-  -H "Authorization: Bearer change-me" \
+  -H "Authorization: Bearer journal_opus_..." \
   -H "Content-Type: application/json" \
   -d '{ "entries": [
     { "app": "opus", "level": "info", "message": "task created" },
@@ -93,7 +99,7 @@ A tiny client any Facile app can drop in:
 
 ```ts
 const JOURNAL_URL = process.env.JOURNAL_URL ?? 'http://localhost:4010';
-const JOURNAL_TOKEN = process.env.JOURNAL_TOKEN ?? 'change-me';
+const JOURNAL_TOKEN = process.env.JOURNAL_TOKEN ?? '';
 
 export async function shipLog(
 	level: 'debug' | 'info' | 'warn' | 'error',
@@ -121,7 +127,8 @@ app down with it.
 | Variable | Description | Default |
 |---|---|---|
 | `ORIGIN` | Public URL of the SvelteKit app (CSRF) | `http://localhost:3000` |
-| `INGEST_TOKEN` | Bearer token required to POST `/ingest` | `change-me` |
+| `INGEST_TOKEN` | Legacy shared ingest token; empty disables it (per-app keys are primary) | — (empty) |
+| `RETENTION_DAYS` | Delete log entries older than N days; `0` keeps forever | `90` |
 | `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
 | `ALLOWED_ORIGINS` / `DOMAINS` | Allowed frontend origins for CORS | — |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, or `error` | `info` |

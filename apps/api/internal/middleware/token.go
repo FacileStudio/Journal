@@ -1,23 +1,44 @@
 package middleware
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
-	"strings"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Journal/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Journal/apps/api/internal/errors"
 	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
 )
 
-func RequireToken(expected string) func(http.Handler) http.Handler {
+type IngestKeyVerifier interface {
+	VerifyIngestKey(ctx context.Context, token string) (string, error)
+}
+
+func RequireIngestAuth(legacyToken string, keys IngestKeyVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			token := strings.TrimSpace(strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer "))
-			if expected == "" || token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(expected)) != 1 {
-				httpjson.WriteError(w, errors.Unauthorized("invalid ingest token"))
+			token, ok := authcrypto.BearerToken(request.Header.Get("Authorization"))
+			if !ok {
+				httpjson.WriteError(w, errors.Unauthorized("missing bearer token"))
 				return
 			}
-			next.ServeHTTP(w, request)
+			if legacyToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(legacyToken)) == 1 {
+				next.ServeHTTP(w, request)
+				return
+			}
+			app, err := keys.VerifyIngestKey(request.Context(), token)
+			if err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			scoped := authcontext.WithIngestScope(request.Context(), authcontext.IngestScope{App: app})
+			next.ServeHTTP(w, request.WithContext(scoped))
 		})
 	}
+}
+
+func KeyByBearerTokenHash(request *http.Request) (string, error) {
+	token, _ := authcrypto.BearerToken(request.Header.Get("Authorization"))
+	return authcrypto.HashToken(token), nil
 }

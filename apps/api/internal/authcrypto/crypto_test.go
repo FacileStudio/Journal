@@ -37,6 +37,33 @@ func TestVerifyRejectsMalformed(t *testing.T) {
 	}
 }
 
+func TestBearerToken(t *testing.T) {
+	cases := []struct {
+		name          string
+		authorization string
+		wantToken     string
+		wantOK        bool
+	}{
+		{"standard", "Bearer abc123", "abc123", true},
+		{"lowercase scheme", "bearer abc123", "abc123", true},
+		{"uppercase scheme", "BEARER abc123", "abc123", true},
+		{"extra spaces trimmed", "Bearer   abc123  ", "abc123", true},
+		{"raw token rejected", "abc123", "", false},
+		{"empty rejected", "", "", false},
+		{"scheme only rejected", "Bearer ", "", false},
+		{"scheme without space rejected", "Bearerabc123", "", false},
+		{"wrong scheme rejected", "Basic abc123", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			token, ok := BearerToken(tc.authorization)
+			if token != tc.wantToken || ok != tc.wantOK {
+				t.Fatalf("BearerToken(%q) = (%q, %v), want (%q, %v)", tc.authorization, token, ok, tc.wantToken, tc.wantOK)
+			}
+		})
+	}
+}
+
 func TestTokenHashDeterministicAndUnique(t *testing.T) {
 	token, err := NewToken()
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 )
 
 func NewToken() (string, error) {
@@ -18,4 +19,13 @@ func NewToken() (string, error) {
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func BearerToken(authorization string) (string, bool) {
+	const scheme = "bearer "
+	if len(authorization) <= len(scheme) || !strings.EqualFold(authorization[:len(scheme)], scheme) {
+		return "", false
+	}
+	token := strings.TrimSpace(authorization[len(scheme):])
+	return token, token != ""
 }

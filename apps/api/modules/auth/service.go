@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	sessionTTL     = 30 * 24 * time.Hour
-	minPasswordLen = 12
+	sessionTTL          = 30 * 24 * time.Hour
+	minPasswordLen      = 12
+	registrationLockKey = 0x6A6F75726E616C
 )
 
 type Service struct {
@@ -28,15 +29,7 @@ func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }
 
-func (s *Service) HasUsers(ctx context.Context) (bool, error) {
-	var count int64
-	if err := s.orm.WithContext(ctx).Model(&schemas.User{}).Count(&count).Error; err != nil {
-		return false, errors.Internal("failed to count users", err)
-	}
-	return count > 0, nil
-}
-
-func (s *Service) Register(ctx context.Context, email, name, password string) (*schemas.User, string, error) {
+func (s *Service) Register(ctx context.Context, email, name, password string, allowRegistration bool) (*schemas.User, string, error) {
 	email = normalizeEmail(email)
 	if !validEmail(email) {
 		return nil, "", errors.Invalid("a valid email is required")
@@ -53,9 +46,15 @@ func (s *Service) Register(ctx context.Context, email, name, password string) (*
 	user := schemas.User{Email: email, Name: strings.TrimSpace(name), PasswordHash: hash}
 
 	txErr := s.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(registrationLockKey)).Error; err != nil {
+			return errors.Internal("failed to acquire registration lock", err)
+		}
 		var count int64
 		if err := tx.Model(&schemas.User{}).Count(&count).Error; err != nil {
 			return errors.Internal("failed to count users", err)
+		}
+		if !allowRegistration && count > 0 {
+			return errors.Forbidden("registration is disabled")
 		}
 		var existing int64
 		if err := tx.Model(&schemas.User{}).Where("email = ?", email).Count(&existing).Error; err != nil {
@@ -67,6 +66,9 @@ func (s *Service) Register(ctx context.Context, email, name, password string) (*
 
 		user.IsAdmin = count == 0
 		if err := tx.Create(&user).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
+				return errors.Conflict("an account with this email already exists")
+			}
 			return errors.Internal("failed to create user", err)
 		}
 		return nil
@@ -99,6 +101,8 @@ func (s *Service) Login(ctx context.Context, email, password string) (*schemas.U
 		return nil, "", errors.Unauthorized("invalid email or password")
 	}
 
+	s.orm.WithContext(ctx).Where("expires_at < now()").Delete(&schemas.Session{})
+
 	token, err := s.issueSession(ctx, user.ID)
 	if err != nil {
 		return nil, "", err
@@ -128,11 +132,12 @@ func (s *Service) Authenticate(ctx context.Context, authorization string) (authc
 	var out struct {
 		UserID    int64
 		Email     string
+		IsAdmin   bool
 		ExpiresAt time.Time
 	}
 	err := s.orm.WithContext(ctx).
 		Table("sessions s").
-		Select("u.id as user_id, u.email as email, s.expires_at as expires_at").
+		Select("u.id as user_id, u.email as email, u.is_admin as is_admin, s.expires_at as expires_at").
 		Joins("join users u on u.id = s.user_id").
 		Where("s.token = ?", authcrypto.HashToken(token)).
 		Scan(&out).Error
@@ -145,7 +150,7 @@ func (s *Service) Authenticate(ctx context.Context, authorization string) (authc
 	if time.Now().After(out.ExpiresAt) {
 		return authcontext.Identity{}, errors.Unauthorized("expired auth token")
 	}
-	return authcontext.Identity{UserID: out.UserID, Email: out.Email}, nil
+	return authcontext.Identity{UserID: out.UserID, Email: out.Email, IsAdmin: out.IsAdmin}, nil
 }
 
 func (s *Service) UserByID(ctx context.Context, id int64) (*schemas.User, error) {
@@ -180,7 +185,11 @@ func normalizeEmail(email string) string {
 }
 
 func normalizeBearer(authorization string) string {
-	return strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+	token, ok := authcrypto.BearerToken(authorization)
+	if !ok {
+		return ""
+	}
+	return token
 }
 
 func validEmail(email string) bool {

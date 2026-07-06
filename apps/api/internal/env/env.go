@@ -14,13 +14,14 @@ type Config struct {
 	IngestToken       string
 	AllowRegistration bool
 	AllowedOrigins    []string
+	RetentionDays     int
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL: valueOrDefault("DATABASE_URL", "postgres://journal:journal@localhost:5432/journal?sslmode=disable"),
-		Port:        valueOrDefault("PORT", "4010"),
-		LogLevel:    valueOrDefault("LOG_LEVEL", "info"),
+		DatabaseURL:       valueOrDefault("DATABASE_URL", "postgres://journal:journal@localhost:5432/journal?sslmode=disable"),
+		Port:              valueOrDefault("PORT", "4010"),
+		LogLevel:          valueOrDefault("LOG_LEVEL", "info"),
 		IngestToken:       os.Getenv("INGEST_TOKEN"),
 		AllowRegistration: boolOrDefault("ALLOW_REGISTRATION", true),
 	}
@@ -32,6 +33,12 @@ func Load() (Config, error) {
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return Config{}, err
 	}
+
+	retentionDays, err := strconv.Atoi(strings.TrimSpace(valueOrDefault("RETENTION_DAYS", "90")))
+	if err != nil || retentionDays < 0 {
+		return Config{}, fmt.Errorf("RETENTION_DAYS must be a non-negative integer")
+	}
+	cfg.RetentionDays = retentionDays
 
 	origins := os.Getenv("ALLOWED_ORIGINS")
 	if origins == "" {

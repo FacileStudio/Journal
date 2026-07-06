@@ -37,9 +37,14 @@ export type LogEntry = {
 	received_at: string;
 };
 
+export type LogCursor = {
+	ts: string;
+	id: number;
+};
+
 export type ListLogsResponse = {
 	entries: LogEntry[];
-	next_before: number | null;
+	next_before: LogCursor | null;
 };
 
 export type AppSummary = {
@@ -56,10 +61,59 @@ export type ListLogsParams = {
 	app?: string;
 	level?: LogLevel[];
 	q?: string;
+	request_id?: string;
 	since?: string;
 	until?: string;
 	limit?: number;
-	before?: number;
+	before?: LogCursor;
+};
+
+export type HistogramParams = {
+	app?: string;
+	level?: LogLevel[];
+	q?: string;
+	request_id?: string;
+	since?: string;
+	until?: string;
+};
+
+export type HistogramCounts = {
+	debug?: number;
+	info?: number;
+	warn?: number;
+	error?: number;
+};
+
+export type HistogramBucket = {
+	ts: string;
+	counts: HistogramCounts;
+};
+
+export type HistogramResponse = {
+	bucket_seconds: number;
+	buckets: HistogramBucket[];
+};
+
+export type LogContextResponse = {
+	entries: LogEntry[];
+	anchor_id: number;
+};
+
+export type ApiKey = {
+	id: number;
+	app: string;
+	prefix: string;
+	created_at: string;
+	revoked_at: string | null;
+};
+
+export type ListApiKeysResponse = {
+	keys: ApiKey[];
+};
+
+export type CreateApiKeyResponse = {
+	key: ApiKey;
+	token: string;
 };
 
 type ApiErrorPayload = {
@@ -77,7 +131,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 	const response = await fetch(`${backendBaseUrl}${path}`, { ...options, headers });
 	if (response.status === 401 && !path.startsWith('/auth/')) {
 		clearToken();
-		if (browser) goto('/login');
+		if (browser) {
+			goto('/login');
+			return new Promise<never>(() => {});
+		}
 	}
 	if (!response.ok) {
 		let payload: ApiErrorPayload | undefined;
@@ -127,15 +184,50 @@ export const backend = {
 		if (params.app) qs.set('app', params.app);
 		if (params.level) for (const level of params.level) qs.append('level', level);
 		if (params.q) qs.set('q', params.q);
+		if (params.request_id) qs.set('request_id', params.request_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);
 		if (params.limit != null) qs.set('limit', String(params.limit));
-		if (params.before != null) qs.set('before', String(params.before));
+		if (params.before != null) {
+			qs.set('before_ts', params.before.ts);
+			qs.set('before_id', String(params.before.id));
+		}
 		const query = qs.size ? `?${qs}` : '';
 		return apiFetch<ListLogsResponse>(`/logs${query}`);
 	},
 
+	histogram(params: HistogramParams = {}) {
+		const qs = new URLSearchParams();
+		if (params.app) qs.set('app', params.app);
+		if (params.level?.length) qs.set('level', params.level.join(','));
+		if (params.q) qs.set('q', params.q);
+		if (params.request_id) qs.set('request_id', params.request_id);
+		if (params.since) qs.set('since', params.since);
+		if (params.until) qs.set('until', params.until);
+		const query = qs.size ? `?${qs}` : '';
+		return apiFetch<HistogramResponse>(`/logs/histogram${query}`);
+	},
+
+	logContext(id: number, before = 50, after = 50) {
+		return apiFetch<LogContextResponse>(`/logs/${id}/context?before=${before}&after=${after}`);
+	},
+
 	listApps() {
 		return apiFetch<ListAppsResponse>('/apps');
+	},
+
+	listApiKeys() {
+		return apiFetch<ListApiKeysResponse>('/apikeys');
+	},
+
+	createApiKey(app: string) {
+		return apiFetch<CreateApiKeyResponse>('/apikeys', {
+			method: 'POST',
+			body: JSON.stringify({ app })
+		});
+	},
+
+	revokeApiKey(id: number) {
+		return apiFetch<Record<string, never>>(`/apikeys/${id}`, { method: 'DELETE' });
 	}
 };

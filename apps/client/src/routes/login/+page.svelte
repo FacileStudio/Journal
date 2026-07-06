@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { backend } from '$lib/backend';
-	import { setToken } from '$lib/auth';
+	import { clearToken, getToken, setToken } from '$lib/auth';
 
 	let mode = $state<'login' | 'register'>('login');
 	let email = $state('');
@@ -13,6 +13,15 @@
 	let error = $state('');
 
 	onMount(async () => {
+		if (getToken()) {
+			try {
+				await backend.me();
+				goto('/');
+				return;
+			} catch {
+				clearToken();
+			}
+		}
 		try {
 			const cfg = await backend.authConfig();
 			allowRegistration = cfg.allow_registration;
