@@ -36,9 +36,14 @@ lights up the dashboard's request_id pivot.
 ## Behavior
 
 - Batched: flushes every 2s or at 200 entries, never blocks the caller.
-- Best-effort: retries on 429/5xx and network errors, drops on other 4xx,
-  drops oldest beyond a 5000-entry buffer when Journal is unreachable —
-  Journal being down never takes your app down.
+- Best-effort: retries on 429/5xx and network errors (honoring `Retry-After`
+  on 429), drops on other 4xx, drops oldest beyond a 5000-entry buffer when
+  Journal is unreachable — Journal being down never takes your app down.
+- Meta values are sanitized at log time: errors ship as their `.Error()`
+  message, `fmt.Stringer`s as `.String()`, and anything JSON can't encode
+  (channels, funcs, NaN, …) as a `%v` string — one exotic value can never
+  poison a batch. The caller may reuse the meta map after `Log` returns.
 - With a per-app key (`journal_<app>_…`) leave `Config.App` empty; the server
   fills it from the key's scope. The legacy shared token needs `App` set.
-- `Close()` flushes once on shutdown.
+- `Close()` drains the buffer on shutdown (best effort, bounded), is
+  idempotent, and counts anything undeliverable in `Dropped()`.

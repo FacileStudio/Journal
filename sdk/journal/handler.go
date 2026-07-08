@@ -3,6 +3,7 @@ package journal
 import (
 	"context"
 	"log/slog"
+	"time"
 )
 
 // Handler is a slog.Handler that ships every record to Journal and forwards
@@ -49,7 +50,20 @@ func (h *Handler) Handle(ctx context.Context, record slog.Record) error {
 	if len(meta) == 0 {
 		meta = nil
 	}
-	h.client.Log(levelName(record.Level), record.Message, meta)
+	if h.client == nil {
+		return err
+	}
+	ts := record.Time
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	h.client.enqueue(Entry{
+		App:     h.client.cfg.App,
+		Level:   levelName(record.Level),
+		Message: record.Message,
+		Ts:      ts.UTC().Format(time.RFC3339Nano),
+		Meta:    meta,
+	})
 	return err
 }
 
