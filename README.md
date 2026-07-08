@@ -95,7 +95,16 @@ curl -X POST http://localhost:4010/ingest \
 
 ## Shipping logs from a Facile app
 
-A tiny client any Facile app can drop in:
+**Go apps**: use the SDK — `go get github.com/FacileStudio/Journal/sdk/journal@main`, then
+tee your slog handler (see [`sdk/journal/README.md`](sdk/journal/README.md)):
+
+```go
+client := journal.New(journal.Config{URL: os.Getenv("JOURNAL_URL"), Token: os.Getenv("JOURNAL_TOKEN")})
+defer client.Close()
+slog.SetDefault(slog.New(journal.NewHandler(client, slog.Default().Handler())))
+```
+
+**TypeScript apps**: a tiny client to drop in:
 
 ```ts
 const JOURNAL_URL = process.env.JOURNAL_URL ?? 'http://localhost:4010';

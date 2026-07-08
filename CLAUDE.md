@@ -98,6 +98,8 @@ Journal/
           (app)/alerts/+page.svelte # alert rules management (admin only)
           api/[...path]/           # reverse proxy to Go API (dev plumbing — prod bypasses it, see Architecture)
       static/                      # favicon, logo, fonts, vendored iconify-icon script
+  sdk/
+    journal/                       # Go SDK: batching client + slog tee handler (stdlib-only, go-gettable)
 ```
 
 ## Architecture
