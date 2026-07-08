@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
@@ -32,12 +33,29 @@ type webhookPayload struct {
 	Entries       []schemas.LogEntry `json:"entries"`
 }
 
-func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger) {
-	client := &http.Client{Timeout: webhookTimeout}
+type webhookDelivery struct {
+	guarded      *http.Client
+	trusted      *http.Client
+	allowedHosts []string
+}
+
+func (d webhookDelivery) clientFor(host string) *http.Client {
+	if hostAllowed(host, d.allowedHosts) {
+		return d.trusted
+	}
+	return d.guarded
+}
+
+func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger, allowedHosts []string) {
+	delivery := webhookDelivery{
+		guarded:      guardedClient(webhookTimeout),
+		trusted:      trustedClient(webhookTimeout),
+		allowedHosts: allowedHosts,
+	}
 	ticker := time.NewTicker(evaluateInterval)
 	defer ticker.Stop()
 	for {
-		evaluateDueRules(ctx, orm, client, logger)
+		evaluateDueRules(ctx, orm, delivery, logger)
 		select {
 		case <-ctx.Done():
 			return
@@ -46,7 +64,7 @@ func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger) {
 	}
 }
 
-func evaluateDueRules(ctx context.Context, orm *gorm.DB, client *http.Client, logger *slog.Logger) {
+func evaluateDueRules(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, logger *slog.Logger) {
 	now := time.Now().UTC()
 
 	var rules []schemas.AlertRule
@@ -84,11 +102,11 @@ func evaluateDueRules(ctx context.Context, orm *gorm.DB, client *http.Client, lo
 		if !ok {
 			continue
 		}
-		evaluateRule(ctx, orm, client, logger, rule, savedQuery, now)
+		evaluateRule(ctx, orm, delivery, logger, rule, savedQuery, now)
 	}
 }
 
-func evaluateRule(ctx context.Context, orm *gorm.DB, client *http.Client, logger *slog.Logger, rule schemas.AlertRule, savedQuery schemas.SavedQuery, now time.Time) {
+func evaluateRule(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, logger *slog.Logger, rule schemas.AlertRule, savedQuery schemas.SavedQuery, now time.Time) {
 	until := now
 	since := now.Add(-time.Duration(rule.WindowMinutes) * time.Minute)
 	params := logfilter.Params{
@@ -132,7 +150,7 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, client *http.Client, logger
 		Until:         until.Format(time.RFC3339),
 		Entries:       entries,
 	}
-	if !deliverWebhook(ctx, client, logger, rule, payload) {
+	if !deliverWebhook(ctx, delivery, logger, rule, payload) {
 		return
 	}
 
@@ -143,12 +161,19 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, client *http.Client, logger
 	}
 }
 
-func deliverWebhook(ctx context.Context, client *http.Client, logger *slog.Logger, rule schemas.AlertRule, payload webhookPayload) bool {
+func deliverWebhook(ctx context.Context, delivery webhookDelivery, logger *slog.Logger, rule schemas.AlertRule, payload webhookPayload) bool {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		logger.Warn("alert payload encode failed", slog.String("alert", rule.Name), slog.Any("error", err))
 		return false
 	}
+
+	parsedURL, err := url.Parse(rule.WebhookURL)
+	if err != nil {
+		logger.Warn("alert webhook url invalid", slog.String("alert", rule.Name), slog.Any("error", err))
+		return false
+	}
+	client := delivery.clientFor(parsedURL.Hostname())
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, rule.WebhookURL, bytes.NewReader(body))
 	if err != nil {

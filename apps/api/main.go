@@ -67,7 +67,7 @@ func main() {
 	if appEnv.RetentionDays > 0 {
 		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
 	}
-	go alerts.RunEvaluator(shutdownSignal, db, appLogger)
+	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)

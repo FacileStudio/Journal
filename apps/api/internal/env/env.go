@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	DatabaseURL       string
-	Port              string
-	LogLevel          string
-	IngestToken       string
-	AllowRegistration bool
-	AllowedOrigins    []string
-	RetentionDays     int
+	DatabaseURL         string
+	Port                string
+	LogLevel            string
+	IngestToken         string
+	AllowRegistration   bool
+	AllowedOrigins      []string
+	RetentionDays       int
+	WebhookAllowedHosts []string
 }
 
 func Load() (Config, error) {
@@ -53,7 +54,20 @@ func Load() (Config, error) {
 		cfg.AllowedOrigins = []string{}
 	}
 
+	cfg.WebhookAllowedHosts = splitList(os.Getenv("WEBHOOK_ALLOWED_HOSTS"))
+
 	return cfg, nil
+}
+
+func splitList(value string) []string {
+	result := []string{}
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
 }
 
 func valueOrDefault(key string, fallback string) string {

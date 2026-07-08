@@ -3,6 +3,7 @@ package alerts
 import (
 	"context"
 	stderrors "errors"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -120,6 +121,9 @@ func validateRule(name string, threshold, windowMinutes int, webhookURL string) 
 	parsed, err := url.Parse(webhookURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return errors.Invalid("webhook_url must be a valid http or https URL")
+	}
+	if ip := net.ParseIP(parsed.Hostname()); ip != nil && isBlockedIP(ip) {
+		return errors.Invalid("webhook_url must not point at a private, loopback, or metadata address")
 	}
 	return nil
 }
