@@ -7,8 +7,8 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Journal/apps/api/internal/authcrypto"
-	"github.com/FacileStudio/Journal/apps/api/internal/errors"
-	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
+	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/httpjson"
 )
 
 type IngestKeyVerifier interface {

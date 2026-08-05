@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/errors"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )

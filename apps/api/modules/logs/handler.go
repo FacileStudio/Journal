@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/errors"
-	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/httpjson"
 
 	"github.com/go-chi/chi/v5"
 )

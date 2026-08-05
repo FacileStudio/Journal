@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
-	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
+	"github.com/FacileStudio/tronc/httpjson"
 )
 
 type Authenticator interface {

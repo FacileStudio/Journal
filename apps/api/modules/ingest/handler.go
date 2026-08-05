@@ -8,9 +8,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
-	"github.com/FacileStudio/Journal/apps/api/internal/errors"
-	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/httpjson"
 )
 
 const (
@@ -19,6 +19,7 @@ const (
 	maxFutureTimestamp   = 5 * time.Minute
 	maxBatchEntries      = 1000
 	maxDecompressedBytes = 32 << 20
+	maxCompressedBytes   = 8 << 20
 )
 
 var validLevels = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
@@ -35,9 +36,9 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 	var req IngestRequest
 	var decodeErr error
 	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Content-Encoding")), "gzip") {
-		decodeErr = httpjson.DecodeGzipJSON(w, r, &req, maxDecompressedBytes)
+		decodeErr = httpjson.DecodeGzipJSONLimit(w, r, &req, maxCompressedBytes, maxDecompressedBytes)
 	} else {
-		decodeErr = httpjson.DecodeJSON(w, r, &req)
+		decodeErr = httpjson.DecodeJSONLimit(w, r, &req, maxCompressedBytes)
 	}
 	if decodeErr != nil {
 		httpjson.WriteError(w, decodeErr)

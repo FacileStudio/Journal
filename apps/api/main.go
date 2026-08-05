@@ -12,9 +12,6 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/database"
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
-	"github.com/FacileStudio/Journal/apps/api/internal/errors"
-	"github.com/FacileStudio/Journal/apps/api/internal/httpjson"
-	"github.com/FacileStudio/Journal/apps/api/internal/logger"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
@@ -24,20 +21,30 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
+	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/health"
+	"github.com/FacileStudio/tronc/healthcheck"
+	"github.com/FacileStudio/tronc/httpjson"
+	"github.com/FacileStudio/tronc/httpx"
+	"github.com/FacileStudio/tronc/logger"
+	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 	"gorm.io/gorm"
 )
 
 func main() {
+	if healthcheck.Handle(os.Args) {
+		return
+	}
+
 	appEnv, err := env.Load()
-	appLogger := logger.New("info")
+	appLogger := logger.New(logger.Config{})
 	if err != nil {
 		appLogger.Error("failed to load config", slog.Any("error", err))
 		os.Exit(1)
 	}
-	appLogger = logger.New(appEnv.LogLevel)
+	appLogger = logger.New(logger.Config{Level: appEnv.LogLevel})
 
 	db, err := database.Open(appEnv.DatabaseURL)
 	if err != nil {
@@ -84,26 +91,15 @@ func main() {
 	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
 	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
-	router := chi.NewRouter()
-	router.Use(chimiddleware.RequestID)
-	router.Use(middleware.RealIP)
-	router.Use(middleware.CORS(appEnv.AllowedOrigins))
+	router := httpx.NewRouter(httpx.Config{
+		Logger: appLogger,
+		CORS: troncmiddleware.CORSConfig{
+			AllowedOrigins: appEnv.AllowedOrigins,
+		},
+	})
 	router.Use(middleware.SecurityHeaders)
-	router.Use(middleware.RequestLogger(appLogger))
-	router.Use(chimiddleware.Recoverer)
 
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
-		readinessContext, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		if err := sqlDB.PingContext(readinessContext); err != nil {
-			httpjson.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
-			return
-		}
-		httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-	})
+	health.Mount(router, health.DB(sqlDB))
 
 	auth.RegisterRoutes(router, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
 	ingest.RegisterRoutes(router, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
