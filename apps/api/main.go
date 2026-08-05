@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/database"
+	docs "github.com/FacileStudio/Journal/apps/api/internal/documentation"
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
@@ -22,6 +23,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
+	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/healthcheck"
@@ -82,53 +84,7 @@ func run() int {
 	}
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
-	ingestService := ingest.NewService(db)
-	logsService := logs.NewService(db)
-	authService := auth.NewService(db)
-	apiKeysService := apikeys.NewService(db)
-	queriesService := queries.NewService(db)
-	alertsService := alerts.NewService(db)
-
-	rateLimitExceeded := httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "60")
-		httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
-	})
-	credentialLimiter := httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint), rateLimitExceeded)
-	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
-	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
-
-	router := httpx.NewRouter(httpx.Config{
-		Logger: appLogger,
-		CORS: troncmiddleware.CORSConfig{
-			AllowedOrigins: appEnv.CORSAllowedOrigins,
-		},
-	})
-	router.Use(middleware.SecurityHeaders)
-
-	health.Mount(router, health.DB(sqlDB))
-
-	router.Route("/api", func(api chi.Router) {
-		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
-		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
-
-		api.Group(func(protected chi.Router) {
-			protected.Use(sessionLimiter)
-			protected.Use(middleware.RequireAuth(authService))
-			logs.RegisterRoutes(protected, logsService)
-			queries.RegisterRoutes(protected, queriesService)
-			protected.Group(func(admin chi.Router) {
-				admin.Use(middleware.RequireAdmin)
-				apikeys.RegisterRoutes(admin, apiKeysService)
-				alerts.RegisterRoutes(admin, alertsService)
-			})
-		})
-	})
-
-	clientDir := spa.DirFromEnv()
-	if spa.Available(clientDir) {
-		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
-		appLogger.Info("serving client", slog.String("dir", clientDir))
-	}
+	router := buildRouter(db, appEnv, appLogger, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -163,6 +119,68 @@ func run() int {
 	}
 
 	return 0
+}
+
+func buildRouter(db *gorm.DB, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
+	ingestService := ingest.NewService(db)
+	logsService := logs.NewService(db)
+	authService := auth.NewService(db)
+	apiKeysService := apikeys.NewService(db)
+	queriesService := queries.NewService(db)
+	alertsService := alerts.NewService(db)
+
+	rateLimitExceeded := httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
+	})
+	credentialLimiter := httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint), rateLimitExceeded)
+	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
+	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
+
+	router := httpx.NewRouter(httpx.Config{
+		Logger: appLogger,
+		CORS: troncmiddleware.CORSConfig{
+			AllowedOrigins: appEnv.CORSAllowedOrigins,
+		},
+	})
+	router.Use(middleware.SecurityHeaders)
+
+	health.Mount(router, checks...)
+	apiref.Mount(router, referenceConfig())
+
+	router.Route("/api", func(api chi.Router) {
+		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
+		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
+
+		api.Group(func(protected chi.Router) {
+			protected.Use(sessionLimiter)
+			protected.Use(middleware.RequireAuth(authService))
+			logs.RegisterRoutes(protected, logsService)
+			queries.RegisterRoutes(protected, queriesService)
+			protected.Group(func(admin chi.Router) {
+				admin.Use(middleware.RequireAdmin)
+				apikeys.RegisterRoutes(admin, apiKeysService)
+				alerts.RegisterRoutes(admin, alertsService)
+			})
+		})
+	})
+
+	clientDir := spa.DirFromEnv()
+	if spa.Available(clientDir) {
+		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
+		appLogger.Info("serving client", slog.String("dir", clientDir))
+	}
+
+	return router
+}
+
+func referenceConfig() apiref.Config {
+	return apiref.Config{
+		Title:       "Journal API",
+		Description: "Centralized logging for the Facile Suite: apps ship structured entries to /ingest, the dashboard searches them.",
+		Servers:     []string{"/api"},
+		Registry:    docs.Registry,
+	}
 }
 
 func runRetention(ctx context.Context, db *gorm.DB, days int, logger *slog.Logger) {
