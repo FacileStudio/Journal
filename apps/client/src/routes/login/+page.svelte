@@ -4,6 +4,12 @@
 	import { backend } from '$lib/backend';
 	import { clearToken, getToken, setToken } from '$lib/auth';
 
+	const inputClass =
+		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+	const labelClass = 'text-sm font-medium leading-none';
+	const primaryButtonClass =
+		'inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50';
+
 	let mode = $state<'login' | 'register'>('login');
 	let email = $state('');
 	let password = $state('');
@@ -56,96 +62,126 @@
 </script>
 
 <svelte:head>
-	<title>Journal — Sign in</title>
+	<title>{mode === 'register' ? 'Create account' : 'Log in'} — Journal</title>
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-	<div class="w-full max-w-sm">
-		<div class="mb-8 flex items-center justify-center gap-2">
-			<iconify-icon icon="solar:notebook-bold-duotone" width="26" class="text-foreground"></iconify-icon>
-			<span class="text-2xl font-bold font-heading tracking-tight">Journal</span>
+<div class="flex min-h-screen">
+	<div class="hidden lg:flex lg:w-1/2 flex-col bg-black px-12 py-10">
+		<a href="/" class="flex items-center gap-3 mb-auto">
+			<iconify-icon icon="solar:notebook-bold-duotone" width="28" class="text-white"></iconify-icon>
+			<span class="text-xl font-bold font-heading tracking-tight text-white">Journal</span>
+		</a>
+
+		<div class="mb-auto">
+			<h2 class="text-4xl font-bold font-heading text-white leading-tight tracking-tight">
+				Your logs.<br />Your server.
+			</h2>
+			<p class="mt-4 text-sm text-white/50 max-w-xs leading-relaxed">
+				Centralized logging for every app in the Facile Suite.
+			</p>
 		</div>
 
-		<div class="rounded-xl border border-border bg-card p-6 shadow-sm">
-			<h1 class="text-lg font-semibold">
-				{mode === 'register' ? 'Create your account' : 'Welcome back'}
-			</h1>
-			<p class="mt-1 text-sm text-muted-foreground">
-				{mode === 'register'
-					? 'Set up the first account to access the logs.'
-					: 'Sign in to view the Suite logs.'}
-			</p>
+		<p class="text-xs text-white/30">
+			© {new Date().getFullYear()} Journal by Facile.
+		</p>
+	</div>
 
-			<form class="mt-6 flex flex-col gap-4" onsubmit={submit}>
-				{#if mode === 'register'}
-					<label class="flex flex-col gap-1.5 text-sm">
-						<span class="font-medium">Name</span>
-						<input
-							type="text"
-							bind:value={name}
-							autocomplete="name"
-							placeholder="Ada Lovelace"
-							class="h-10 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						/>
-					</label>
-				{/if}
-
-				<label class="flex flex-col gap-1.5 text-sm">
-					<span class="font-medium">Email</span>
-					<input
-						type="email"
-						bind:value={email}
-						required
-						autocomplete="email"
-						placeholder="you@facile.studio"
-						class="h-10 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					/>
-				</label>
-
-				<label class="flex flex-col gap-1.5 text-sm">
-					<span class="font-medium">Password</span>
-					<input
-						type="password"
-						bind:value={password}
-						required
-						minlength={mode === 'register' ? 12 : undefined}
-						autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
-						placeholder="••••••••••••"
-						class="h-10 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					/>
-					{#if mode === 'register'}
-						<span class="text-xs text-muted-foreground">At least 12 characters.</span>
-					{/if}
-				</label>
-
-				{#if error}
-					<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-				{/if}
-
-				<button
-					type="submit"
-					disabled={busy}
-					class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-				>
-					{busy ? 'Please wait…' : mode === 'register' ? 'Create account' : 'Sign in'}
-				</button>
-			</form>
+	<div class="flex w-full lg:w-1/2 flex-col items-center justify-center px-8 py-12 bg-background">
+		<div class="w-full max-w-sm">
+			<div class="mb-8">
+				<h1 class="text-2xl font-bold font-heading tracking-tight text-foreground">
+					{mode === 'register' ? 'Create account' : 'Welcome back'}
+				</h1>
+				<p class="mt-1.5 text-sm text-muted-foreground">
+					{mode === 'register'
+						? 'Set up the first account to access the logs.'
+						: 'Log in to your Journal account.'}
+				</p>
+			</div>
 
 			{#if allowRegistration}
-				<p class="mt-4 text-center text-sm text-muted-foreground">
-					{#if mode === 'login'}
-						No account yet?
-						<button class="font-medium text-foreground hover:underline" onclick={() => switchMode('register')}>
-							Create one
-						</button>
-					{:else}
-						Already have an account?
-						<button class="font-medium text-foreground hover:underline" onclick={() => switchMode('login')}>
-							Sign in
-						</button>
-					{/if}
-				</p>
+				<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1" role="tablist">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={mode === 'login'}
+						class="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors {mode === 'login'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
+						onclick={() => switchMode('login')}
+					>Log in</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={mode === 'register'}
+						class="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors {mode === 'register'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:text-foreground'}"
+						onclick={() => switchMode('register')}
+					>Register</button>
+				</div>
 			{/if}
+
+			<form class="space-y-4" onsubmit={submit}>
+				{#if mode === 'register'}
+					<div class="space-y-1.5">
+						<label for="name" class={labelClass}>Name</label>
+						<input
+							id="name"
+							type="text"
+							bind:value={name}
+							placeholder="Ada Lovelace"
+							autocomplete="name"
+							disabled={busy}
+							class={inputClass}
+						/>
+					</div>
+				{/if}
+
+				<div class="space-y-1.5">
+					<label for="email" class={labelClass}>Email</label>
+					<input
+						id="email"
+						type="email"
+						bind:value={email}
+						placeholder="you@example.com"
+						autocomplete="email"
+						required
+						disabled={busy}
+						class={inputClass}
+					/>
+				</div>
+
+				<div class="space-y-1.5">
+					<label for="password" class={labelClass}>Password</label>
+					<input
+						id="password"
+						type="password"
+						bind:value={password}
+						placeholder="••••••••"
+						autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
+						minlength={mode === 'register' ? 12 : undefined}
+						required
+						disabled={busy}
+						class={inputClass}
+					/>
+					{#if mode === 'register'}
+						<p class="text-xs text-muted-foreground">At least 12 characters.</p>
+					{/if}
+				</div>
+
+				{#if error}
+					<p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+						{error}
+					</p>
+				{/if}
+
+				<button type="submit" disabled={busy} class={primaryButtonClass}>
+					{busy
+						? mode === 'register' ? 'Creating account…' : 'Logging in…'
+						: mode === 'register' ? 'Create account' : 'Log in'}
+				</button>
+			</form>
 		</div>
 	</div>
 </div>
