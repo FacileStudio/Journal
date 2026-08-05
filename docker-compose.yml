@@ -23,7 +23,6 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-      network: host
     expose:
       - "4010"
     networks:
@@ -67,7 +66,6 @@ services:
     build:
       context: apps/client
       dockerfile: Dockerfile
-      network: host
     expose:
       - "3000"
     networks:
@@ -105,7 +103,6 @@ services:
     build:
       context: apps/collector
       dockerfile: Dockerfile
-      network: host
     networks:
       - default
     volumes:
