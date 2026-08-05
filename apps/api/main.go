@@ -28,6 +28,7 @@ import (
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
+	"github.com/FacileStudio/tronc/spa"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httprate"
 	"gorm.io/gorm"
@@ -101,20 +102,28 @@ func main() {
 
 	health.Mount(router, health.DB(sqlDB))
 
-	auth.RegisterRoutes(router, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
-	ingest.RegisterRoutes(router, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
+	router.Route("/api", func(api chi.Router) {
+		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
+		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
-	router.Group(func(protected chi.Router) {
-		protected.Use(sessionLimiter)
-		protected.Use(middleware.RequireAuth(authService))
-		logs.RegisterRoutes(protected, logsService)
-		queries.RegisterRoutes(protected, queriesService)
-		protected.Group(func(admin chi.Router) {
-			admin.Use(middleware.RequireAdmin)
-			apikeys.RegisterRoutes(admin, apiKeysService)
-			alerts.RegisterRoutes(admin, alertsService)
+		api.Group(func(protected chi.Router) {
+			protected.Use(sessionLimiter)
+			protected.Use(middleware.RequireAuth(authService))
+			logs.RegisterRoutes(protected, logsService)
+			queries.RegisterRoutes(protected, queriesService)
+			protected.Group(func(admin chi.Router) {
+				admin.Use(middleware.RequireAdmin)
+				apikeys.RegisterRoutes(admin, apiKeysService)
+				alerts.RegisterRoutes(admin, alertsService)
+			})
 		})
 	})
+
+	clientDir := spa.DirFromEnv()
+	if spa.Available(clientDir) {
+		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
+		appLogger.Info("serving client", slog.String("dir", clientDir))
+	}
 
 	addr := ":" + appEnv.Port
 	server := &http.Server{

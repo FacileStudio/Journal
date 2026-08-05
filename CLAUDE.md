@@ -9,7 +9,7 @@ Docker-deployed.
 | Layer | Tech |
 |-------|------|
 | API | Go 1.24, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
-| Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-node |
+| Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
 | Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: per-app API keys (SHA256-hashed, admin-managed) with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
@@ -20,7 +20,7 @@ Docker-deployed.
 ```sh
 cp .env.example .env
 docker compose up --build                                          # production: no host ports published
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # dev: 127.0.0.1:3000/4010/5432
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # dev: 127.0.0.1:4010/5432
 ```
 
 ### Local Development
@@ -34,7 +34,7 @@ cd apps/api
 cp .env.example .env
 go run .
 
-# 3. Client (port 5173)
+# 3. Client (port 5173) — Vite proxies /api to the API above
 cd apps/client
 bun install
 bun run dev
@@ -43,7 +43,7 @@ bun run dev
 ### Ingest a test log
 
 ```sh
-curl -X POST http://localhost:4010/ingest \
+curl -X POST http://localhost:4010/api/ingest \
   -H "Authorization: Bearer change-me" \
   -H "Content-Type: application/json" \
   -d '{ "app": "nuage", "level": "error", "message": "upload failed", "meta": { "file_id": 42 } }'
@@ -61,12 +61,13 @@ bun run build                      # production build
 
 ```
 Journal/
-  docker-compose.yml               # db, api, client — production shape, no host ports
+  Dockerfile                       # one image: bun builds the client, go builds the API, distroless runs it
+  docker-compose.yml               # db + one app service — production shape, no host ports
   docker-compose.dev.yml           # opt-in (-f) local dev: publishes ports on 127.0.0.1
   .env.example                     # production env template
   apps/
     api/
-      main.go                      # entrypoint, router + middleware stack, retention job, route registration
+      main.go                      # entrypoint, router + middleware stack, retention job, route registration under /api, SPA catch-all
       internal/
         env/                       # config loading from env vars
         database/                  # GORM Postgres connection (pool: 10 open / 5 idle / 30m lifetime)
@@ -78,16 +79,15 @@ Journal/
         middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAuth, RequireAdmin
       schemas/                     # GORM models (log_entry, user, session, api_key, saved_query, alert_rule) + Migrate
       modules/
-        auth/                      # /auth/{config,register,login,logout,me} — sessions
-        ingest/                    # POST /ingest (single + batch, gzip), per-app key or legacy token
-        logs/                      # GET /logs, /logs/histogram, /logs/{id}/context, GET /apps — session-protected
-        apikeys/                   # /apikeys CRUD — session + admin only
-        queries/                   # /queries CRUD (saved filter sets) — session-protected
-        alerts/                    # /alerts CRUD + 60s webhook evaluator — session + admin only
-    collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /ingest
+        auth/                      # /api/auth/{config,register,login,logout,me} — sessions
+        ingest/                    # POST /api/ingest (single + batch, gzip), per-app key or legacy token
+        logs/                      # GET /api/logs, /api/logs/histogram, /api/logs/{id}/context, GET /api/apps — session-protected
+        apikeys/                   # /api/apikeys CRUD — session + admin only
+        queries/                   # /api/queries CRUD (saved filter sets) — session-protected
+        alerts/                    # /api/alerts CRUD + 60s webhook evaluator — session + admin only
+    collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /api/ingest
     client/
       src/
-        hooks.server.ts            # security headers on all responses (CSP lives in svelte.config.js)
         lib/backend.ts             # typed API client (auth, logs, histogram, context, api keys)
         lib/auth.ts                # localStorage session token (journal.token)
         routes/
@@ -96,7 +96,7 @@ Journal/
           (app)/+page.svelte       # dashboard: filters, saved queries, time range, histogram, live tail (pause/gap markers), pivots, context panel
           (app)/keys/+page.svelte  # API key management (admin only)
           (app)/alerts/+page.svelte # alert rules management (admin only)
-          api/[...path]/           # reverse proxy to Go API (dev plumbing — prod bypasses it, see Architecture)
+          +layout.ts               # prerender = false, ssr = false — the whole dashboard is client-rendered
       static/                      # favicon, logo, fonts, vendored iconify-icon script
   sdk/
     journal/                       # Go SDK: batching client + slog tee handler (stdlib-only, go-gettable)
@@ -105,15 +105,24 @@ Journal/
 ## Architecture
 
 ```
-Facile apps ──POST /ingest──▶ Go API (:4010) ──▶ Postgres
-Browser ──▶ SvelteKit (:3000) ──/api/*──▶ Go API (:4010)
+Facile apps ──POST /api/ingest──▶ Go API (:4010) ──▶ Postgres
+Browser ──▶ same Go API (:4010): /api/* is the API, everything else is the static dashboard
 ```
 
-In production, Traefik routes `journal.facile.studio/api/*` (stripprefix) **directly to the
-Go API** and everything else to the SvelteKit client — the client's `/api/[...path]` reverse
-proxy only carries traffic in local dev. The Go API's own middleware (CORS, security headers,
-rate limits) is the real browser-facing perimeter; hardening in the SvelteKit proxy does not
-apply to prod traffic. Postgres is internal with hardcoded credentials and no published ports.
+One container. The Go binary registers every application module inside
+`router.Route("/api", …)` and mounts tronc's `spa.Handler` on `/*` as the last route, so it
+serves both halves; Traefik has a **single** router, ``Host(`journal.facile.studio`)``, with
+no `PathPrefix` and no stripprefix middleware.
+
+Public URLs did not change when this replaced the two-container split: Traefik used to strip
+`/api` before forwarding, so `/api/ingest` reached the API as `/ingest`. Now the prefix is
+part of the route itself and `/api/ingest` stays `/api/ingest` — the nine suite apps and the
+collector shipping to `JOURNAL_URL=https://journal.facile.studio/api` are unaffected.
+
+`/health` and `/ready` are explicit chi routes at the root, so they win over the SPA
+catch-all and keep their URLs. The Go API's own middleware (CORS, security headers, rate
+limits) is the only browser-facing perimeter — there is no SvelteKit server left. Postgres is
+internal with hardcoded credentials and no published ports.
 
 ## Environment Variables
 
@@ -126,7 +135,7 @@ apply to prod traffic. Postgres is internal with hardcoded credentials and no pu
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
 | `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
 | `ALLOWED_ORIGINS` / `DOMAINS` | Comma-separated CORS origins | — |
-| `ORIGIN` | Public client URL — consumed by SvelteKit adapter-node (CSRF), not the Go API | `http://localhost:3000` |
+| `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |
 
 ## Schema
 
@@ -153,6 +162,10 @@ Table `api_keys`: `id` PK, `app` text, `prefix` text (display only), `key_hash` 
 (SHA256 hex of the full token), `created_at`, `revoked_at` nullable.
 
 ## API Contract
+
+Every path below is relative to the `/api` mount: `/ingest` is served at `/api/ingest`,
+`/logs` at `/api/logs`, and so on. The only exceptions are `/health` and `/ready`, which stay
+at the root. Anything not under `/api` falls through to the dashboard's index document.
 
 ### Auth (`/auth/*`)
 
@@ -267,32 +280,47 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
 
 ## Gotchas
 
-- The API Dockerfile context is the repo root (it copies `apps/api/`). The client Dockerfile
-  context is `apps/client/`. Both have `.dockerignore` files.
+- There is one `Dockerfile`, at the repo root, and its context is the repo root: a bun stage
+  builds the client, a Go stage builds the API, and the distroless runtime image holds the
+  binary at `/api` and the client at `/client` (`spa.DefaultDir` is `./client`, and the image
+  has no `WORKDIR`, so the process runs from `/`). The compose healthcheck is
+  `["CMD", "/api", "healthcheck"]` — it must track the binary's path in the image. The
+  runtime is `:nonroot` because the app service mounts no writable volume; adding one means
+  dropping back to the root distroless variant.
+- **A base URL missing `/api` fails silently.** The SPA catch-all answers *any* unmatched
+  path — including a `POST` — with `200` and `index.html`, and both the collector and the Go
+  SDK treat any 2xx as a successful ingest. `JOURNAL_URL` must therefore end in `/api`
+  (`https://journal.facile.studio/api` publicly, `http://journal-api:4010/api` on the
+  compose network); point it at the bare host and every log line is accepted, discarded, and
+  never reported.
 - Ingest auth is per-app API keys (created on the dashboard's Keys page, admin only). The legacy
   `INGEST_TOKEN` still works if set; empty (the default) disables it — with no keys and no legacy
-  token, every `/ingest` is rejected.
+  token, every `/api/ingest` is rejected.
 - `docker compose up` alone publishes **no** host ports (production shape). Local dev needs
-  `-f docker-compose.yml -f docker-compose.dev.yml`, which binds 3000/4010/5432 on 127.0.0.1.
+  `-f docker-compose.yml -f docker-compose.dev.yml`, which binds 4010/5432 on 127.0.0.1.
 - Live tail polls `GET /logs` every 2.5s and merges entries whose `id` exceeds the current max
   (capped at 2000 rows client-side). It relies on `id` monotonicity, not `created_at`, so
   out-of-order client timestamps still tail correctly. The histogram refreshes every 4th poll.
 - In-flight request races on the dashboard are guarded by generation counters — stale load/poll
   responses are discarded, not merged.
-- Default ports: API `4010`, client `3000` — chosen to not clash with Nuage (`4000`/`3000`,
-  different host).
+- Default ports: the app listens on `4010` (chosen to not clash with Nuage's `4000`), and
+  `bun run dev` still serves the client on `5173` with a Vite proxy forwarding `/api` to
+  `localhost:4010`.
 - Full-text uses the `simple` dictionary (no stemming/stopwords) for predictable, language-agnostic
   matching across app log lines.
 - The `iconify-icon` script is vendored in `static/vendor/` (no CDN at runtime), but it still
   fetches icon *data* from `api.iconify.design` — the CSP `connect-src` must keep allowing that
   origin or every icon breaks.
-- CSP is configured in `svelte.config.js` (`kit.csp`, auto nonces); the other security headers
-  live in `src/hooks.server.ts`. The Go API sets its own headers for `/api/*` (the prod path).
+- CSP is configured in `svelte.config.js` (`kit.csp`). With `adapter-static` the `auto` mode
+  emits **hashes**, not nonces, into the `<meta http-equiv>` of the built `index.html`, so it
+  survives being served by the Go binary. Every other security header comes from the Go
+  `middleware.SecurityHeaders`, which runs on all routes including the SPA — the old
+  `hooks.server.ts` is gone, since no SvelteKit server runs in production.
 
 ## Collector sidecar
 
 `apps/collector` (stdlib-only Go) tails every Docker container on the host via
-`/var/run/docker.sock` and ships lines to `/ingest` — zero code change for apps that only
+`/var/run/docker.sock` and ships lines to `/api/ingest` — zero code change for apps that only
 write stdout/stderr. Opt-in via compose profile: set `COMPOSE_PROFILES=collector` in the
 deploy env. It ships many apps, so it needs the **legacy unscoped `INGEST_TOKEN`** (per-app
 keys won't work). Container labels: `journal.ignore=true` to skip, `journal.app=<name>` to

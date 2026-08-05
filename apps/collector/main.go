@@ -19,7 +19,7 @@ type config struct {
 
 func loadConfig() config {
 	cfg := config{
-		journalURL:       envOr("JOURNAL_URL", "http://journal-api:4010"),
+		journalURL:       envOr("JOURNAL_URL", "http://journal-api:4010/api"),
 		journalToken:     os.Getenv("JOURNAL_TOKEN"),
 		dockerSock:       envOr("DOCKER_SOCK", "/var/run/docker.sock"),
 		discoverInterval: 30 * time.Second,

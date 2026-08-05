@@ -38,13 +38,17 @@ In production, set `COMPOSE_PROFILES=collector` in the deploy environment.
 
 | Variable | Description | Default |
 |---|---|---|
-| `JOURNAL_URL` | Journal API base URL | `http://journal-api:4010` |
+| `JOURNAL_URL` | Journal API base URL, `/api` included | `http://journal-api:4010/api` |
 | `JOURNAL_TOKEN` | Legacy unscoped ingest token (required) | — |
 | `DOCKER_SOCK` | Docker Engine socket path | `/var/run/docker.sock` |
 | `DISCOVER_INTERVAL` | Container discovery interval, seconds | `30` |
 
 ## Caveats
 
+- **`JOURNAL_URL` must include `/api`**: the API serves its routes under `/api` and the SPA
+  catch-all answers everything else with `200` + `index.html`. A base URL missing the prefix
+  therefore looks like a successful ingest to the shipper, and every line is dropped in
+  silence.
 - **Restart loss**: on collector restart, tailing starts at "now" — lines logged while the
   collector was down are not backfilled. Within a running session, tails reconnect from the
   last seen timestamp. Batches are buffered in memory (max 5000 entries, oldest dropped) and

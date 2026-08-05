@@ -1,9 +1,11 @@
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-static';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
-		adapter: adapter(),
+		// The Go binary serves this build and owns routing, so every route is a
+		// client-side one and falls back to index.html.
+		adapter: adapter({ fallback: 'index.html', strict: false }),
 		csp: {
 			mode: 'auto',
 			directives: {

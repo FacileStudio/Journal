@@ -6,7 +6,3 @@ services:
   journal-api:
     ports:
       - "127.0.0.1:4010:4010"
-
-  journal-client:
-    ports:
-      - "127.0.0.1:3000:3000"

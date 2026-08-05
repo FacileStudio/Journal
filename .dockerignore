@@ -1,5 +1,7 @@
 .git
-apps/client
 *.md
 .env
 .env.*
+**/node_modules
+**/.svelte-kit
+**/build
