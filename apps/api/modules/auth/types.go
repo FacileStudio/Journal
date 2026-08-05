@@ -29,5 +29,7 @@ type MeResponse struct {
 }
 
 type ConfigResponse struct {
+	SSOOnly           bool `json:"sso_only"`
+	OIDCEnabled       bool `json:"oidc_enabled"`
 	AllowRegistration bool `json:"allow_registration"`
 }

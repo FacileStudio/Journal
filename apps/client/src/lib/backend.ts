@@ -24,6 +24,8 @@ export type MeResponse = {
 };
 
 export type AuthConfig = {
+	sso_only: boolean;
+	oidc_enabled: boolean;
 	allow_registration: boolean;
 };
 

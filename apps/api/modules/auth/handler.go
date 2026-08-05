@@ -20,7 +20,11 @@ func newHandler(service *Service, allowRegistration bool) *Handler {
 }
 
 func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
-	httpjson.WriteJSON(w, http.StatusOK, ConfigResponse{AllowRegistration: h.allowRegistration})
+	httpjson.WriteJSON(w, http.StatusOK, ConfigResponse{
+		SSOOnly:           false,
+		OIDCEnabled:       false,
+		AllowRegistration: h.allowRegistration,
+	})
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
