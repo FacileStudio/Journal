@@ -126,6 +126,23 @@ internal with hardcoded credentials and no published ports.
 
 ## Environment Variables
 
+**Development configuration comes from [Casier](https://casier.facile.studio), not from a
+`.env`.** `.casier.toml` pins this repo to the `journal` project and its `dev` environment, so
+`mise run dev` wraps the API in `casier run` and the process starts with `ORIGIN`,
+`INGEST_TOKEN`, `LOG_LEVEL` and `ALLOWED_ORIGINS` already in its environment. Nothing has to
+exist on disk; a local `.env` still works and simply wins nothing, because the API reads the
+process environment either way.
+
+`casier run` is network-first with a last-known-good cache, so a Casier outage falls back to
+the previously fetched values and *says so on stderr* — it never starts the API with an empty
+environment. `mise run dev-offline` forces the cached path. Add or change a value with
+`casier secrets set -p journal -e dev KEY value`, or push a whole file with
+`casier sync push -p journal -e dev -f .env`.
+
+Deployment is unchanged: production values are injected by Dokploy. Casier covers the
+developer loop, not the bootstrap tier.
+
+
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_URL` | Postgres connection string | **required** — the API exits 1 without it |
