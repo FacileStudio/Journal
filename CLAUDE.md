@@ -128,13 +128,15 @@ internal with hardcoded credentials and no published ports.
 
 | Variable | Description | Default |
 |---|---|---|
-| `DATABASE_URL` | Postgres connection string | `postgres://journal:journal@localhost:5432/journal?sslmode=disable` |
+| `DATABASE_URL` | Postgres connection string | **required** — the API exits 1 without it |
+| `APP_ENV` | `development`, `staging`, `production`. Never gates security behaviour | `development` |
 | `PORT` | API listen port | `4010` |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `INGEST_TOKEN` | Legacy shared ingest token (unscoped). Empty disables it — per-app API keys are the primary ingest auth | — (empty) |
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
 | `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
-| `ALLOWED_ORIGINS` / `DOMAINS` | Comma-separated CORS origins | — |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins, read through `tronc/env`. `ALLOWED_ORIGINS` and `DOMAINS` remain accepted fallbacks | — (unset denies every cross-origin caller) |
+| `WEBHOOK_ALLOWED_HOSTS` | Comma-separated hostnames allowed as internal alert webhook targets | — |
 | `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |
 
 ## Schema
