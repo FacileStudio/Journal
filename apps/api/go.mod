@@ -1,6 +1,6 @@
 module github.com/FacileStudio/Journal/apps/api
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/FacileStudio/tronc v0.9.0
