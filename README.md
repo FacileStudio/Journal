@@ -36,7 +36,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 Open <http://localhost:4010> and create the first account — it becomes the admin. Then
-create a per-app API key on the Keys page for each app that will ship logs. Plain
+create a per-app API key under Settings → API for each app that will ship logs. Plain
 `docker compose up` is the production shape and publishes no host ports.
 
 Ship a test entry:
@@ -81,7 +81,8 @@ Full reference: [docs/configuration.md](docs/configuration.md).
 apps/
   api/         Go backend — modules/ (auth, ingest, logs, queries, alerts, apikeys),
                schemas/ (GORM models and migrations), internal/ (crypto, filters, middleware)
-  client/      SvelteKit dashboard — logs, keys, alerts
+  client/      SvelteKit dashboard on the muse design system — overview, logs,
+               apps, saved queries, alerts, settings
   collector/   Docker log collector sidecar, its own Go module
 sdk/
   journal/     Go client and slog handler, its own Go module

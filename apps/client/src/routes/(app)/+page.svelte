@@ -1,878 +1,154 @@
 <script lang="ts">
-	import { getContext, onDestroy, onMount } from 'svelte';
-	import { backend, type AppSummary, type AuthUser, type HistogramCounts, type HistogramResponse, type ListLogsParams, type LogCursor, type LogEntry, type LogLevel, type SavedQuery, type SavedQueryParams } from '$lib/backend';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { Button, Card, DonutChart, EmptyState, Sparkline, StatCard, Table, icons } from '@facile/muse';
+	import { backend, type AppSummary, type LogEntry } from '$lib/backend';
+	import { LEVELS, levelFill } from '$lib/levels';
+	import { buildHistogram, bucketTotals, type HistBar, type Histogram } from '$lib/histogram';
+	import { formatCount, formatRelative, toLocalInput } from '$lib/format';
+	import LogHistogram from '$lib/components/LogHistogram.svelte';
+	import LogTable from '$lib/components/LogTable.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
-	const auth = getContext<{ user: AuthUser | null; logout: () => void }>('auth');
+	const WINDOW_MS = 86_400_000;
 
-	const levels: LogLevel[] = ['debug', 'info', 'warn', 'error'];
-	const MAX_ENTRIES = 2000;
-	const CONTEXT_MAX = 200;
-
-	const rangePresets = [
-		{ key: '15m', label: '15m', ms: 900_000 },
-		{ key: '1h', label: '1h', ms: 3_600_000 },
-		{ key: '6h', label: '6h', ms: 21_600_000 },
-		{ key: '24h', label: '24h', ms: 86_400_000 },
-		{ key: '7d', label: '7d', ms: 604_800_000 },
-		{ key: '30d', label: '30d', ms: 2_592_000_000 },
-		{ key: 'all', label: 'All', ms: 0 }
-	] as const;
-	type RangeKey = (typeof rangePresets)[number]['key'] | 'custom';
-
-	type HistBar = { start: number; end: number; counts: HistogramCounts; total: number };
-	type Histogram = { bucketSeconds: number; bars: HistBar[]; max: number };
-
-	let apps = $state<AppSummary[]>([]);
-	let entries = $state<LogEntry[]>([]);
-	let selectedApp = $state<string | null>(null);
-	let selectedLevels = $state<LogLevel[]>([]);
-	let query = $state('');
-	let requestId = $state<string | null>(null);
-	let rangePreset = $state<RangeKey>('24h');
-	let customSince = $state('');
-	let customUntil = $state('');
-	let nextBefore = $state<LogCursor | null>(null);
-	let loading = $state(false);
-	let loadingMore = $state(false);
-	let liveTail = $state(false);
-	let tailPaused = $state(false);
-	let gapIds = $state<number[]>([]);
-	let expandedId = $state<number | null>(null);
-	let error = $state('');
 	let hist = $state<Histogram | null>(null);
+	let apps = $state<AppSummary[]>([]);
+	let recentErrors = $state<LogEntry[]>([]);
+	let loading = $state(true);
 
-	let savedQueries = $state<SavedQuery[]>([]);
-	let savedQueryError = $state('');
-	let savingQuery = $state(false);
-	let deletingQueryId = $state<number | null>(null);
-
-	let contextOpen = $state(false);
-	let contextEntries = $state<LogEntry[]>([]);
-	let contextAnchorId = $state<number | null>(null);
-	let contextBefore = $state(50);
-	let contextAfter = $state(50);
-	let contextLoading = $state(false);
-	let contextError = $state('');
-
-	let searchTimer: ReturnType<typeof setTimeout> | undefined;
-	let loadGen = 0;
-	let histGen = 0;
-	let pollCount = 0;
-	let contextId = 0;
-
-	function timeRange(): { since?: string; until?: string } {
-		if (rangePreset === 'custom') {
-			const range: { since?: string; until?: string } = {};
-			if (customSince) range.since = new Date(customSince).toISOString();
-			if (customUntil) range.until = new Date(customUntil).toISOString();
-			return range;
+	const totals = $derived.by(() => {
+		const counts = { debug: 0, info: 0, warn: 0, error: 0 };
+		for (const bar of hist?.bars ?? []) {
+			for (const level of LEVELS) counts[level] += bar.counts[level] ?? 0;
 		}
-		const preset = rangePresets.find((entry) => entry.key === rangePreset);
-		if (!preset || !preset.ms) return {};
-		return { since: new Date(Date.now() - preset.ms).toISOString() };
-	}
+		return counts;
+	});
+	const grandTotal = $derived(LEVELS.reduce((sum, level) => sum + totals[level], 0));
+	const spark = $derived(hist ? bucketTotals(hist) : []);
+	const slices = $derived(
+		LEVELS.filter((level) => totals[level] > 0).map((level) => ({
+			label: level,
+			value: totals[level],
+			color: levelFill(level)
+		}))
+	);
+	const topApps = $derived([...apps].sort((a, b) => b.count - a.count).slice(0, 8));
 
-	function filterParams(): ListLogsParams {
-		return {
-			app: selectedApp ?? undefined,
-			level: selectedLevels.length ? selectedLevels : undefined,
-			q: query.trim() || undefined,
-			request_id: requestId ?? undefined,
-			...timeRange()
-		};
-	}
-
-	function applyFilters() {
-		load();
-		loadHistogram();
-	}
-
-	async function load() {
-		const gen = ++loadGen;
-		loading = true;
-		error = '';
-		try {
-			const res = await backend.listLogs({ ...filterParams(), limit: 100 });
-			if (gen !== loadGen) return;
-			entries = res.entries;
-			nextBefore = res.next_before;
-			gapIds = [];
-		} catch (err) {
-			if (gen !== loadGen) return;
-			error = err instanceof Error ? err.message : 'Failed to load logs';
-		} finally {
-			if (gen === loadGen) loading = false;
-		}
-	}
-
-	async function loadMore() {
-		if (nextBefore == null || loadingMore) return;
-		const gen = loadGen;
-		loadingMore = true;
-		try {
-			const res = await backend.listLogs({ ...filterParams(), limit: 100, before: nextBefore });
-			if (gen !== loadGen) return;
-			entries = [...entries, ...res.entries];
-			nextBefore = res.next_before;
-		} catch (err) {
-			if (gen !== loadGen) return;
-			error = err instanceof Error ? err.message : 'Failed to load more';
-		} finally {
-			loadingMore = false;
-		}
-	}
-
-	async function poll() {
-		const gen = loadGen;
-		pollCount += 1;
-		if (pollCount % 4 === 0) loadHistogram();
-		try {
-			const res = await backend.listLogs({ ...filterParams(), limit: 100 });
-			if (gen !== loadGen || !liveTail || tailPaused) return;
-			const maxId = entries.reduce((max, entry) => Math.max(max, entry.id), 0);
-			const fresh = res.entries.filter((entry) => entry.id > maxId);
-			if (fresh.length) {
-				if (fresh.length === 100 && entries.length > 0) {
-					gapIds = [...gapIds, fresh[fresh.length - 1].id];
-				}
-				entries = [...fresh, ...entries].slice(0, MAX_ENTRIES);
-			}
-		} catch {
-			/* keep tailing silently */
-		}
-	}
-
-	async function loadHistogram() {
-		const gen = ++histGen;
-		const range = timeRange();
-		try {
-			const res = await backend.histogram(filterParams());
-			if (gen !== histGen) return;
-			hist = buildHistogram(res, range);
-		} catch {
-			if (gen === histGen) hist = null;
-		}
-	}
-
-	function buildHistogram(res: HistogramResponse, range: { since?: string; until?: string }): Histogram {
-		const step = res.bucket_seconds * 1000;
-		if (!step) return { bucketSeconds: res.bucket_seconds, bars: [], max: 0 };
-		const byTime = new Map<number, HistogramCounts>();
-		for (const bucket of res.buckets) byTime.set(Date.parse(bucket.ts), bucket.counts);
-		const times = [...byTime.keys()];
-		const offset = times.length ? ((times[0] % step) + step) % step : 0;
-		const rawStart = range.since
-			? Date.parse(range.since)
-			: times.length
-				? Math.min(...times)
-				: Date.now() - 86_400_000;
-		const rawEnd = range.until ? Date.parse(range.until) : Date.now();
-		const start = Math.floor((rawStart - offset) / step) * step + offset;
-		const end = Math.max(rawEnd, start + step);
-		const count = Math.min(Math.ceil((end - start) / step), 1000);
-		const bars: HistBar[] = [];
-		let max = 0;
-		for (let i = 0; i < count; i++) {
-			const ts = start + i * step;
-			const counts = byTime.get(ts) ?? {};
-			const total = (counts.debug ?? 0) + (counts.info ?? 0) + (counts.warn ?? 0) + (counts.error ?? 0);
-			max = Math.max(max, total);
-			bars.push({ start: ts, end: ts + step, counts, total });
-		}
-		return { bucketSeconds: res.bucket_seconds, bars, max };
-	}
-
-	function stackSegments(bar: HistBar): { level: LogLevel; y: number; h: number }[] {
-		if (!hist || hist.max === 0) return [];
-		const segments: { level: LogLevel; y: number; h: number }[] = [];
-		let y = 100;
-		for (const level of levels) {
-			const value = bar.counts[level] ?? 0;
-			if (!value) continue;
-			const h = (value / hist.max) * 96;
-			y -= h;
-			segments.push({ level, y, h });
-		}
-		return segments;
-	}
-
-	function bucketTitle(bar: HistBar): string {
-		const parts = levels
-			.filter((level) => bar.counts[level])
-			.map((level) => `${level} ${bar.counts[level]}`);
-		return `${formatTime(new Date(bar.start).toISOString())} · ${parts.length ? parts.join(', ') : 'no entries'}`;
-	}
-
-	function toLocalInput(ms: number): string {
-		const date = new Date(ms);
-		const pad = (value: number) => String(value).padStart(2, '0');
-		return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-	}
-
-	function zoomToBucket(bar: HistBar) {
-		customSince = toLocalInput(Math.floor(bar.start / 60_000) * 60_000);
-		customUntil = toLocalInput(Math.max(Math.ceil(bar.end / 60_000) * 60_000, bar.start + 60_000));
-		rangePreset = 'custom';
-		applyFilters();
-	}
-
-	function selectRange(key: RangeKey) {
-		rangePreset = key;
-		applyFilters();
-	}
-
-	function onCustomRange() {
-		rangePreset = 'custom';
-		applyFilters();
-	}
-
-	async function loadApps() {
-		try {
-			const res = await backend.listApps();
-			apps = res.apps;
-		} catch {
-			apps = [];
-		}
-	}
-
-	function selectApp(name: string) {
-		selectedApp = selectedApp === name ? null : name;
-		applyFilters();
-	}
-
-	async function loadSavedQueries() {
-		try {
-			const res = await backend.listQueries();
-			savedQueries = res.queries;
-		} catch {
-			savedQueries = [];
-		}
-	}
-
-	function savedQuerySummary(saved: SavedQuery): string {
-		const parts: string[] = [];
-		if (saved.params.app) parts.push(`app:${saved.params.app}`);
-		if (saved.params.levels?.length) parts.push(`levels:${saved.params.levels.join(',')}`);
-		if (saved.params.q) parts.push(`q:${saved.params.q}`);
-		if (saved.params.request_id) parts.push(`req:${saved.params.request_id}`);
-		return parts.length ? parts.join(' · ') : 'no filters';
-	}
-
-	function applySavedQuery(saved: SavedQuery) {
-		selectedApp = saved.params.app || null;
-		selectedLevels = levels.filter((level) => saved.params.levels?.includes(level));
-		query = saved.params.q ?? '';
-		requestId = saved.params.request_id || null;
-		savedQueryError = '';
-		applyFilters();
-	}
-
-	async function saveCurrentQuery() {
-		if (savingQuery) return;
-		const name = prompt('Name for this saved query:')?.trim();
-		if (!name) return;
-		const params: SavedQueryParams = {};
-		if (selectedApp) params.app = selectedApp;
-		if (selectedLevels.length) params.levels = selectedLevels;
-		if (query.trim()) params.q = query.trim();
-		if (requestId) params.request_id = requestId;
-		savingQuery = true;
-		savedQueryError = '';
-		try {
-			await backend.createQuery(name, params);
-			await loadSavedQueries();
-		} catch (err) {
-			savedQueryError = err instanceof Error ? err.message : 'Failed to save query';
-		} finally {
-			savingQuery = false;
-		}
-	}
-
-	async function deleteSavedQuery(saved: SavedQuery) {
-		if (deletingQueryId != null) return;
-		if (!confirm(`Delete saved query "${saved.name}"?`)) return;
-		deletingQueryId = saved.id;
-		savedQueryError = '';
-		try {
-			await backend.deleteQuery(saved.id);
-			await loadSavedQueries();
-		} catch (err) {
-			savedQueryError = err instanceof Error ? err.message : 'Failed to delete saved query';
-		} finally {
-			deletingQueryId = null;
-		}
-	}
-
-	function toggleLiveTail() {
-		liveTail = !liveTail;
-		if (!liveTail) tailPaused = false;
-	}
-
-	function toggleTailPause() {
-		tailPaused = !tailPaused;
-		if (!tailPaused) applyFilters();
-	}
-
-	function pivotApp(name: string, event: Event) {
-		event.stopPropagation();
-		selectApp(name);
-	}
-
-	function pivotLevel(level: LogLevel, event: Event) {
-		event.stopPropagation();
-		toggleLevel(level);
-	}
-
-	function toggleLevel(level: LogLevel) {
-		selectedLevels = selectedLevels.includes(level)
-			? selectedLevels.filter((value) => value !== level)
-			: [...selectedLevels, level];
-		applyFilters();
-	}
-
-	function onSearchInput() {
-		clearTimeout(searchTimer);
-		searchTimer = setTimeout(applyFilters, 300);
-	}
-
-	function metaRequestId(entry: LogEntry): string | null {
-		const value = entry.meta?.['request_id'];
-		if (typeof value === 'string' && value) return value;
-		if (typeof value === 'number') return String(value);
-		return null;
-	}
-
-	function pivotRequest(rid: string) {
-		requestId = rid;
-		selectedApp = null;
-		applyFilters();
-	}
-
-	function clearRequestId() {
-		requestId = null;
-		applyFilters();
-	}
-
-	async function openContext(id: number) {
-		contextOpen = true;
-		contextId = id;
-		contextBefore = 50;
-		contextAfter = 50;
-		contextEntries = [];
-		contextAnchorId = null;
-		contextError = '';
-		await fetchContext();
-	}
-
-	async function fetchContext() {
-		const id = contextId;
-		contextLoading = true;
-		contextError = '';
-		try {
-			const res = await backend.logContext(id, contextBefore, contextAfter);
-			if (!contextOpen || id !== contextId) return;
-			contextEntries = res.entries;
-			contextAnchorId = res.anchor_id;
-		} catch (err) {
-			if (!contextOpen || id !== contextId) return;
-			contextError = err instanceof Error ? err.message : 'Failed to load context';
-		} finally {
-			if (id === contextId) contextLoading = false;
-		}
-	}
-
-	function extendContext(direction: 'before' | 'after') {
-		if (contextLoading) return;
-		if (direction === 'before') contextBefore = Math.min(contextBefore + 50, CONTEXT_MAX);
-		else contextAfter = Math.min(contextAfter + 50, CONTEXT_MAX);
-		fetchContext();
-	}
-
-	function closeContext() {
-		contextOpen = false;
-	}
-
-	function toggleRow(id: number) {
-		expandedId = expandedId === id ? null : id;
-	}
-
-	function levelClass(level: LogLevel): string {
-		switch (level) {
-			case 'error':
-				return 'bg-destructive/10 text-destructive';
-			case 'warn':
-				return 'bg-amber-500/10 text-amber-600';
-			case 'debug':
-				return 'bg-muted text-muted-foreground';
-			default:
-				return 'bg-secondary text-secondary-foreground';
-		}
-	}
-
-	function levelFill(level: LogLevel): string {
-		switch (level) {
-			case 'error':
-				return 'fill-destructive';
-			case 'warn':
-				return 'fill-amber-600';
-			case 'debug':
-				return 'fill-muted-foreground';
-			default:
-				return 'fill-secondary-foreground';
-		}
-	}
-
-	function formatTime(iso: string): string {
-		const date = new Date(iso);
-		if (Number.isNaN(date.getTime())) return iso;
-		return date.toLocaleString(undefined, {
-			month: 'short',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-			hour12: false
+	function openBucket(bar: HistBar) {
+		const params = new URLSearchParams({
+			range: 'custom',
+			since: toLocalInput(Math.floor(bar.start / 60_000) * 60_000),
+			until: toLocalInput(Math.max(Math.ceil(bar.end / 60_000) * 60_000, bar.start + 60_000))
 		});
+		void goto(`/logs?${params}`);
 	}
 
-	onMount(() => {
-		loadApps();
-		loadSavedQueries();
-		load();
-		loadHistogram();
-	});
-
-	onDestroy(() => {
-		clearTimeout(searchTimer);
-	});
-
-	$effect(() => {
-		if (!liveTail || tailPaused) return;
-		const interval = setInterval(poll, 2500);
-		return () => clearInterval(interval);
+	onMount(async () => {
+		const since = new Date(Date.now() - WINDOW_MS).toISOString();
+		const [histRes, appsRes, errorsRes] = await Promise.allSettled([
+			backend.histogram({ since }),
+			backend.listApps(),
+			backend.listLogs({ level: ['error'], since, limit: 8 })
+		]);
+		if (histRes.status === 'fulfilled') hist = buildHistogram(histRes.value, { since });
+		if (appsRes.status === 'fulfilled') apps = appsRes.value.apps;
+		if (errorsRes.status === 'fulfilled') recentErrors = errorsRes.value.entries;
+		loading = false;
 	});
 </script>
 
-<svelte:head>
-	<title>Journal</title>
-</svelte:head>
+<svelte:head><title>Overview — Journal</title></svelte:head>
 
-<svelte:window
-	onkeydown={(event) => {
-		if (event.key === 'Escape' && contextOpen) closeContext();
-	}}
-/>
+<PageHeader title="Overview" description="What every app in the suite has been saying for the last 24 hours.">
+	{#snippet actions()}
+		<Button size="sm" variant="outline" href="/logs" icon={icons.history}>Open logs</Button>
+	{/snippet}
+</PageHeader>
 
-<div class="flex h-screen bg-background text-foreground">
-	<aside class="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar md:flex">
-		<div class="flex items-center gap-2 border-b border-border px-5 py-4">
-			<iconify-icon icon="solar:notebook-bold-duotone" width="22" class="text-foreground"></iconify-icon>
-			<span class="text-lg font-bold font-heading tracking-tight">Journal</span>
-		</div>
+<section class="flex flex-col gap-4">
+	<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+		<StatCard label="Entries" value={formatCount(grandTotal)}>
+			<Sparkline data={spark} />
+		</StatCard>
+		<StatCard label="Errors" value={formatCount(totals.error)}>
+			<Sparkline data={hist?.bars.map((bar) => bar.counts.error ?? 0) ?? []} color={levelFill('error')} />
+		</StatCard>
+		<StatCard label="Warnings" value={formatCount(totals.warn)}>
+			<Sparkline data={hist?.bars.map((bar) => bar.counts.warn ?? 0) ?? []} color={levelFill('warn')} />
+		</StatCard>
+		<StatCard label="Apps reporting" value={formatCount(apps.length)} />
+	</div>
+</section>
 
-		<div class="flex-1 overflow-y-auto px-3 py-4">
-			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Saved queries</div>
-			<div class="mb-5 flex flex-col gap-1">
-				{#if savedQueryError}
-					<p class="px-2 py-1 text-xs text-destructive">{savedQueryError}</p>
-				{/if}
-				{#if savedQueries.length === 0}
-					<p class="px-2 py-1.5 text-sm text-muted-foreground">No saved queries yet.</p>
-				{:else}
-					{#each savedQueries as saved (saved.id)}
-						<div class="flex items-center gap-1">
-							<button
-								class="flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-								title={savedQuerySummary(saved)}
-								onclick={() => applySavedQuery(saved)}
-							>
-								<span class="truncate font-medium">{saved.name}</span>
-							</button>
-							<button
-								class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-								title="Delete saved query"
-								aria-label="Delete saved query {saved.name}"
-								onclick={() => deleteSavedQuery(saved)}
-								disabled={deletingQueryId != null}
-							>
-								<iconify-icon icon="solar:trash-bin-trash-linear" width="14"></iconify-icon>
-							</button>
-						</div>
-					{/each}
-				{/if}
-				<button
-					class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-					onclick={saveCurrentQuery}
-					disabled={savingQuery}
-				>
-					<iconify-icon icon="solar:add-circle-linear" width="16"></iconify-icon>
-					{savingQuery ? 'Saving…' : 'Save current filters'}
-				</button>
-			</div>
+<section class="flex flex-col gap-4">
+	<div class="flex flex-col gap-1">
+		<h2 class="text-fc-lg font-semibold text-fc-fg">Volume</h2>
+		<p class="text-fc-sm text-fc-fg-muted">Click a bucket to open it in the log explorer.</p>
+	</div>
+	<Card>
+		<LogHistogram {hist} height={140} onSelect={openBucket} />
+	</Card>
+</section>
 
-			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Levels</div>
-			<div class="mb-5 flex flex-col gap-1">
-				{#each levels as level (level)}
-					<button
-						class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent {selectedLevels.includes(level) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
-						onclick={() => toggleLevel(level)}
-					>
-						<span class="inline-flex items-center gap-2">
-							<span class="inline-block h-2 w-2 rounded-full {levelClass(level)}"></span>
-							{level}
-						</span>
-						{#if selectedLevels.includes(level)}
-							<iconify-icon icon="solar:check-circle-bold" width="16"></iconify-icon>
-						{/if}
-					</button>
-				{/each}
-			</div>
-
-			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Time range</div>
-			<div class="mb-5 flex flex-col gap-2 px-2">
-				<div class="grid grid-cols-4 gap-1">
-					{#each rangePresets as preset (preset.key)}
-						<button
-							class="rounded-md px-1 py-1.5 text-xs transition-colors hover:bg-accent {rangePreset === preset.key ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground'}"
-							onclick={() => selectRange(preset.key)}
-						>
-							{preset.label}
-						</button>
-					{/each}
-				</div>
-				<label class="flex flex-col gap-1 text-xs text-muted-foreground">
-					From
-					<input
-						type="datetime-local"
-						bind:value={customSince}
-						onchange={onCustomRange}
-						class="h-9 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					/>
-				</label>
-				<label class="flex flex-col gap-1 text-xs text-muted-foreground">
-					To
-					<input
-						type="datetime-local"
-						bind:value={customUntil}
-						onchange={onCustomRange}
-						class="h-9 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					/>
-				</label>
-			</div>
-
-			<div class="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Apps</div>
-			<div class="flex flex-col gap-1">
-				{#if apps.length === 0}
-					<p class="px-2 py-1.5 text-sm text-muted-foreground">No apps yet.</p>
-				{:else}
-					{#each apps as app (app.name)}
-						<button
-							class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent {selectedApp === app.name ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
-							onclick={() => selectApp(app.name)}
-						>
-							<span class="truncate font-medium">{app.name}</span>
-							<span class="ml-2 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{app.count}</span>
-						</button>
-					{/each}
-				{/if}
-			</div>
-		</div>
-	</aside>
-
-	<main class="flex min-w-0 flex-1 flex-col">
-		<header class="flex items-center gap-3 border-b border-border px-5 py-3">
-			<div class="relative flex-1">
-				<iconify-icon icon="solar:magnifer-linear" width="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"></iconify-icon>
-				<input
-					type="search"
-					bind:value={query}
-					oninput={onSearchInput}
-					placeholder="Search messages…"
-					class="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				/>
-			</div>
-			{#if requestId}
-				<span class="inline-flex h-9 max-w-[16rem] items-center rounded-md border border-border bg-accent pl-2 text-xs text-accent-foreground">
-					<span class="truncate font-mono" title={requestId}>req:{requestId}</span>
-					<button
-						class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted"
-						aria-label="Clear request filter"
-						title="Clear request filter"
-						onclick={clearRequestId}
-					>
-						<iconify-icon icon="solar:close-circle-linear" width="16"></iconify-icon>
-					</button>
-				</span>
-			{/if}
-			<button
-				class="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium transition-colors {liveTail ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}"
-				onclick={toggleLiveTail}
-			>
-				<span class="inline-block h-2 w-2 rounded-full {liveTail && !tailPaused ? 'animate-pulse bg-green-500 motion-reduce:animate-none' : 'bg-muted-foreground'}"></span>
-				Live tail
-			</button>
-			{#if liveTail}
-				<button
-					class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium transition-colors {tailPaused ? 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20' : 'bg-background hover:bg-accent'}"
-					title={tailPaused ? 'Resume live tail' : 'Pause live tail'}
-					onclick={toggleTailPause}
-				>
-					<iconify-icon icon={tailPaused ? 'solar:play-linear' : 'solar:pause-linear'} width="14"></iconify-icon>
-					{tailPaused ? 'Resume' : 'Pause'}
-				</button>
-			{/if}
-
-			<div class="ml-1 flex items-center gap-2 border-l border-border pl-3">
-				{#if auth?.user}
-					<span class="hidden max-w-[12rem] truncate text-sm text-muted-foreground sm:inline" title={auth.user.email}>
-						{auth.user.name || auth.user.email}
-					</span>
-				{/if}
-				{#if auth?.user?.is_admin}
-					<a
-						href="/keys"
-						class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
-						title="API keys"
-						aria-label="API keys"
-					>
-						<iconify-icon icon="solar:key-linear" width="16"></iconify-icon>
-					</a>
-					<a
-						href="/alerts"
-						class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
-						title="Alerts"
-						aria-label="Alerts"
-					>
-						<iconify-icon icon="solar:bell-linear" width="16"></iconify-icon>
-					</a>
-				{/if}
-				<button
-					class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
-					title="Sign out"
-					aria-label="Sign out"
-					onclick={() => auth?.logout()}
-				>
-					<iconify-icon icon="solar:logout-2-linear" width="16"></iconify-icon>
-				</button>
-			</div>
-		</header>
-
-		{#if error}
-			<div class="border-b border-border bg-destructive/10 px-5 py-2 text-sm text-destructive">{error}</div>
+<section class="grid gap-4 lg:grid-cols-2">
+	<Card class="flex flex-col gap-4">
+		<h2 class="text-fc-lg font-semibold text-fc-fg">By level</h2>
+		{#if slices.length > 0}
+			<DonutChart
+				data={slices}
+				class="flex-1"
+				centerLabel="entries"
+				centerValue={formatCount(grandTotal)}
+			/>
+		{:else}
+			<EmptyState bare icon={icons.dashboard} title="Nothing ingested yet" />
 		{/if}
+	</Card>
 
-		{#if hist && hist.bars.length > 0}
-			<div class="border-b border-border px-5 pb-2 pt-3">
-				<svg
-					class="block h-20 w-full"
-					viewBox="0 0 {hist.bars.length} 100"
-					preserveAspectRatio="none"
-					role="img"
-					aria-label="Log volume by level over the selected time range"
-				>
-					{#each hist.bars as bar, i (bar.start)}
-						<g
-							role="button"
-							tabindex="0"
-							class="cursor-pointer outline-none"
-							onclick={() => zoomToBucket(bar)}
-							onkeydown={(event) => {
-								if (event.key === 'Enter' || event.key === ' ') {
-									event.preventDefault();
-									zoomToBucket(bar);
-								}
-							}}
-						>
-							<title>{bucketTitle(bar)}</title>
-							<rect x={i + 0.08} y="0" width="0.84" height="100" fill="transparent" />
-							{#each stackSegments(bar) as segment (segment.level)}
-								<rect x={i + 0.08} y={segment.y} width="0.84" height={segment.h} class={levelFill(segment.level)} />
-							{/each}
-						</g>
-					{/each}
-				</svg>
-				<div class="mt-1 flex justify-between font-mono text-[10px] text-muted-foreground">
-					<span>{formatTime(new Date(hist.bars[0].start).toISOString())}</span>
-					<span>{formatTime(new Date(hist.bars[hist.bars.length - 1].end).toISOString())}</span>
-				</div>
-			</div>
-		{/if}
-
-		<div class="flex-1 overflow-y-auto">
-			<table class="w-full border-collapse text-sm">
-				<thead class="sticky top-0 z-10 bg-background">
-					<tr class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-						<th class="px-5 py-2 font-medium">Time</th>
-						<th class="px-3 py-2 font-medium">App</th>
-						<th class="px-3 py-2 font-medium">Level</th>
-						<th class="px-3 py-2 font-medium">Message</th>
+	<Card class="flex flex-col gap-4">
+		<h2 class="text-fc-lg font-semibold text-fc-fg">Busiest apps</h2>
+		{#if topApps.length > 0}
+			<Table class="bg-transparent">
+				<thead>
+					<tr>
+						<th scope="col">App</th>
+						<th scope="col">Entries</th>
+						<th scope="col">Last seen</th>
 					</tr>
 				</thead>
 				<tbody>
-					{#if loading && entries.length === 0}
-						<tr><td colspan="4" class="px-5 py-10 text-center text-muted-foreground">Loading…</td></tr>
-					{:else if entries.length === 0}
-						<tr><td colspan="4" class="px-5 py-10 text-center text-muted-foreground">No log entries match these filters.</td></tr>
-					{:else}
-						{#each entries as entry (entry.id)}
-							<tr
-								class="cursor-pointer border-b border-border/60 align-top transition-colors hover:bg-accent/50"
-								onclick={() => toggleRow(entry.id)}
-							>
-								<td class="whitespace-nowrap px-5 py-2 font-mono text-xs text-muted-foreground">{formatTime(entry.created_at)}</td>
-								<td class="px-3 py-2">
-									<span
-										role="button"
-										tabindex="0"
-										class="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground outline-none ring-ring transition-colors hover:bg-accent focus-visible:ring-2"
-										title="Filter by app {entry.app}"
-										onclick={(event) => pivotApp(entry.app, event)}
-										onkeydown={(event) => {
-											if (event.key === 'Enter' || event.key === ' ') {
-												event.preventDefault();
-												pivotApp(entry.app, event);
-											}
-										}}
-									>{entry.app}</span>
-								</td>
-								<td class="px-3 py-2">
-									<span
-										role="button"
-										tabindex="0"
-										class="rounded-md px-1.5 py-0.5 text-xs font-medium uppercase outline-none ring-ring transition-opacity hover:opacity-80 focus-visible:ring-2 {levelClass(entry.level)}"
-										title="Toggle level {entry.level}"
-										onclick={(event) => pivotLevel(entry.level, event)}
-										onkeydown={(event) => {
-											if (event.key === 'Enter' || event.key === ' ') {
-												event.preventDefault();
-												pivotLevel(entry.level, event);
-											}
-										}}
-									>{entry.level}</span>
-								</td>
-								<td class="max-w-0 truncate px-3 py-2 font-mono text-xs">{entry.message}</td>
-							</tr>
-							{#if expandedId === entry.id}
-								{@const rid = metaRequestId(entry)}
-								<tr class="border-b border-border/60 bg-muted/40">
-									<td colspan="4" class="px-5 py-3">
-										<div class="mb-2 font-mono text-xs whitespace-pre-wrap break-words">{entry.message}</div>
-										{#if entry.meta && Object.keys(entry.meta).length > 0}
-											<pre class="overflow-x-auto rounded-md border border-border bg-card p-3 font-mono text-xs">{JSON.stringify(entry.meta, null, 2)}</pre>
-										{:else}
-											<p class="text-xs text-muted-foreground">No metadata.</p>
-										{/if}
-										<div class="mt-3 flex flex-wrap items-center gap-2">
-											<button
-												class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-												onclick={() => openContext(entry.id)}
-											>
-												<iconify-icon icon="solar:clock-circle-linear" width="14"></iconify-icon>
-												Context
-											</button>
-											{#if rid}
-												<button
-													class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-secondary px-3 font-mono text-xs text-secondary-foreground transition-colors hover:bg-accent"
-													title="Filter by this request across all apps"
-													onclick={() => pivotRequest(rid)}
-												>
-													<iconify-icon icon="solar:filter-linear" width="14"></iconify-icon>
-													request_id: {rid}
-												</button>
-											{/if}
-										</div>
-										<div class="mt-2 text-xs text-muted-foreground">received {formatTime(entry.received_at)}</div>
-									</td>
-								</tr>
-							{/if}
-							{#if gapIds.includes(entry.id)}
-								<tr class="border-b border-border/60 bg-muted/40">
-									<td colspan="4" class="px-5 py-1.5 text-center text-xs text-muted-foreground">
-										<span class="inline-flex items-center gap-1.5">
-											<iconify-icon icon="solar:danger-triangle-linear" width="14"></iconify-icon>
-											possible gap — some logs may not be shown
-										</span>
-									</td>
-								</tr>
-							{/if}
-						{/each}
-					{/if}
+					{#each topApps as app (app.name)}
+						<tr>
+							<td class="font-fc-mono text-fc-xs">
+								<a class="hover:underline" href="/logs?app={encodeURIComponent(app.name)}">{app.name}</a>
+							</td>
+							<td class="tabular-nums">{formatCount(app.count)}</td>
+							<td class="whitespace-nowrap text-fc-fg-muted">{formatRelative(app.last_seen)}</td>
+						</tr>
+					{/each}
 				</tbody>
-			</table>
+			</Table>
+		{:else}
+			<EmptyState bare icon={icons.server} title="No app has shipped a log yet" />
+		{/if}
+	</Card>
+</section>
 
-			{#if nextBefore != null && entries.length > 0}
-				<div class="flex justify-center py-4">
-					<button
-						class="inline-flex h-9 items-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
-						onclick={loadMore}
-						disabled={loadingMore}
-					>
-						{loadingMore ? 'Loading…' : 'Load more'}
-					</button>
-				</div>
-			{/if}
+<section class="flex flex-col gap-4">
+	<div class="flex flex-wrap items-end justify-between gap-4">
+		<div class="flex flex-col gap-1">
+			<h2 class="text-fc-lg font-semibold text-fc-fg">Recent errors</h2>
+			<p class="text-fc-sm text-fc-fg-muted">The last eight, across every app.</p>
 		</div>
-	</main>
-</div>
-
-{#if contextOpen}
-	<div class="fixed inset-0 z-50 flex justify-end">
-		<button class="absolute inset-0 bg-foreground/30" aria-label="Close context view" onclick={closeContext}></button>
-		<aside class="relative flex h-full w-full max-w-2xl flex-col border-l border-border bg-background shadow-xl">
-			<header class="flex items-center justify-between border-b border-border px-5 py-3">
-				<h2 class="text-sm font-semibold">Log context</h2>
-				<button
-					class="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent"
-					aria-label="Close"
-					title="Close"
-					onclick={closeContext}
-				>
-					<iconify-icon icon="solar:close-circle-linear" width="18"></iconify-icon>
-				</button>
-			</header>
-
-			{#if contextError}
-				<div class="border-b border-border bg-destructive/10 px-5 py-2 text-sm text-destructive">{contextError}</div>
-			{/if}
-
-			<div class="flex-1 overflow-y-auto">
-				<div class="flex justify-center py-3">
-					<button
-						class="inline-flex h-11 items-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
-						onclick={() => extendContext('after')}
-						disabled={contextLoading || contextAfter >= CONTEXT_MAX}
-					>
-						{contextAfter >= CONTEXT_MAX ? 'Newer limit reached' : 'Load newer'}
-					</button>
-				</div>
-
-				{#if contextLoading && contextEntries.length === 0}
-					<p class="px-5 py-8 text-center text-sm text-muted-foreground">Loading…</p>
-				{:else if contextEntries.length === 0}
-					<p class="px-5 py-8 text-center text-sm text-muted-foreground">No surrounding entries.</p>
-				{:else}
-					<div class="flex flex-col">
-						{#each contextEntries as entry (entry.id)}
-							<div class="flex items-start gap-2 border-b border-border/60 px-5 py-2 {entry.id === contextAnchorId ? 'bg-accent ring-1 ring-inset ring-ring' : ''}">
-								<span class="whitespace-nowrap font-mono text-xs text-muted-foreground">{formatTime(entry.created_at)}</span>
-								<span class="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">{entry.app}</span>
-								<span class="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium uppercase {levelClass(entry.level)}">{entry.level}</span>
-								<span class="min-w-0 flex-1 break-words font-mono text-xs">{entry.message}</span>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
-				<div class="flex justify-center py-3">
-					<button
-						class="inline-flex h-11 items-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
-						onclick={() => extendContext('before')}
-						disabled={contextLoading || contextBefore >= CONTEXT_MAX}
-					>
-						{contextBefore >= CONTEXT_MAX ? 'Older limit reached' : 'Load older'}
-					</button>
-				</div>
-			</div>
-		</aside>
+		<Button size="sm" variant="ghost" href="/logs?level=error" iconRight={icons.arrow}>
+			See all errors
+		</Button>
 	</div>
-{/if}
+	<LogTable
+		entries={recentErrors}
+		{loading}
+		emptyTitle="No errors in the last 24 hours"
+		emptyDescription="Quiet is good. The explorer has the full stream if you want to look closer."
+	/>
+</section>

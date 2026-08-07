@@ -10,6 +10,7 @@ Docker-deployed.
 |-------|------|
 | API | Go 1.24, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
+| Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.4.0`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
 | Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: per-app API keys (SHA256-hashed, admin-managed) with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
@@ -88,16 +89,26 @@ Journal/
     collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /api/ingest
     client/
       src/
-        lib/backend.ts             # typed API client (auth, logs, histogram, context, api keys)
+        app.css                    # `@import '@facile/muse/styles'` + `@source` + the suite-name alias block. Nothing else.
+        lib/backend.ts             # typed API client (auth, logs, histogram, context, api keys, queries, alerts)
         lib/auth.ts                # localStorage session token (journal.token)
+        lib/theme.svelte.ts        # system/light/dark, toggles BOTH .dark and .light on <html>
+        lib/format.ts              # formatTime / formatClock / formatDate / formatRelative / toLocalInput
+        lib/levels.ts              # level -> muse tone, chart fill, chip class, volume-strip weight
+        lib/histogram.ts           # sparse buckets -> dense bars, stacked pixel geometry (pure, testable)
+        lib/components/            # LogTable, LogHistogram, LogContextDrawer, LevelBadge, PageHeader
         routes/
-          login/+page.svelte       # sign in / register (redirects authed users to /)
-          (app)/+layout.svelte     # auth guard — redirects to /login, exposes user via context
-          (app)/+page.svelte       # dashboard: filters, saved queries, time range, histogram, live tail (pause/gap markers), pivots, context panel
-          (app)/keys/+page.svelte  # API key management (admin only)
-          (app)/alerts/+page.svelte # alert rules management (admin only)
+          +layout.svelte           # app.css, iconify-icon registration, stored theme, one <Toaster>
           +layout.ts               # prerender = false, ssr = false — the whole dashboard is client-rendered
-      static/                      # favicon, logo, fonts, vendored iconify-icon script
+          login/+page.svelte       # canonical suite split-screen sign in / register
+          (app)/+layout.svelte     # the shell: SideBar + Topbar + MobileNav, auth guard, user context
+          (app)/+page.svelte       # Overview: stat cards, volume strip, level donut, busiest apps, recent errors
+          (app)/logs/+page.svelte  # explorer: filters (URL-synced), histogram drill-down, live tail, pivots, context drawer
+          (app)/apps/+page.svelte  # sources with counts and last-seen
+          (app)/queries/+page.svelte # saved filter sets
+          (app)/alerts/+page.svelte  # alert rules (admin only)
+          (app)/settings/          # +layout (Tabs) + Profile / appearance / api (keys, admin) / advanced
+      static/                      # favicon, logo — fonts and iconify come from the muse package
   sdk/
     journal/                       # Go SDK: batching client + slog tee handler (stdlib-only, go-gettable)
 ```
@@ -296,6 +307,14 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
 - GORM models live in `apps/api/schemas/`; migration in `schemas/migrate.go`.
 - Client uses Svelte 5 runes only (`$state`, `$props`, `$derived`, `$effect`), TypeScript strict.
 - All client API calls go through `src/lib/backend.ts`.
+- **muse is the component layer.** Read `muse/CHARTE.md` before writing UI: reuse a primitive
+  before hand-rolling one, style with `fc-*` token utilities (never a raw hex or a stock
+  Tailwind palette colour), keep the dashboard rhythm (`gap-4` inside and between cards, `p-5`
+  card padding, `gap-10` between sections), and remember containers carry **no** border — the
+  fill separates them. Local components exist only for domain widgets (`LogHistogram`,
+  `LogTable`) and thin compositions (`PageHeader`), never for chrome, form controls or dialogs.
+- Settings is reached from the sidebar user card only — never a nav row — and each section is a
+  real route under `/settings` (CHARTE §14). Log out lives in settings.
 
 ## Gotchas
 
@@ -312,7 +331,8 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
   (`https://journal.facile.studio/api` publicly, `http://journal-api:4010/api` on the
   compose network); point it at the bare host and every log line is accepted, discarded, and
   never reported.
-- Ingest auth is per-app API keys (created on the dashboard's Keys page, admin only). The legacy
+- Ingest auth is per-app API keys (created under **Settings → API**, admin only; the page used to
+  live at `/keys`). The legacy
   `INGEST_TOKEN` still works if set; empty (the default) disables it — with no keys and no legacy
   token, every `/api/ingest` is rejected.
 - `docker compose up` alone publishes **no** host ports (production shape). Local dev needs
@@ -322,14 +342,32 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
   out-of-order client timestamps still tail correctly. The histogram refreshes every 4th poll.
 - In-flight request races on the dashboard are guarded by generation counters — stale load/poll
   responses are discarded, not merged.
+- `/logs` mirrors its filters into the query string (`app`, `level`, `q`, `request_id`, `range`,
+  `since`, `until`) via `replaceState`, so a filtered view is linkable and survives a reload.
+  Anything that navigates *to* the explorer (a bucket click on the Overview, an app row, a saved
+  query) builds that same query string rather than poking at page state.
+- The volume strip is a local component, not a muse `BarChart`: a bucket is a *control* (click to
+  zoom the whole page into it) and muse's charts expose no selection. It still follows CHARTE §12
+  — real pixel geometry, rounded corners on every free end, `aria-hidden` svg beside a hidden data
+  table — and `debug`/`info` are painted at reduced opacity so warn and error stay legible.
 - Default ports: the app listens on `4010` (chosen to not clash with Nuage's `4000`), and
   `bun run dev` still serves the client on `5173` with a Vite proxy forwarding `/api` to
   `localhost:4010`.
 - Full-text uses the `simple` dictionary (no stemming/stopwords) for predictable, language-agnostic
   matching across app log lines.
-- The `iconify-icon` script is vendored in `static/vendor/` (no CDN at runtime), but it still
-  fetches icon *data* from `api.iconify.design` — the CSP `connect-src` must keep allowing that
-  origin or every icon breaks.
+- `iconify-icon` is an npm dependency registered client-side from the root layout
+  (`if (browser) void import('iconify-icon')`), so it satisfies `script-src: self` without a
+  vendored file. It still fetches icon *data* from `api.iconify.design` — the CSP `connect-src`
+  must keep allowing that origin or every icon renders blank.
+- **`optimizeDeps.exclude: ['@facile/muse']` in `vite.config.ts` is load-bearing.** muse ships
+  uncompiled source including `.svelte.ts` rune modules; Vite's dev-only optimizer hands those to
+  esbuild without the TypeScript transform and `vite dev` exits 1. `vite build`, `bun run check`
+  and CI never run the optimizer, so nothing else catches it.
+- Fonts and the whole palette come from the muse package — there is no `static/fonts`, no
+  `@font-face` and no `:root`/`.dark` block in `app.css`. Do not reintroduce them.
+- Theme switching must toggle **both** `.dark` and `.light` on `<html>`: muse paints dark from
+  `@media (prefers-color-scheme: dark)` scoped to `:root:not(.light)`, so toggling only `.dark`
+  leaves a dark-OS user unable to force light. `system` writes neither class.
 - CSP is configured in `svelte.config.js` (`kit.csp`). With `adapter-static` the `auto` mode
   emits **hashes**, not nonces, into the `<meta http-equiv>` of the built `index.html`, so it
   survives being served by the Go binary. Every other security header comes from the Go
