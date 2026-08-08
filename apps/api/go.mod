@@ -3,7 +3,7 @@ module github.com/FacileStudio/Journal/apps/api
 go 1.25.0
 
 require (
-	github.com/FacileStudio/porte v0.1.0
+	github.com/FacileStudio/porte v0.1.1
 	github.com/FacileStudio/tronc v0.9.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.15.0
@@ -28,5 +28,3 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
-
-replace github.com/FacileStudio/porte => ../../../porte
