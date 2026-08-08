@@ -163,6 +163,10 @@ developer loop, not the bootstrap tier.
 | `INGEST_TOKEN` | Legacy shared ingest token (unscoped). Empty disables it — per-app API keys are the primary ingest auth | — (empty) |
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
 | `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
+| `OIDC_ISSUER` | Enables single sign-on through porte; makes the next four required | — |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | Provider credentials | — |
+| `OIDC_REDIRECT_URL` / `OIDC_SUCCESS_URL` | Callback and landing URLs | — |
+| `SSO_ONLY` | `true` unregisters the password routes; needs `OIDC_ISSUER` | `false` |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins, read through `tronc/env`. `ALLOWED_ORIGINS` and `DOMAINS` remain accepted fallbacks | — (unset denies every cross-origin caller) |
 | `WEBHOOK_ALLOWED_HOSTS` | Comma-separated hostnames allowed as internal alert webhook targets | — |
 | `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |
@@ -199,17 +203,29 @@ at the root. Anything not under `/api` falls through to the dashboard's index do
 
 ### Auth (`/auth/*`)
 
-Dashboard accounts. DB-backed sessions: a random 32-byte token is returned to the client and
-stored SHA256-hashed in `sessions`; passwords are Argon2id. The first account created becomes
-admin (guarded by `pg_advisory_xact_lock` inside the register transaction). The token is sent
-as `Authorization: Bearer <token>` (scheme required, case-insensitive) and the client keeps it
-in `localStorage` (`journal.token`). Login opportunistically deletes expired session rows.
+Dashboard accounts, through **porte** — the suite's shared authentication kit, which Journal
+is the first app to adopt. `porte/oidc` owns the middleware, `/auth/config`, `/auth/logout`
+and the whole OIDC flow; `porte/pg` owns `porte_sessions`, `porte_identities` and
+`porte_login_codes`. Journal keeps its own `users` table and implements `porte.UserStore` over
+it, because `is_admin` and first-account-becomes-admin are product rules porte has no opinion
+about.
 
-- `GET /auth/config` → `{ "allow_registration": bool }` (drives the register tab)
+Sessions are DB-backed: a random 32-byte token, stored SHA256-hashed in `porte_sessions`, 30-day
+absolute TTL plus a 7-day idle window on the cookie transport only. Two transports, one row —
+a password login returns the token and the client keeps it in `localStorage` (`journal.token`)
+and sends `Authorization: Bearer <token>`; the SSO callback puts it in an HttpOnly
+`__Host-session` cookie instead and no token ever reaches a URL. A cookie-authenticated write
+must carry `X-Facile-CSRF` with any non-empty value. Passwords are Argon2id, and the first
+account created becomes admin (guarded by `pg_advisory_xact_lock`, in the register transaction
+and in the OIDC upsert alike). Login opportunistically deletes expired session rows.
+
+- `GET /auth/config` → `{ sso_only, oidc_enabled, allow_registration }` (porte serves it; `allow_registration` rides in through `Deps.ConfigExtra`)
+- `GET /auth/oidc` → starts SSO. Registered only with an `OIDC_ISSUER`. `?flow=cli` ends on a one-time code instead of a cookie.
 - `POST /auth/register` → `{ token, user }` (201). Body `{ email, name?, password }`, password ≥ 12 chars. Locked once accounts exist if `ALLOW_REGISTRATION=false` (first account always allowed). Duplicate email → 409.
 - `POST /auth/login` → `{ token, user }`. Body `{ email, password }`.
-- `POST /auth/logout` (Bearer) → deletes the session.
-- `GET /auth/me` (Bearer) → `{ user }` (includes `is_admin`).
+- `POST /auth/logout` (session) → porte deletes the session and clears the cookie, `{ logged_out: true }`.
+- `GET /auth/me` (session) → `{ user }` (includes `is_admin`). porte authenticates, then `middleware.RequireAuth` hydrates email + `is_admin` from `users` — porte carries neither.
+- `SSO_ONLY=true` does not register `/auth/register` and `/auth/login` at all.
 
 `GET /logs*` and `GET /apps` require a valid Bearer session token; `/apikeys*` additionally
 requires `is_admin`. `/health` and `/ready` stay public and rate-limit exempt.

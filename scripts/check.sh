@@ -70,6 +70,10 @@ for dir in $GO_MODULES; do
     "$GO" vet ./... || s=1
     "$GO" test ./... || s=1
 
+    if [ -z "${JOURNAL_TEST_DATABASE_URL:-}" ]; then
+      echo "check: JOURNAL_TEST_DATABASE_URL is unset, the database-backed tests were skipped (CI still runs them)" >&2
+    fi
+
     # Postgres is the only database in this suite, tests included. A test on
     # SQLite builds a different schema from the GORM struct tags and then
     # passes, proving nothing about the Postgres DDL that actually ships — and

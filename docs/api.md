@@ -45,10 +45,24 @@ Postgres with a 2-second timeout and returns `200 {"status":"ready"}` or
 | POST | `/api/auth/login` | public |
 | POST | `/api/auth/logout` | session |
 | GET | `/api/auth/me` | session |
+| GET | `/api/auth/oidc` | public, SSO only |
+| GET | `/api/auth/oidc/callback` | public, SSO only |
+| POST | `/api/auth/oidc/exchange` | public, SSO only |
+| POST | `/api/auth/sync-profile` | session, SSO only |
+| POST | `/api/auth/backchannel-logout` | the provider, SSO only |
 
-`GET /api/auth/config` returns `{"sso_only":false,"oidc_enabled":false,"allow_registration":bool}`.
-Journal has no OIDC client, so the first two fields are constants — the shape exists so the
-login screen matches the rest of the suite.
+`GET /api/auth/config` returns `{"sso_only":bool,"oidc_enabled":bool,"allow_registration":bool}`.
+The first two come from [porte](https://github.com/FacileStudio/porte), the suite's
+authentication kit, and follow `OIDC_ISSUER` and `SSO_ONLY`; `allow_registration` is
+Journal's own addition to the suite-wide shape. The routes marked *SSO only* are not
+registered at all without an `OIDC_ISSUER`, and `SSO_ONLY=true` unregisters `/auth/register`
+and `/auth/login` the same way — there is no endpoint left to probe in either direction.
+
+A session issued by single sign-on lands in an **HttpOnly** cookie rather than in the
+response body, so no token ever reaches a URL, a log line or `localStorage`. A request
+authenticated by that cookie must carry an `X-Facile-CSRF` header, with any non-empty value,
+on every method other than `GET`, `HEAD` and `OPTIONS`. Bearer callers are exempt: nothing
+attaches a header on their behalf.
 
 `POST /api/auth/register` takes `{"email","name","password"}` and returns `201 {"token","user"}`.
 The email must parse, the password must be at least 12 characters, a duplicate email is

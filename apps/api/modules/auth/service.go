@@ -10,23 +10,29 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Journal/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )
 
 const (
-	sessionTTL          = 30 * 24 * time.Hour
 	minPasswordLen      = 12
 	registrationLockKey = 0x6A6F75726E616C
 )
 
 type Service struct {
-	orm *gorm.DB
+	orm        *gorm.DB
+	sessions   porte.SessionStore
+	sessionTTL time.Duration
 }
 
-func NewService(orm *gorm.DB) *Service {
-	return &Service{orm: orm}
+// NewService takes the session store porte authenticates against, so a
+// password login and an SSO login land in the same table and are ended by the
+// same logout. There is one session model in this app and two ways to reach
+// it, which is the whole point of adopting the kit.
+func NewService(orm *gorm.DB, sessions porte.SessionStore, sessionTTL time.Duration) *Service {
+	return &Service{orm: orm, sessions: sessions, sessionTTL: sessionTTL}
 }
 
 func (s *Service) Register(ctx context.Context, email, name, password string, allowRegistration bool) (*schemas.User, string, error) {
@@ -101,7 +107,9 @@ func (s *Service) Login(ctx context.Context, email, password string) (*schemas.U
 		return nil, "", errors.Unauthorized("invalid email or password")
 	}
 
-	s.orm.WithContext(ctx).Where("expires_at < now()").Delete(&schemas.Session{})
+	// Opportunistic and best effort, as it has always been: a sweep that
+	// fails is a table that stays a little larger, not a login that fails.
+	_, _ = s.sessions.DeleteExpired(ctx, time.Now())
 
 	token, err := s.issueSession(ctx, user.ID)
 	if err != nil {
@@ -110,47 +118,34 @@ func (s *Service) Login(ctx context.Context, email, password string) (*schemas.U
 	return &user, token, nil
 }
 
-func (s *Service) Logout(ctx context.Context, authorization string) error {
-	token := normalizeBearer(authorization)
-	if token == "" {
-		return nil
-	}
-	if err := s.orm.WithContext(ctx).
-		Where("token = ?", authcrypto.HashToken(token)).
-		Delete(&schemas.Session{}).Error; err != nil {
-		return errors.Internal("failed to delete session", err)
-	}
-	return nil
-}
-
-func (s *Service) Authenticate(ctx context.Context, authorization string) (authcontext.Identity, error) {
-	token := normalizeBearer(authorization)
-	if token == "" {
-		return authcontext.Identity{}, errors.Unauthorized("missing auth token")
-	}
-
+// IdentityForUser turns the user id porte authenticated into the identity the
+// rest of Journal reads. porte hands the middleware a session and a user id
+// and stops there: it holds no email and no is_admin, because what a role may
+// do is the app's business and the profile lives in the app's own table.
+//
+// This is the query the old Authenticate already made as a join, moved one
+// step later in the chain. It is unchanged in cost.
+func (s *Service) IdentityForUser(ctx context.Context, userID int64) (authcontext.Identity, error) {
 	var out struct {
-		UserID    int64
-		Email     string
-		IsAdmin   bool
-		ExpiresAt time.Time
+		ID      int64
+		Email   string
+		IsAdmin bool
 	}
 	err := s.orm.WithContext(ctx).
-		Table("sessions s").
-		Select("u.id as user_id, u.email as email, u.is_admin as is_admin, s.expires_at as expires_at").
-		Joins("join users u on u.id = s.user_id").
-		Where("s.token = ?", authcrypto.HashToken(token)).
+		Model(&schemas.User{}).
+		Select("id", "email", "is_admin").
+		Where("id = ?", userID).
 		Scan(&out).Error
 	if err != nil {
-		return authcontext.Identity{}, errors.Internal("failed to verify session", err)
+		return authcontext.Identity{}, errors.Internal("failed to load the account", err)
 	}
-	if out.UserID == 0 {
+	if out.ID == 0 {
+		// The session points at a user that no longer exists. porte's
+		// foreign key cascades a delete, so this is a race rather than
+		// a leak, and it is still not an authenticated request.
 		return authcontext.Identity{}, errors.Unauthorized("invalid auth token")
 	}
-	if time.Now().After(out.ExpiresAt) {
-		return authcontext.Identity{}, errors.Unauthorized("expired auth token")
-	}
-	return authcontext.Identity{UserID: out.UserID, Email: out.Email, IsAdmin: out.IsAdmin}, nil
+	return authcontext.Identity{UserID: out.ID, Email: out.Email, IsAdmin: out.IsAdmin}, nil
 }
 
 func (s *Service) UserByID(ctx context.Context, id int64) (*schemas.User, error) {
@@ -164,17 +159,29 @@ func (s *Service) UserByID(ctx context.Context, id int64) (*schemas.User, error)
 	return &user, nil
 }
 
+// issueSession mints a password session through porte's store, so it is the
+// same row shape, the same hash and the same revocation as one issued by the
+// SSO callback.
+//
+// The token still comes back to the client and still travels as a bearer:
+// porte v0.1 sets its HttpOnly cookie on the OIDC callback only, and it does
+// not export session issuance for an app that owns a local login. That is
+// v0.2's job. Until then the password path keeps the transport it has, which
+// regresses nothing, and both transports authenticate through porte.
 func (s *Service) issueSession(ctx context.Context, userID int64) (string, error) {
-	token, err := authcrypto.NewToken()
+	token, err := porte.NewToken()
 	if err != nil {
 		return "", errors.Internal("failed to generate token", err)
 	}
-	session := schemas.Session{
-		Token:     authcrypto.HashToken(token),
-		UserID:    userID,
-		ExpiresAt: time.Now().Add(sessionTTL),
-	}
-	if err := s.orm.WithContext(ctx).Create(&session).Error; err != nil {
+	now := time.Now()
+	_, err = s.sessions.Create(ctx, porte.Session{
+		TokenHash:  porte.HashToken(token),
+		UserID:     userID,
+		CreatedAt:  now,
+		LastUsedAt: now,
+		ExpiresAt:  now.Add(s.sessionTTL),
+	})
+	if err != nil {
 		return "", errors.Internal("failed to create session", err)
 	}
 	return token, nil
@@ -182,14 +189,6 @@ func (s *Service) issueSession(ctx context.Context, userID int64) (string, error
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func normalizeBearer(authorization string) string {
-	token, ok := authcrypto.BearerToken(authorization)
-	if !ok {
-		return ""
-	}
-	return token
 }
 
 func validEmail(email string) bool {

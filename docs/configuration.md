@@ -35,6 +35,24 @@ passes `ALLOWED_ORIGINS`.
 | `RETENTION_DAYS` | no | `90` | Delete entries older than N days, hourly. `0` keeps forever. A negative value exits 1 |
 | `WEBHOOK_ALLOWED_HOSTS` | no | — | Comma-separated hostnames alert webhooks may reach past the SSRF guard. Without it, private, loopback, link-local, and metadata addresses are refused |
 
+### Single sign-on
+
+Journal federates to the suite's Authentik through [porte](https://github.com/FacileStudio/porte).
+The variable names are the suite convention and are the same in every Facile app.
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `OIDC_ISSUER` | no | — | Issuer URL. Setting it enables SSO and turns the next four into hard requirements. Must be an absolute `http(s)` URL — a bare hostname parses as a relative path and would otherwise fail discovery at boot with an opaque error |
+| `OIDC_CLIENT_ID` | with issuer | — | Client identifier |
+| `OIDC_CLIENT_SECRET` | with issuer | — | Client secret |
+| `OIDC_REDIRECT_URL` | with issuer | — | Callback URL, e.g. `https://journal.facile.studio/api/auth/oidc/callback`. Must match the provider's registration exactly |
+| `OIDC_SUCCESS_URL` | with issuer | — | Where the browser lands after a successful login |
+| `SSO_ONLY` | no | `false` | `true` stops registering `/auth/register` and `/auth/login`. Requires `OIDC_ISSUER`: without one it would leave no way to sign in, so the API exits 1 rather than lock you out |
+
+`OIDC_ISSUER` is all-or-nothing, and discovery runs at startup: an unreachable issuer or a
+missing secret exits 1 there rather than becoming a 500 on somebody's first login three days
+later. Leaving it unset registers no OIDC endpoint at all.
+
 ### Static client
 
 | Variable | Required | Default | What it does |

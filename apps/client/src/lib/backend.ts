@@ -29,6 +29,11 @@ export type AuthConfig = {
 	allow_registration: boolean;
 };
 
+// Where the browser goes to start single sign-on. It is a navigation, not a
+// fetch: the API answers with a redirect to the identity provider, and an XHR
+// cannot follow that across origins.
+export const ssoLoginUrl = `${backendBaseUrl}/auth/oidc`;
+
 export type LogEntry = {
 	id: number;
 	app: string;
@@ -176,6 +181,14 @@ type ApiErrorPayload = {
 	error?: { message?: string };
 };
 
+// A session issued by single sign-on lives in an HttpOnly cookie the browser
+// attaches whether or not the page meant to send it, which is the whole CSRF
+// problem. The API refuses a cookie-authenticated write without this header,
+// and its presence is the entire signal: a browser will not attach a custom
+// header cross-site without a preflight the API never answers. The value is
+// irrelevant.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 	const headers = new Headers(options.headers);
 	if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
@@ -183,6 +196,9 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 	}
 	const token = getToken();
 	if (token) headers.set('Authorization', `Bearer ${token}`);
+	if (!SAFE_METHODS.has((options.method ?? 'GET').toUpperCase())) {
+		headers.set('X-Facile-CSRF', '1');
+	}
 
 	const response = await fetch(`${backendBaseUrl}${path}`, { ...options, headers });
 	if (response.status === 401 && !path.startsWith('/auth/')) {
@@ -228,7 +244,7 @@ export const backend = {
 	},
 
 	logout() {
-		return apiFetch<{ ok: boolean }>('/auth/logout', { method: 'POST' });
+		return apiFetch<{ logged_out: boolean }>('/auth/logout', { method: 'POST' });
 	},
 
 	me() {

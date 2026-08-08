@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { backend } from '$lib/backend';
-	import { clearToken, getToken, setToken } from '$lib/auth';
+	import { backend, ssoLoginUrl } from '$lib/backend';
+	import { clearToken, setToken } from '$lib/auth';
 
 	const inputClass =
 		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -15,22 +15,27 @@
 	let password = $state('');
 	let name = $state('');
 	let allowRegistration = $state(false);
+	let ssoEnabled = $state(false);
+	let ssoOnly = $state(false);
 	let busy = $state(false);
 	let error = $state('');
 
 	onMount(async () => {
-		if (getToken()) {
-			try {
-				await backend.me();
-				goto('/');
-				return;
-			} catch {
-				clearToken();
-			}
+		/* A single sign-on session is an HttpOnly cookie, so there is nothing here to
+		   inspect: the API is the only thing that can say whether this browser is already
+		   signed in. */
+		try {
+			await backend.me();
+			goto('/');
+			return;
+		} catch {
+			clearToken();
 		}
 		try {
 			const cfg = await backend.authConfig();
 			allowRegistration = cfg.allow_registration;
+			ssoEnabled = cfg.oidc_enabled;
+			ssoOnly = cfg.sso_only;
 		} catch {
 			allowRegistration = false;
 		}
@@ -93,13 +98,30 @@
 					{mode === 'register' ? 'Create account' : 'Welcome back'}
 				</h1>
 				<p class="mt-1.5 text-sm text-muted-foreground">
-					{mode === 'register'
-						? 'Set up the first account to access the logs.'
-						: 'Log in to your Journal account.'}
+					{ssoOnly
+						? 'Sign in with your Facile account to access the logs.'
+						: mode === 'register'
+							? 'Set up the first account to access the logs.'
+							: 'Log in to your Journal account.'}
 				</p>
 			</div>
 
-			{#if allowRegistration}
+			{#if ssoEnabled}
+				<a href={ssoLoginUrl} data-sveltekit-reload class={primaryButtonClass}>
+					<iconify-icon icon="solar:key-minimalistic-square-bold-duotone" width="18" class="mr-2"
+					></iconify-icon>
+					Sign in with Facile
+				</a>
+				{#if !ssoOnly}
+					<div class="my-6 flex items-center gap-3">
+						<span class="h-px flex-1 bg-border"></span>
+						<span class="text-xs uppercase tracking-wide text-muted-foreground">or</span>
+						<span class="h-px flex-1 bg-border"></span>
+					</div>
+				{/if}
+			{/if}
+
+			{#if allowRegistration && !ssoOnly}
 				<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1" role="tablist">
 					<button
 						type="button"
@@ -122,6 +144,7 @@
 				</div>
 			{/if}
 
+			{#if !ssoOnly}
 			<form class="space-y-4" onsubmit={submit}>
 				{#if mode === 'register'}
 					<div class="space-y-1.5">
@@ -182,6 +205,7 @@
 						: mode === 'register' ? 'Create account' : 'Log in'}
 				</button>
 			</form>
+			{/if}
 		</div>
 	</div>
 </div>

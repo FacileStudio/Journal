@@ -69,6 +69,8 @@ cd apps/client && bun install && bun run dev
 | `PORT` | HTTP listen port, `4010` in the shipped compose file |
 | `INGEST_TOKEN` | Legacy unscoped ingest token; empty disables it |
 | `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups; the first account is always allowed |
+| `OIDC_ISSUER` | Enables single sign-on; four companion `OIDC_*` variables become required with it |
+| `SSO_ONLY` | `true` retires the password routes entirely; needs `OIDC_ISSUER` |
 | `RETENTION_DAYS` | Delete entries older than N days; `0` keeps forever |
 | `CORS_ALLOWED_ORIGINS` | Allowed cross-origin callers; unset denies every one of them |
 | `WEBHOOK_ALLOWED_HOSTS` | Hostnames alert webhooks may reach on the private network |

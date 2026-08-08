@@ -19,14 +19,6 @@ func newHandler(service *Service, allowRegistration bool) *Handler {
 	return &Handler{service: service, allowRegistration: allowRegistration}
 }
 
-func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
-	httpjson.WriteJSON(w, http.StatusOK, ConfigResponse{
-		SSOOnly:           false,
-		OIDCEnabled:       false,
-		AllowRegistration: h.allowRegistration,
-	})
-}
-
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
@@ -55,14 +47,6 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpjson.WriteJSON(w, http.StatusOK, AuthResponse{Token: token, User: toUserResponse(*user)})
-}
-
-func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	if err := h.service.Logout(r.Context(), r.Header.Get("Authorization")); err != nil {
-		httpjson.WriteError(w, err)
-		return
-	}
-	httpjson.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {

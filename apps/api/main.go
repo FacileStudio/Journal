@@ -22,6 +22,8 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte/oidc"
+	portepg "github.com/FacileStudio/porte/pg"
 
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/errors"
@@ -79,12 +81,36 @@ func run() int {
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// oidc.New is the boot path: it performs discovery, so an unreachable
+	// or half-configured issuer fails here rather than on somebody's first
+	// login attempt. A kit with no OIDC_ISSUER is not an error — it still
+	// serves /auth/config and /auth/logout and authenticates every session
+	// this app issues.
+	identityStore := portepg.New(sqlDB)
+	kit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
+		Users:       auth.NewUserStore(db),
+		Identities:  identityStore.Identities(),
+		Sessions:    identityStore.Sessions(),
+		Codes:       identityStore.LoginCodes(),
+		Logger:      appLogger,
+		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
+	})
+	if err != nil {
+		appLogger.Error("failed to configure authentication", slog.Any("error", err))
+		return 1
+	}
+	if kit.Enabled() {
+		appLogger.Info("single sign-on enabled",
+			slog.String("issuer", appEnv.Porte.Issuer),
+			slog.Bool("sso_only", appEnv.Porte.SSOOnly))
+	}
+
 	if appEnv.RetentionDays > 0 {
 		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
 	}
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
-	router := buildRouter(db, appEnv, appLogger, health.DB(sqlDB))
+	router := buildRouter(db, kit, identityStore, appEnv, appLogger, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -121,10 +147,10 @@ func run() int {
 	return 0
 }
 
-func buildRouter(db *gorm.DB, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, kit *oidc.Kit, identityStore *portepg.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
-	authService := auth.NewService(db)
+	authService := auth.NewService(db, identityStore.Sessions(), kit.Config().SessionTTL)
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
 	alertsService := alerts.NewService(db)
@@ -148,13 +174,16 @@ func buildRouter(db *gorm.DB, appEnv env.Config, appLogger *slog.Logger, checks 
 	health.Mount(router, checks...)
 	apiref.Mount(router, referenceConfig())
 
+	requireAuth := middleware.RequireAuth(kit, authService)
+
 	router.Route("/api", func(api chi.Router) {
-		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, credentialLimiter, sessionLimiter)
+		kit.Mount(api.With(sessionLimiter))
+		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
 		api.Group(func(protected chi.Router) {
 			protected.Use(sessionLimiter)
-			protected.Use(middleware.RequireAuth(authService))
+			protected.Use(requireAuth)
 			logs.RegisterRoutes(protected, logsService)
 			queries.RegisterRoutes(protected, queriesService)
 			protected.Group(func(admin chi.Router) {

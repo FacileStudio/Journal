@@ -3,11 +3,13 @@ package schemas
 import "gorm.io/gorm"
 
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}, &User{}, &Session{}, &APIKey{}, &SavedQuery{}, &AlertRule{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &SavedQuery{}, &AlertRule{}); err != nil {
 		return err
 	}
 
 	statements := []string{
+		porteSchema,
+		carryLegacySessionsOver,
 		`ALTER TABLE log_entries ADD COLUMN IF NOT EXISTS search tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(message, ''))) STORED`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_search ON log_entries USING GIN(search)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
@@ -23,3 +25,84 @@ func Migrate(db *gorm.DB) error {
 	}
 	return nil
 }
+
+// porteSchema is porte/pg's Schema with its porte_users table left out and
+// every foreign key repointed at Journal's own users.
+//
+// porte offers UserStore as the escape hatch for exactly this: users is
+// referenced by name across this codebase and carries is_admin, which porte
+// has no opinion about, so Journal keeps the table and implements the one
+// method porte needs to resolve a callback to a row in it. The other three
+// stores come from porte/pg unchanged — they only ever touch the tables below.
+//
+// Kept verbatim from porte otherwise, column for column: pg's queries are
+// written against these names and a divergence here would surface as a runtime
+// error on the login path rather than at boot.
+const porteSchema = `
+CREATE TABLE IF NOT EXISTS porte_identities (
+	user_id         bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	provider        text NOT NULL,
+	subject         text NOT NULL,
+	password_hash   text NOT NULL DEFAULT '',
+	access_token    text NOT NULL DEFAULT '',
+	refresh_token   text NOT NULL DEFAULT '',
+	token_expiry    timestamptz,
+	roles           jsonb,
+	roles_synced_at timestamptz,
+	synced_at       timestamptz,
+	PRIMARY KEY (provider, subject)
+);
+CREATE INDEX IF NOT EXISTS porte_identities_user_idx ON porte_identities (user_id);
+
+CREATE TABLE IF NOT EXISTS porte_sessions (
+	id           bigserial PRIMARY KEY,
+	token_hash   text NOT NULL UNIQUE,
+	user_id      bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	label        text NOT NULL DEFAULT '',
+	created_at   timestamptz NOT NULL DEFAULT now(),
+	last_used_at timestamptz NOT NULL DEFAULT now(),
+	expires_at   timestamptz
+);
+CREATE INDEX IF NOT EXISTS porte_sessions_user_idx ON porte_sessions (user_id);
+CREATE INDEX IF NOT EXISTS porte_sessions_expiry_idx ON porte_sessions (expires_at)
+	WHERE expires_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS porte_login_codes (
+	code_hash   text PRIMARY KEY,
+	user_id     bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	expires_at  timestamptz NOT NULL,
+	consumed_at timestamptz
+);
+`
+
+// carryLegacySessionsOver moves the pre-porte sessions table across instead of
+// dropping it, so adopting porte does not sign every existing user out.
+//
+// It works because the two tables agree on the only thing that matters: both
+// store the SHA-256 hex of a 32-byte token and never the token itself, so a
+// row copied here keeps authenticating the credential already in someone's
+// browser. last_used_at is stamped now rather than copied from created_at —
+// porte retires a browser session idle for seven days, and the old table
+// recorded no use at all, so carrying created_at over would log out everyone
+// who signed in more than a week ago on the deploy that is meant to keep them.
+//
+// The whole thing is guarded on the table existing, which makes it a no-op on
+// a fresh install and on every boot after the first. to_regclass is given an
+// unqualified name so it resolves through search_path, like every other
+// statement here — hardcoding public would make this silently skip on any
+// deployment that puts the app in a schema of its own.
+const carryLegacySessionsOver = `
+DO $$
+BEGIN
+	IF to_regclass('sessions') IS NOT NULL THEN
+		INSERT INTO porte_sessions (token_hash, user_id, created_at, last_used_at, expires_at)
+		SELECT s.token, s.user_id, s.created_at, now(), s.expires_at
+		  FROM sessions s
+		  JOIN users u ON u.id = s.user_id
+		 WHERE s.expires_at > now()
+		ON CONFLICT (token_hash) DO NOTHING;
+		DROP TABLE sessions;
+	END IF;
+END
+$$;
+`

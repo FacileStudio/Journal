@@ -57,14 +57,21 @@ app can `go get github.com/FacileStudio/Journal/sdk/journal` without pulling the
 
 Two independent credentials, both `Authorization: Bearer <token>`.
 
-**Dashboard sessions.** `POST /api/auth/register` and `/api/auth/login` return a random
-32-byte URL-safe token. Only its SHA-256 hex is stored, in `sessions`, with a 30-day TTL.
+**Dashboard sessions.** Issued and verified by [porte](https://github.com/FacileStudio/porte),
+the suite's authentication kit, which Journal is the first app to adopt. `POST
+/api/auth/register` and `/api/auth/login` return a random 32-byte URL-safe token; the single
+sign-on callback puts the same thing in an HttpOnly `__Host-session` cookie instead. Only the
+SHA-256 hex is stored, in `porte_sessions`, with a 30-day absolute TTL and a 7-day idle
+window that applies to the cookie transport only — a bearer belongs to a CLI or a nightly
+job, which is idle by design. Both transports are the same row, so one logout ends either.
 Passwords are Argon2id (64 MiB, 3 iterations, parallelism 2, 16-byte salt, 32-byte key) in
 the standard `$argon2id$…` encoding. A login for an unknown email runs
 `authcrypto.EqualizeTiming` against a throwaway hash so response timing does not leak
 account existence. Registration takes a `pg_advisory_xact_lock` and counts users inside the
 transaction: the first account created becomes admin, and `ALLOW_REGISTRATION=false` only
-blocks sign-ups once at least one account exists.
+blocks sign-ups once at least one account exists. The single sign-on callback goes through the
+same lock and the same rule, in `modules/auth`'s `UserStore` — porte resolves the identity and
+hands over the claims, and Journal decides what an account is.
 
 **Ingest keys.** `POST /api/apikeys` (admin) mints `journal_<app>_<random>` and returns the
 full token exactly once; the row keeps a display `prefix` and the SHA-256 hash. A key is
@@ -77,9 +84,11 @@ constant time and is unscoped, so every entry must carry its own `app`.
 
 | Table | Columns of note |
 |---|---|
+| `porte_sessions` | `token_hash`, `user_id` → `users(id)`, `label`, `last_used_at`, `expires_at` |
+| `porte_identities` | `(provider, subject)` primary key, `user_id`, the IdP tokens and the cached roles claim |
+| `porte_login_codes` | one-time codes bridging a browser login to a CLI |
 | `log_entries` | `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
 | `users` | `email` unique, `name`, `password_hash`, `is_admin` |
-| `sessions` | `token` PK (hashed), `user_id`, `expires_at` |
 | `api_keys` | `app`, `prefix`, `key_hash` unique, `revoked_at` |
 | `saved_queries` | `name` unique, `params` jsonb (`app`, `levels`, `q`, `request_id`) |
 | `alert_rules` | `saved_query_id` FK, `threshold`, `window_minutes`, `webhook_url`, `webhook_header`, `webhook_secret`, `enabled`, `last_fired_at` |

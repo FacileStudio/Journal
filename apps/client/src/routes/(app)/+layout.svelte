@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
-	import { clearToken, getToken } from '$lib/auth';
+	import { clearToken } from '$lib/auth';
 	import { setContext } from 'svelte';
 
 	let { children } = $props();
@@ -42,11 +42,10 @@
 		logout
 	});
 
+	/* A single sign-on session lives in an HttpOnly cookie, so there is no token here to
+	   check and no way to read one. The API is the only thing that can answer whether this
+	   browser is signed in, so ask it rather than guessing from localStorage. */
 	$effect(() => {
-		if (!getToken()) {
-			void goto('/login');
-			return;
-		}
 		backend
 			.me()
 			.then((res) => {
