@@ -138,7 +138,7 @@ internal with hardcoded credentials and no published ports.
 ## Environment Variables
 
 **Development configuration comes from [Casier](https://casier.facile.studio), not from a
-`.env`.** `.casier.toml` pins this repo to the `journal` project and its `dev` environment, so
+`.env`.** `casier.yml` pins this repo to the `journal` project and its `dev` environment, so
 `mise run dev` wraps the API in `casier run` and the process starts with `ORIGIN`,
 `INGEST_TOKEN`, `LOG_LEVEL` and `ALLOWED_ORIGINS` already in its environment. Nothing has to
 exist on disk; a local `.env` still works and simply wins nothing, because the API reads the
