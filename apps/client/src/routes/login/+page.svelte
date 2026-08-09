@@ -21,6 +21,8 @@
 	let error = $state('');
 
 	onMount(async () => {
+		const refused = new URLSearchParams(location.search).get('error');
+		if (refused) error = refused;
 		/* A single sign-on session is an HttpOnly cookie, so there is nothing here to
 		   inspect: the API is the only thing that can say whether this browser is already
 		   signed in. */
@@ -105,6 +107,12 @@
 							: 'Log in to your Journal account.'}
 				</p>
 			</div>
+
+			{#if error}
+				<p class="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+					{error}
+				</p>
+			{/if}
 
 			{#if ssoEnabled}
 				<a href={ssoLoginUrl} data-sveltekit-reload class={primaryButtonClass}>
@@ -192,12 +200,6 @@
 						<p class="text-xs text-muted-foreground">At least 12 characters.</p>
 					{/if}
 				</div>
-
-				{#if error}
-					<p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-						{error}
-					</p>
-				{/if}
 
 				<button type="submit" disabled={busy} class={primaryButtonClass}>
 					{busy
