@@ -10,6 +10,10 @@ func Migrate(db *gorm.DB) error {
 	statements := []string{
 		porteSchema,
 		carryLegacySessionsOver,
+		adoptExistingPasswords,
+		`UPDATE users SET avatar_url = '' WHERE avatar_url IS NULL`,
+		`ALTER TABLE users ALTER COLUMN avatar_url SET DEFAULT ''`,
+		`ALTER TABLE users ALTER COLUMN avatar_url SET NOT NULL`,
 		`ALTER TABLE log_entries ADD COLUMN IF NOT EXISTS search tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(message, ''))) STORED`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_search ON log_entries USING GIN(search)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
@@ -105,4 +109,24 @@ BEGIN
 	END IF;
 END
 $$;
+`
+
+// adoptExistingPasswords moves the argon2 hashes from users.password_hash into
+// the identity rows porte/local reads.
+//
+// Without it the v0.2 deploy silently ends password login for every existing
+// account: the hash is still in the users table, nothing reads it there any
+// more, and the login form answers "invalid email or password" to a correct
+// password. The hashes are byte-identical — porte/local uses the parameters
+// this app already used — so the move is a copy and nobody resets anything.
+//
+// The source column is deliberately left in place. Blanking it in the same
+// deploy would make the change unrollbackable for the sake of tidiness, and a
+// column nothing reads can be dropped on any later day.
+const adoptExistingPasswords = `
+INSERT INTO porte_identities (user_id, provider, subject, password_hash)
+SELECT id, 'local', email, password_hash
+  FROM users
+ WHERE password_hash <> ''
+ON CONFLICT (provider, subject) DO NOTHING;
 `

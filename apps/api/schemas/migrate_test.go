@@ -6,6 +6,7 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte/local"
 )
 
 // Adopting porte moves sessions from Journal's own table to porte's. Both
@@ -119,5 +120,82 @@ func TestDeletingAUserRevokesItsSessions(t *testing.T) {
 		if remaining != 0 {
 			t.Fatalf("%s survived the user it belongs to", table)
 		}
+	}
+}
+
+// Adopting porte/local moves the password from users.password_hash to an
+// identity row. If this fails, the deploy answers "invalid email or password"
+// to every correct password an existing user types — the hash is still in the
+// users table and nothing reads it there any more.
+func TestExistingPasswordsKeepWorking(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&schemas.User{}); err != nil {
+		t.Fatalf("seed the pre-porte users table: %v", err)
+	}
+	hash, err := local.HashPassword("a-long-enough-password")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at)
+		 VALUES (1, 'someone@facile.studio', 'Someone', ?, true, now())`, hash,
+	).Error; err != nil {
+		t.Fatalf("seed the account: %v", err)
+	}
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var adopted struct {
+		UserID       int64
+		PasswordHash string
+	}
+	err = db.Raw(
+		`SELECT user_id, password_hash FROM porte_identities WHERE provider = 'local' AND subject = 'someone@facile.studio'`,
+	).Scan(&adopted).Error
+	if err != nil {
+		t.Fatalf("read the adopted identity: %v", err)
+	}
+	if adopted.UserID != 1 {
+		t.Fatal("the existing password was not adopted as a local identity")
+	}
+	if !local.VerifyPassword("a-long-enough-password", adopted.PasswordHash) {
+		t.Fatal("the adopted hash does not verify the password it came from")
+	}
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("the adoption is not idempotent: %v", err)
+	}
+}
+
+// avatar_url arrives on an existing table, so AutoMigrate adds it nullable and
+// every row is NULL. Scanning that into a Go string fails, which would take
+// out GET /auth/me — every authenticated page — rather than just the avatar.
+func TestTheAvatarColumnIsNeverNull(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&schemas.User{}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE users ALTER COLUMN avatar_url DROP NOT NULL`).Error; err != nil {
+		t.Fatalf("make the column nullable, as AutoMigrate would have: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at, avatar_url)
+		 VALUES (1, 'someone@facile.studio', 'Someone', '', true, now(), NULL)`,
+	).Error; err != nil {
+		t.Fatalf("seed a null avatar: %v", err)
+	}
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var user schemas.User
+	if err := db.First(&user, 1).Error; err != nil {
+		t.Fatalf("the user row no longer scans: %v", err)
+	}
+	if user.AvatarURL != "" {
+		t.Fatalf("avatar_url = %q, want empty", user.AvatarURL)
 	}
 }
