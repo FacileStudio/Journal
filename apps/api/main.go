@@ -22,8 +22,11 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte/avatarfs"
+	"github.com/FacileStudio/porte/local"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
+	"github.com/FacileStudio/porte/session"
 
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/errors"
@@ -87,16 +90,49 @@ func run() int {
 	// serves /auth/config and /auth/logout and authenticates every session
 	// this app issues.
 	identityStore := portepg.New(sqlDB)
+	users := auth.NewUserStore(db)
+
+	// One manager over one table. Both kits issue through it, so a password
+	// login and a federated one are the same row, the same cookie and the
+	// same logout.
+	sessions, err := session.New(appEnv.Porte, session.Deps{
+		Sessions: identityStore.Sessions(),
+		Logger:   appLogger,
+	})
+	if err != nil {
+		appLogger.Error("failed to configure sessions", slog.Any("error", err))
+		return 1
+	}
+
+	avatars, err := avatarfs.New(appEnv.AvatarDir, "/avatars")
+	if err != nil {
+		appLogger.Error("failed to open the avatar directory", slog.Any("error", err))
+		return 1
+	}
+
 	kit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
-		Users:       auth.NewUserStore(db),
+		Users:       users,
 		Identities:  identityStore.Identities(),
-		Sessions:    identityStore.Sessions(),
+		Sessions:    sessions,
 		Codes:       identityStore.LoginCodes(),
+		Avatars:     avatars,
 		Logger:      appLogger,
 		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
 	})
 	if err != nil {
 		appLogger.Error("failed to configure authentication", slog.Any("error", err))
+		return 1
+	}
+
+	passwords, err := local.New(local.Config{AllowRegistration: appEnv.AllowRegistration}, local.Deps{
+		Users:      users,
+		Identities: identityStore.Identities(),
+		Sessions:   sessions,
+		Logger:     appLogger,
+		Count:      users.CountUsers,
+	})
+	if err != nil {
+		appLogger.Error("failed to configure the password login", slog.Any("error", err))
 		return 1
 	}
 	if kit.Enabled() {
@@ -110,7 +146,7 @@ func run() int {
 	}
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
-	router := buildRouter(db, kit, identityStore, appEnv, appLogger, health.DB(sqlDB))
+	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, appLogger, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -147,10 +183,10 @@ func run() int {
 	return 0
 }
 
-func buildRouter(db *gorm.DB, kit *oidc.Kit, identityStore *portepg.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
-	authService := auth.NewService(db, identityStore.Sessions(), kit.Config().SessionTTL)
+	authService := auth.NewService(db, passwords)
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
 	alertsService := alerts.NewService(db)
@@ -174,11 +210,12 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, identityStore *portepg.Store, appEn
 	health.Mount(router, checks...)
 	apiref.Mount(router, referenceConfig())
 
-	requireAuth := middleware.RequireAuth(kit, authService)
+	requireAuth := middleware.RequireAuth(sessions, authService)
 
 	router.Route("/api", func(api chi.Router) {
+		sessions.Mount(api.With(sessionLimiter))
 		kit.Mount(api.With(sessionLimiter))
-		auth.RegisterRoutes(api, authService, appEnv.AllowRegistration, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
+		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
 		api.Group(func(protected chi.Router) {
@@ -193,6 +230,8 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, identityStore *portepg.Store, appEn
 			})
 		})
 	})
+
+	router.Handle("/avatars/*", avatars.Handler())
 
 	clientDir := spa.DirFromEnv()
 	if spa.Available(clientDir) {

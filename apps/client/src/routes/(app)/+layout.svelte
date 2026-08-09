@@ -79,7 +79,10 @@
 	/* Every settings section collapses to one key: the sections have their own PageTransition
 	   inside the settings layout, and keying this one on the full path replays both. */
 	const routeKey = $derived(onSettings ? '/settings' : page.url.pathname);
-	const navUser = $derived.by(() => ({ name: user?.name || user?.email || 'Account' }));
+	const navUser = $derived.by(() => ({
+		name: user?.name || user?.email || 'Account',
+		avatar: user?.avatar_url || undefined
+	}));
 </script>
 
 {#if ready}

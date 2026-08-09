@@ -2,41 +2,6 @@ package authcrypto
 
 import "testing"
 
-func TestPasswordRoundTrip(t *testing.T) {
-	hash, err := HashPassword("correct horse battery staple")
-	if err != nil {
-		t.Fatalf("hash: %v", err)
-	}
-	if !VerifyPassword("correct horse battery staple", hash) {
-		t.Fatal("correct password rejected")
-	}
-	if VerifyPassword("wrong password", hash) {
-		t.Fatal("wrong password accepted")
-	}
-}
-
-func TestHashIsSalted(t *testing.T) {
-	a, err := HashPassword("same input")
-	if err != nil {
-		t.Fatalf("hash a: %v", err)
-	}
-	b, err := HashPassword("same input")
-	if err != nil {
-		t.Fatalf("hash b: %v", err)
-	}
-	if a == b {
-		t.Fatal("identical encoded hashes for same password — salt is missing")
-	}
-}
-
-func TestVerifyRejectsMalformed(t *testing.T) {
-	for _, bad := range []string{"", "notahash", "$argon2id$broken", "$2y$bcrypt$nope"} {
-		if VerifyPassword("anything", bad) {
-			t.Fatalf("malformed hash accepted: %q", bad)
-		}
-	}
-}
-
 func TestBearerToken(t *testing.T) {
 	cases := []struct {
 		name          string

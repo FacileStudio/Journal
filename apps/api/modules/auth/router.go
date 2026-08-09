@@ -14,8 +14,8 @@ import (
 //
 // Under SSO_ONLY the credential routes are not registered rather than
 // rejected, so there is no endpoint left to probe for an account.
-func RegisterRoutes(router chi.Router, service *Service, allowRegistration, ssoOnly bool, credentialLimiter, sessionLimiter, requireAuth func(http.Handler) http.Handler) {
-	handler := newHandler(service, allowRegistration)
+func RegisterRoutes(router chi.Router, service *Service, ssoOnly bool, credentialLimiter, sessionLimiter, requireAuth func(http.Handler) http.Handler) {
+	handler := newHandler(service)
 	if !ssoOnly {
 		router.With(credentialLimiter).Post("/auth/register", handler.register)
 		router.With(credentialLimiter).Post("/auth/login", handler.login)

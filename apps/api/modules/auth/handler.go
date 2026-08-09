@@ -11,12 +11,11 @@ import (
 )
 
 type Handler struct {
-	service           *Service
-	allowRegistration bool
+	service *Service
 }
 
-func newHandler(service *Service, allowRegistration bool) *Handler {
-	return &Handler{service: service, allowRegistration: allowRegistration}
+func newHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +25,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, err := h.service.Register(r.Context(), req.Email, req.Name, req.Password, h.allowRegistration)
+	user, token, err := h.service.Register(r.Context(), w, r, req.Email, req.Name, req.Password)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -41,7 +40,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, err := h.service.Login(r.Context(), req.Email, req.Password)
+	user, token, err := h.service.Login(r.Context(), w, r, req.Email, req.Password)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -70,6 +69,7 @@ func toUserResponse(user schemas.User) UserResponse {
 		Email:     user.Email,
 		Name:      user.Name,
 		IsAdmin:   user.IsAdmin,
+		AvatarURL: user.AvatarURL,
 		CreatedAt: user.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }

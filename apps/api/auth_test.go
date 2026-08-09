@@ -14,8 +14,6 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/oidc"
-	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,19 +29,9 @@ func liveRouter(t *testing.T) chi.Router {
 		t.Fatalf("sql handle: %v", err)
 	}
 
-	store := portepg.New(sqlDB)
 	appEnv := env.Config{AllowRegistration: true}
-	kit, err := oidc.New(context.Background(), appEnv.Porte, oidc.Deps{
-		Users:       auth.NewUserStore(db),
-		Identities:  store.Identities(),
-		Sessions:    store.Sessions(),
-		Codes:       store.LoginCodes(),
-		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
-	})
-	if err != nil {
-		t.Fatalf("build the kit: %v", err)
-	}
-	return buildRouter(db, kit, store, appEnv, slog.New(slog.DiscardHandler))
+	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
+	return buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler))
 }
 
 func call(t *testing.T, router chi.Router, method, path, token string, body any) *httptest.ResponseRecorder {

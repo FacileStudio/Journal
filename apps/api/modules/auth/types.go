@@ -16,6 +16,7 @@ type UserResponse struct {
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	IsAdmin   bool   `json:"is_admin"`
+	AvatarURL string `json:"avatar_url"`
 	CreatedAt string `json:"created_at"`
 }
 

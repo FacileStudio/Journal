@@ -215,8 +215,8 @@ absolute TTL plus a 7-day idle window on the cookie transport only. Two transpor
 a password login returns the token and the client keeps it in `localStorage` (`journal.token`)
 and sends `Authorization: Bearer <token>`; the SSO callback puts it in an HttpOnly
 `__Host-session` cookie instead and no token ever reaches a URL. A cookie-authenticated write
-must carry `X-Facile-CSRF` with any non-empty value. Passwords are Argon2id, and the first
-account created becomes admin (guarded by `pg_advisory_xact_lock`, in the register transaction
+must carry `X-Facile-CSRF` with any non-empty value. Passwords are `porte/local`'s Argon2id — same parameters as before the move, so existing
+hashes keep verifying — and the first account created becomes admin (guarded by `pg_advisory_xact_lock`, in the register transaction
 and in the OIDC upsert alike). Login opportunistically deletes expired session rows.
 
 - `GET /auth/config` → `{ sso_only, oidc_enabled, allow_registration }` (porte serves it; `allow_registration` rides in through `Deps.ConfigExtra`)

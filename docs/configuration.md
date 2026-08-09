@@ -48,6 +48,8 @@ The variable names are the suite convention and are the same in every Facile app
 | `OIDC_REDIRECT_URL` | with issuer | — | Callback URL, e.g. `https://journal.facile.studio/api/auth/oidc/callback`. Must match the provider's registration exactly |
 | `OIDC_SUCCESS_URL` | with issuer | — | Where the browser lands after a successful login |
 | `SSO_ONLY` | no | `false` | `true` stops registering `/auth/register` and `/auth/login`. Requires `OIDC_ISSUER`: without one it would leave no way to sign in, so the API exits 1 rather than lock you out |
+| `OIDC_CLAIMS_SCOPE` | no | — | The scope carrying a flat `roles` claim, e.g. `roles`. Empty disables role handling. The API refuses to start if the provider does not advertise the scope — a half-configured claim makes every role check deny in silence, which is the worst failure mode available |
+| `AVATAR_DIR` | no | `/data/avatars` | Where avatars fetched from the identity provider are written. Back it with a volume or they vanish on redeploy |
 
 `OIDC_ISSUER` is all-or-nothing, and discovery runs at startup: an unreachable issuer or a
 missing secret exits 1 there rather than becoming a 500 on somebody's first login three days

@@ -64,8 +64,11 @@ sign-on callback puts the same thing in an HttpOnly `__Host-session` cookie inst
 SHA-256 hex is stored, in `porte_sessions`, with a 30-day absolute TTL and a 7-day idle
 window that applies to the cookie transport only — a bearer belongs to a CLI or a nightly
 job, which is idle by design. Both transports are the same row, so one logout ends either.
-Passwords are Argon2id (64 MiB, 3 iterations, parallelism 2, 16-byte salt, 32-byte key) in
-the standard `$argon2id$…` encoding. A login for an unknown email runs
+Passwords are `porte/local`'s: Argon2id (64 MiB, 3 iterations, parallelism 2, 16-byte salt,
+32-byte key) in the standard `$argon2id$…` encoding, unchanged from what this app hashed
+before, so every stored hash keeps verifying. A password is an identity row under the provider
+`local`, keyed on the normalised address — so one human can hold a password and an SSO subject
+at once, and either signs them into the same account. A login for an unknown email runs
 `authcrypto.EqualizeTiming` against a throwaway hash so response timing does not leak
 account existence. Registration takes a `pg_advisory_xact_lock` and counts users inside the
 transaction: the first account created becomes admin, and `ALLOW_REGISTRATION=false` only
@@ -87,6 +90,7 @@ constant time and is unscoped, so every entry must carry its own `app`.
 | `porte_sessions` | `token_hash`, `user_id` → `users(id)`, `label`, `last_used_at`, `expires_at` |
 | `porte_identities` | `(provider, subject)` primary key, `user_id`, the IdP tokens and the cached roles claim |
 | `porte_login_codes` | one-time codes bridging a browser login to a CLI |
+| `users.avatar_url` | the avatar fetched from the identity provider, written under `AVATAR_DIR` and served from `/avatars` |
 | `log_entries` | `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
 | `users` | `email` unique, `name`, `password_hash`, `is_admin` |
 | `api_keys` | `app`, `prefix`, `key_hash` unique, `revoked_at` |

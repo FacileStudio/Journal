@@ -8,6 +8,7 @@ type User struct {
 	Name         string    `json:"name" gorm:"column:name"`
 	PasswordHash string    `json:"-" gorm:"column:password_hash;not null"`
 	IsAdmin      bool      `json:"is_admin" gorm:"column:is_admin;default:false"`
+	AvatarURL    string    `json:"avatar_url" gorm:"column:avatar_url"`
 	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }
 

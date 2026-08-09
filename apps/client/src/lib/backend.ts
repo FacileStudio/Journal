@@ -11,6 +11,7 @@ export type AuthUser = {
 	email: string;
 	name: string;
 	is_admin: boolean;
+	avatar_url: string;
 	created_at: string;
 };
 
