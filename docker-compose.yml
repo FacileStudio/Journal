@@ -44,6 +44,7 @@ services:
       - avatar_data:/data/avatars
     environment:
       APP_ENV: ${APP_ENV:-production}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-journal}:${POSTGRES_PASSWORD:-journal-internal-db}@journal-db:5432/${POSTGRES_DB:-journal}?sslmode=disable
       PORT: "4010"
       LOG_LEVEL: ${LOG_LEVEL:-info}
