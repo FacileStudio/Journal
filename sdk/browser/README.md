@@ -16,15 +16,13 @@ it is not a secret. What protects the instance is on the server: the origin allo
 
 ```ts
 // src/hooks.client.ts
-import { PUBLIC_JOURNAL_URL, PUBLIC_JOURNAL_KEY } from '$env/static/public';
-import { createJournal } from '@facile/journal';
+import { createDeferredJournal } from '@facile/journal';
 import { handleErrorWith } from '@facile/journal/sveltekit';
 
-const journal = createJournal({
-	url: PUBLIC_JOURNAL_URL, // https://journal.facile.studio/api — the /api is load-bearing
-	key: PUBLIC_JOURNAL_KEY, // journal_pub_shop_…
-	release: __APP_VERSION__,
-	environment: 'production'
+const journal = createDeferredJournal(async () => {
+	const config = await fetch('/api/auth/config').then((r) => r.json());
+	if (!config.journal?.url || !config.journal?.key) return null;
+	return { url: config.journal.url, key: config.journal.key };
 });
 
 journal.install();
@@ -35,13 +33,44 @@ export const handleError = handleErrorWith(journal);
 SvelteKit swallows first — a load function that threw, a component that failed to render —
 which never reaches the window. You want both.
 
-**`url` must end in `/api`.** Journal's dashboard answers any unmatched path with `200` and an
-HTML document, so a base URL without it discards every report in silence. The SDK warns on the
-console when it spots this.
+### Why the configuration comes over HTTP
+
+Every Facile front is `adapter-static` served by its own Go binary, so the browser has no
+environment to read and baking the key into the bundle would make rotating it a rebuild. The
+server hands it over instead, on an endpoint the client already calls — porte's `ConfigExtra`
+on the Go side:
+
+```go
+ConfigExtra: func() map[string]any {
+	if appEnv.JournalBrowserKey == "" || appEnv.JournalBrowserURL == "" {
+		return nil
+	}
+	return map[string]any{"journal": map[string]any{
+		"url": appEnv.JournalBrowserURL,
+		"key": appEnv.JournalBrowserKey,
+	}}
+},
+```
+
+`createDeferredJournal` is what makes that safe: it returns a working client immediately and
+buffers what throws while the fetch is in flight — precisely the window boot errors live in. A
+loader returning `null`, or throwing, leaves the client permanently inert, so an app with no
+key configured goes quiet and an unreachable Journal never becomes an error the page has to
+handle. Use `createJournal` directly when the configuration is already in hand.
+
+**The URL must be its own variable, and it must end in `/api`.** `JOURNAL_URL` is the *server*
+SDK's and is documented as `http://journal-api:4010` — a Docker-internal address no browser can
+resolve, which would give you a page reporting diligently into nowhere. And Journal's dashboard
+answers any unmatched path with `200` and an HTML document, so a base URL missing `/api`
+discards every report in silence; the SDK warns on the console, and an adopting app should
+refuse it at boot.
 
 ## API
 
 ```ts
+createJournal(options);                              // configuration in hand
+createDeferredJournal(async () => options | null);   // configuration over HTTP
+
 journal.captureError(error, { level, kind, route, url, meta });
 journal.captureMessage('checkout abandoned', { level: 'warn', meta: { step: 3 } });
 journal.setUser({ email: 'someone@facile.studio' }); // or null on logout

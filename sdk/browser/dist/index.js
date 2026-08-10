@@ -212,6 +212,90 @@ export function createJournal(options) {
     };
 }
 /**
+ * createDeferredJournal returns a working Journal before its configuration
+ * exists, and connects it once `load` resolves.
+ *
+ * Every Facile front is `adapter-static` served by its own Go binary, so there
+ * is no runtime environment in the browser and the key arrives from an HTTP
+ * call. That call is asynchronous, but `handleError` has to be exported
+ * synchronously and the errors worth catching most are the ones that happen
+ * during boot — so something has to hold them in the meantime. Doing it here
+ * means the fifteen apps that need it do not each invent their own buffer.
+ *
+ * `load` returning null means "not configured": the client stays inert for the
+ * rest of the page's life and drops what it buffered. A load that throws is the
+ * same thing, quietly — an unreachable Journal must not become an error the
+ * page has to handle.
+ */
+export function createDeferredJournal(load) {
+    let real = null;
+    let settled = false;
+    let installed = false;
+    let uninstall = null;
+    let user = null;
+    let context = {};
+    // Bounded, because "waiting for config" is exactly when a boot loop
+    // produces thousands of these and nothing is draining them yet.
+    const pending = [];
+    const ready = (async () => {
+        let options = null;
+        try {
+            options = await load();
+        }
+        catch {
+            options = null;
+        }
+        settled = true;
+        if (!options) {
+            pending.length = 0;
+            return;
+        }
+        real = createJournal({ ...options, user: user ?? options.user, context: { ...options.context, ...context } });
+        if (installed)
+            uninstall = real.install();
+        for (const held of pending.splice(0))
+            real.captureError(held.error, held.extra);
+    })();
+    function hold(error, extra) {
+        if (settled && !real)
+            return;
+        if (real) {
+            real.captureError(error, extra);
+            return;
+        }
+        if (pending.length < MAX_QUEUE)
+            pending.push({ error, extra });
+    }
+    return {
+        captureError: hold,
+        captureMessage(message, extra) {
+            hold(message, { level: 'info', ...extra });
+        },
+        setUser(next) {
+            user = next;
+            real?.setUser(next);
+        },
+        setContext(next) {
+            context = { ...context, ...next };
+            real?.setContext(next);
+        },
+        async flush() {
+            await ready;
+            await real?.flush();
+        },
+        install() {
+            installed = true;
+            if (real)
+                uninstall = real.install();
+            return () => {
+                installed = false;
+                uninstall?.();
+                uninstall = null;
+            };
+        }
+    };
+}
+/**
  * A base URL missing /api is the documented way to lose every report in
  * silence: Journal's SPA catch-all answers any unmatched path with 200 and an
  * HTML document, so the SDK would see success forever.
