@@ -323,7 +323,9 @@ Client: [`sdk/browser`](sdk/browser) (`@facile/journal`), consumed as
 ### `GET /logs`
 
 Query params: `app`, `level` (repeatable or CSV), `q` (full-text via
-`websearch_to_tsquery('simple', q)`), `request_id` (matches `meta->>'request_id'`),
+`websearch_to_tsquery('simple', q)`), `source` (matches `meta->>'source'`; browser entries carry `source=browser`, so `?source=browser`
+is the client-error view — partial index on `((meta->>'source'), created_at DESC)`),
+`request_id` (matches `meta->>'request_id'`),
 `since`/`until` (RFC3339 on `created_at`), `limit` (default 100, max 1000), and keyset cursor
 `before_ts` (RFC3339Nano) + `before_id` (int64) — both or neither, predicate
 `(created_at, id) < (?, ?)`. Ordered `created_at desc, id desc`.
@@ -351,7 +353,8 @@ Unfiltered stream around one entry (defaults 50, max 200 each; 404 unknown id). 
 
 ### `/queries` (session)
 
-Saved filter sets: `params` = `{ app?, levels? (string[]), q?, request_id? }` — no time fields.
+Saved filter sets: `params` = `{ app?, levels? (string[]), q?, source?, request_id? }` — no time
+fields. A rule over `{ source: "browser", levels: ["error"] }` is how browser errors become an alert.
 
 - `GET /queries` → `{ "queries": [ { "id", "name", "params", "created_at" } ] }` ordered by name
 - `POST /queries` body `{ "name", "params" }` → 201 `{ "query" }`; duplicate name → 409

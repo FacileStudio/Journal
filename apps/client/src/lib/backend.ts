@@ -69,6 +69,7 @@ export type ListLogsParams = {
 	app?: string;
 	level?: LogLevel[];
 	q?: string;
+	source?: string;
 	request_id?: string;
 	since?: string;
 	until?: string;
@@ -80,6 +81,7 @@ export type HistogramParams = {
 	app?: string;
 	level?: LogLevel[];
 	q?: string;
+	source?: string;
 	request_id?: string;
 	since?: string;
 	until?: string;
@@ -142,6 +144,7 @@ export type SavedQueryParams = {
 	app?: string;
 	levels?: string[];
 	q?: string;
+	source?: string;
 	request_id?: string;
 };
 
@@ -271,6 +274,7 @@ export const backend = {
 		if (params.app) qs.set('app', params.app);
 		if (params.level) for (const level of params.level) qs.append('level', level);
 		if (params.q) qs.set('q', params.q);
+		if (params.source) qs.set('source', params.source);
 		if (params.request_id) qs.set('request_id', params.request_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);
@@ -288,6 +292,7 @@ export const backend = {
 		if (params.app) qs.set('app', params.app);
 		if (params.level?.length) qs.set('level', params.level.join(','));
 		if (params.q) qs.set('q', params.q);
+		if (params.source) qs.set('source', params.source);
 		if (params.request_id) qs.set('request_id', params.request_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);

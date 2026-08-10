@@ -127,6 +127,7 @@ func parseListParams(r *http.Request) (ListParams, error) {
 		Params: logfilter.Params{
 			App:       q.Get("app"),
 			Query:     q.Get("q"),
+			Source:    q.Get("source"),
 			RequestID: q.Get("request_id"),
 			Levels:    parseLevels(q["level"]),
 		},

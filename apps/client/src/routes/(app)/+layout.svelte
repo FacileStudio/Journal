@@ -110,8 +110,11 @@
 				<span class="text-fc-md font-semibold text-fc-fg">Journal</span>
 			</Topbar>
 
-			<div class="mx-auto flex max-w-fc-xl flex-col gap-10 px-4 py-8 sm:px-6 md:px-10 md:py-10">
-				<PageTransition key={routeKey}>
+			<!-- The gap belongs on PageTransition, not on the wrapper: PageTransition
+			     is the wrapper's only child, so a gap there separates nothing and every
+			     page rendered its heading flush against its own content. -->
+			<div class="mx-auto max-w-fc-xl px-4 py-8 sm:px-6 md:px-10 md:py-10">
+				<PageTransition key={routeKey} class="flex flex-col gap-10">
 					{@render children()}
 				</PageTransition>
 			</div>

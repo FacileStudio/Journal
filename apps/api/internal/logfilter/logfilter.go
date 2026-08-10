@@ -7,12 +7,21 @@ import (
 )
 
 type Params struct {
-	App       string
-	Levels    []string
-	Query     string
+	App    string
+	Levels []string
+	Query  string
+
+	// Source filters on meta->>'source', which is what separates entries a
+	// server shipped from the ones a browser reported. Both land in the same
+	// table on purpose — one search, one retention, one alert rule — but a
+	// stack trace out of somebody's browser and a line out of an API are
+	// different work, and without this the browser half is only reachable by
+	// knowing to full-text search for it.
+	Source    string
 	RequestID string
-	Since     *time.Time
-	Until     *time.Time
+
+	Since *time.Time
+	Until *time.Time
 }
 
 func Apply(query *gorm.DB, params Params) *gorm.DB {
@@ -24,6 +33,9 @@ func Apply(query *gorm.DB, params Params) *gorm.DB {
 	}
 	if params.Query != "" {
 		query = query.Where("search @@ websearch_to_tsquery('simple', ?)", params.Query)
+	}
+	if params.Source != "" {
+		query = query.Where("meta->>'source' = ?", params.Source)
 	}
 	if params.RequestID != "" {
 		query = query.Where("meta->>'request_id' = ?", params.RequestID)

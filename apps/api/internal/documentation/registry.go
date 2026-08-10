@@ -206,6 +206,7 @@ var logsModule = Module{
 			Path:    "/logs",
 			Summary: "Search log entries",
 			Description: "Query parameters: app (exact), level (repeatable or comma-separated), q (full text via websearch_to_tsquery('simple', q)), " +
+				"source (exact on meta->>'source'; browser entries carry source=browser, so ?source=browser is the client-error view), " +
 				"request_id (exact on meta->>'request_id'), since and until (RFC3339 on created_at), limit (default 100, clamped to 1000), " +
 				"and the keyset cursor before_ts (RFC3339Nano) plus before_id, which must be given together. " +
 				"Ordered created_at desc, id desc; next_before is non-null only when the page came back full.",
@@ -310,7 +311,7 @@ var apiKeysModule = Module{
 
 var queriesModule = Module{
 	Name:        "queries",
-	Description: "Saved filter sets. params is {app, levels, q, request_id} with no time bounds, since a saved time range would go stale.",
+	Description: "Saved filter sets. params is {app, levels, q, source, request_id} with no time bounds, since a saved time range would go stale. A rule over {source: browser, levels: [error]} is how browser errors become an alert.",
 	Routes: []Route{
 		{
 			Method:       "GET",
@@ -327,7 +328,7 @@ var queriesModule = Module{
 			Summary:      "Save a filter set",
 			Description:  "Returns 201. levels must be a subset of debug, info, warn, error.",
 			Auth:         "bearer",
-			RequestBody:  `{"name":string,"params":{"app":string,"levels":[string],"q":string,"request_id":string}}`,
+			RequestBody:  `{"name":string,"params":{"app":string,"levels":[string],"q":string,"source":string,"request_id":string}}`,
 			ResponseBody: `{"query":SavedQuery}`,
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "the name is empty or levels contains an unknown level"},

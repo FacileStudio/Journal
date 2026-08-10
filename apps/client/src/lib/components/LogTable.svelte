@@ -13,6 +13,7 @@
 		onPivotApp,
 		onPivotLevel,
 		onPivotRequest,
+		onPivotSource,
 		onContext
 	}: {
 		entries: LogEntry[];
@@ -23,6 +24,7 @@
 		onPivotApp?: (app: string) => void;
 		onPivotLevel?: (level: LogLevel) => void;
 		onPivotRequest?: (requestId: string) => void;
+		onPivotSource?: (source: string) => void;
 		onContext?: (id: number) => void;
 	} = $props();
 
@@ -34,6 +36,13 @@
 		expandedId = expandedId === id ? null : id;
 	}
 
+	/* Only browser entries carry a source, so this is what turns an expanded
+	   row into the "show me every client-side error" view. */
+	function sourceOf(entry: LogEntry): string | null {
+		const value = entry.meta?.['source'];
+		return typeof value === 'string' && value ? value : null;
+	}
+
 	function requestIdOf(entry: LogEntry): string | null {
 		const value = entry.meta?.['request_id'];
 		if (typeof value === 'string' && value) return value;
@@ -41,9 +50,20 @@
 		return null;
 	}
 
+	/* A stack trace inside JSON.stringify is one long line of \n escapes, which
+	   is the difference between a usable browser error and an unreadable one.
+	   It comes out into its own block and the rest of meta keeps the JSON. */
+	function stackOf(entry: LogEntry): string | null {
+		const value = entry.meta?.['stack'];
+		return typeof value === 'string' && value ? value : null;
+	}
+
 	function metaOf(entry: LogEntry): string | null {
-		if (!entry.meta || Object.keys(entry.meta).length === 0) return null;
-		return JSON.stringify(entry.meta, null, 2);
+		if (!entry.meta) return null;
+		const rest = { ...entry.meta };
+		delete rest['stack'];
+		if (Object.keys(rest).length === 0) return null;
+		return JSON.stringify(rest, null, 2);
 	}
 </script>
 
@@ -120,6 +140,12 @@
 								<p class="font-fc-mono text-fc-xs break-words whitespace-pre-wrap text-fc-fg">
 									{entry.message}
 								</p>
+								{#if stackOf(entry)}
+									<pre
+										class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed text-fc-fg-muted">{stackOf(
+											entry
+										)}</pre>
+								{/if}
 								{#if metaOf(entry)}
 									<pre
 										class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs text-fc-fg">{metaOf(
@@ -137,6 +163,16 @@
 											onclick={() => onContext?.(entry.id)}
 										>
 											Context
+										</Button>
+									{/if}
+									{#if sourceOf(entry) && onPivotSource}
+										<Button
+											size="sm"
+											variant="ghost"
+											icon={icons.filter}
+											onclick={() => onPivotSource?.(sourceOf(entry) as string)}
+										>
+											source: {sourceOf(entry)}
 										</Button>
 									{/if}
 									{#if requestIdOf(entry) && onPivotRequest}

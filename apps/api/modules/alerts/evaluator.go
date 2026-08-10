@@ -113,6 +113,7 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, l
 		App:       savedQuery.Params.App,
 		Levels:    savedQuery.Params.Levels,
 		Query:     savedQuery.Params.Q,
+		Source:    savedQuery.Params.Source,
 		RequestID: savedQuery.Params.RequestID,
 		Since:     &since,
 		Until:     &until,

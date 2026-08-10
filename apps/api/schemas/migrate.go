@@ -19,6 +19,10 @@ func Migrate(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_created_at_id ON log_entries (created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_request_id ON log_entries ((meta->>'request_id')) WHERE meta ? 'request_id'`,
+		// Partial, like request_id: only browser entries carry a source, so
+		// the index stays small and a filtered explorer view is a lookup
+		// rather than a scan of everything the suite has ever logged.
+		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_source ON log_entries ((meta->>'source'), created_at DESC) WHERE meta ? 'source'`,
 		// Every key that predates the browser endpoint is a server
 		// credential. Saying so explicitly matters more than it looks:
 		// an empty kind would fall through the secret check and the

@@ -6,6 +6,7 @@ type SavedQueryParams struct {
 	App       string   `json:"app,omitempty"`
 	Levels    []string `json:"levels,omitempty"`
 	Q         string   `json:"q,omitempty"`
+	Source    string   `json:"source,omitempty"`
 	RequestID string   `json:"request_id,omitempty"`
 }
 

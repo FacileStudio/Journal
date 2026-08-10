@@ -56,6 +56,7 @@
 	let selectedLevels = $state<LogLevel[]>([]);
 	let query = $state('');
 	let requestId = $state('');
+	let source = $state('');
 	let range = $state('24h');
 	let customSince = $state('');
 	let customUntil = $state('');
@@ -83,7 +84,11 @@
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const activeCount = $derived(
-		(selectedApp ? 1 : 0) + selectedLevels.length + (query.trim() ? 1 : 0) + (requestId ? 1 : 0)
+		(selectedApp ? 1 : 0) +
+		selectedLevels.length +
+		(query.trim() ? 1 : 0) +
+		(source ? 1 : 0) +
+		(requestId ? 1 : 0)
 	);
 
 	function timeRange(): { since?: string; until?: string } {
@@ -103,6 +108,7 @@
 			app: selectedApp || undefined,
 			level: selectedLevels.length ? selectedLevels : undefined,
 			q: query.trim() || undefined,
+			source: source || undefined,
 			request_id: requestId || undefined,
 			...timeRange()
 		};
@@ -113,6 +119,7 @@
 		if (selectedApp) params.set('app', selectedApp);
 		if (selectedLevels.length) params.set('level', selectedLevels.join(','));
 		if (query.trim()) params.set('q', query.trim());
+		if (source) params.set('source', source);
 		if (requestId) params.set('request_id', requestId);
 		if (range !== '24h') params.set('range', range);
 		if (range === 'custom') {
@@ -128,6 +135,7 @@
 		selectedApp = params.get('app') ?? '';
 		selectedLevels = (params.get('level') ?? '').split(',').filter(isLevel);
 		query = params.get('q') ?? '';
+		source = params.get('source') ?? '';
 		requestId = params.get('request_id') ?? '';
 		const wanted = params.get('range');
 		range = wanted && RANGES.some((entry) => entry.id === wanted) ? wanted : '24h';
@@ -260,6 +268,13 @@
 		apply();
 	}
 
+	/* Browser entries carry meta.source; nothing else does. Clicking it is what
+	   makes the client-error view reachable without knowing the schema. */
+	function pivotSource(value: string) {
+		source = source === value ? '' : value;
+		apply();
+	}
+
 	function pivotRequest(id: string) {
 		requestId = id;
 		/* A request crosses services, so pinning it to one app would hide most of the trace. */
@@ -271,6 +286,7 @@
 		selectedApp = '';
 		selectedLevels = [];
 		query = '';
+		source = '';
 		requestId = '';
 		apply();
 	}
@@ -290,6 +306,7 @@
 		selectedApp = saved.params.app ?? '';
 		selectedLevels = (saved.params.levels ?? []).filter(isLevel);
 		query = saved.params.q ?? '';
+		source = saved.params.source ?? '';
 		requestId = saved.params.request_id ?? '';
 		apply();
 	}
@@ -303,6 +320,7 @@
 			if (selectedApp) params.app = selectedApp;
 			if (selectedLevels.length) params.levels = selectedLevels;
 			if (query.trim()) params.q = query.trim();
+			if (source) params.source = source;
 			if (requestId) params.request_id = requestId;
 			await backend.createQuery(name, params);
 			await loadSavedQueries();
@@ -441,6 +459,19 @@
 
 		{#if activeCount > 0}
 			<div class="flex flex-wrap items-center gap-2 border-t border-fc-border pt-4">
+				{#if source}
+					<button
+						type="button"
+						class="flex max-w-full items-center gap-1 rounded-fc-pill bg-fc-surface px-2.5 py-1 font-fc-mono text-fc-xs"
+						onclick={() => {
+							source = '';
+							apply();
+						}}
+					>
+						<span class="truncate">source:{source}</span>
+						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
+					</button>
+				{/if}
 				{#if requestId}
 					<button
 						type="button"
@@ -479,6 +510,7 @@
 		onPivotApp={pivotApp}
 		onPivotLevel={toggleLevel}
 		onPivotRequest={pivotRequest}
+		onPivotSource={pivotSource}
 		onContext={(id) => (contextAnchor = id)}
 	/>
 
