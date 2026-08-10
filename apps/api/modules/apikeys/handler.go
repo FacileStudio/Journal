@@ -26,10 +26,17 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteError(w, err)
 		return
 	}
+	usage, err := h.service.UsageToday(r.Context())
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
 
 	keys := make([]KeyResponse, 0, len(records))
 	for _, record := range records {
-		keys = append(keys, mapKey(record))
+		key := mapKey(record)
+		key.UsedToday = usage[record.ID]
+		keys = append(keys, key)
 	}
 	httpjson.WriteJSON(w, http.StatusOK, ListResponse{Keys: keys})
 }
@@ -41,7 +48,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, token, err := h.service.Create(r.Context(), req.App)
+	key, token, err := h.service.Create(r.Context(), NewKey{
+		App:            req.App,
+		Kind:           req.Kind,
+		AllowedOrigins: req.AllowedOrigins,
+		DailyQuota:     req.DailyQuota,
+	})
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -69,11 +81,22 @@ func mapKey(key schemas.APIKey) KeyResponse {
 		formatted := key.RevokedAt.UTC().Format(time.RFC3339)
 		revokedAt = &formatted
 	}
+	kind := key.Kind
+	if kind == "" {
+		kind = schemas.KeyKindSecret
+	}
+	origins := key.AllowedOrigins
+	if origins == nil {
+		origins = []string{}
+	}
 	return KeyResponse{
-		ID:        key.ID,
-		App:       key.App,
-		Prefix:    key.Prefix,
-		CreatedAt: key.CreatedAt.UTC().Format(time.RFC3339),
-		RevokedAt: revokedAt,
+		ID:             key.ID,
+		App:            key.App,
+		Kind:           kind,
+		Prefix:         key.Prefix,
+		AllowedOrigins: origins,
+		DailyQuota:     key.DailyQuota,
+		CreatedAt:      key.CreatedAt.UTC().Format(time.RFC3339),
+		RevokedAt:      revokedAt,
 	}
 }

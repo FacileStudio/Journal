@@ -21,6 +21,12 @@ func From(ctx context.Context) (Identity, bool) {
 
 type IngestScope struct {
 	App string
+
+	// KeyID, DailyQuota and Origin are set by the browser endpoint only.
+	// A secret key leaves them zero, and the quota is not consulted.
+	KeyID      int64
+	DailyQuota int
+	Origin     string
 }
 
 type ingestScopeKey struct{}

@@ -3,7 +3,7 @@ package schemas
 import "gorm.io/gorm"
 
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &SavedQuery{}, &AlertRule{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}); err != nil {
 		return err
 	}
 
@@ -19,6 +19,15 @@ func Migrate(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_created_at_id ON log_entries (created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_request_id ON log_entries ((meta->>'request_id')) WHERE meta ? 'request_id'`,
+		// Every key that predates the browser endpoint is a server
+		// credential. Saying so explicitly matters more than it looks:
+		// an empty kind would fall through the secret check and the
+		// public check alike, and a key that authenticates nothing is a
+		// silent outage on the next deploy.
+		`UPDATE api_keys SET kind = 'secret' WHERE kind IS NULL OR kind = ''`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_kind ON api_keys (kind) WHERE revoked_at IS NULL`,
+		`ALTER TABLE api_key_usage DROP CONSTRAINT IF EXISTS fk_api_key_usage_key`,
+		`ALTER TABLE api_key_usage ADD CONSTRAINT fk_api_key_usage_key FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE`,
 		`ALTER TABLE alert_rules DROP CONSTRAINT IF EXISTS fk_alert_rules_saved_query`,
 		`ALTER TABLE alert_rules ADD CONSTRAINT fk_alert_rules_saved_query FOREIGN KEY (saved_query_id) REFERENCES saved_queries(id) ON DELETE RESTRICT`,
 	}

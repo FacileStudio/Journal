@@ -169,6 +169,31 @@ var ingestModule = Module{
 				{Status: 429, Code: "rate_limited", Description: "more than 600 requests per minute for this token"},
 			},
 		},
+		{
+			Method:  "POST",
+			Path:    "/ingest/browser",
+			Summary: "Ingest error reports from a page",
+			Description: "The browser write path, authenticated by a **public** key (journal_pub_<app>_…) passed as ?key= or as a bearer token. " +
+				"A public key is pasted into a JavaScript bundle, so this route is deliberately narrower than /ingest: it accepts at most 20 events and a 128 KB body, " +
+				"it carries no app (the key's app is authoritative), and it is refused unless the request's Origin header exactly matches one of the key's allowed origins. " +
+				"A secret key is rejected here, and a public key is rejected on /ingest.\n\n" +
+				"Event fields: message (required), level (default error), ts (RFC3339, clamped like /ingest), kind, stack, url, route, count, user {id,email} and meta. " +
+				"The request also carries release and environment. The server stamps source=browser, origin and user_agent into meta after the client's own meta, " +
+				"which is scrubbed (password, token, cookie, authorization and friends become \"[scrubbed]\"), capped at 8 KB and depth-limited.\n\n" +
+				"Two limits apply: 60 requests per minute per (key, IP), and the key's daily quota in entries, reserved before the write and reset at UTC midnight. " +
+				"Both answer 429, the quota one with Retry-After counting down to midnight. Send the body as text/plain to stay a CORS simple request — " +
+				"application/json triggers a preflight, which the app-wide CORS allowlist answers before this route is reached.",
+			Auth:         "bearer",
+			RequestBody:  `{"release":string,"environment":string,"events":[{"message":string,"level":string,"ts":string,"kind":string,"stack":string,"url":string,"route":string,"count":int,"user":{"id":string,"email":string},"meta":object}]}`,
+			ResponseBody: `{"ingested":int}`,
+			Errors: []Error{
+				{Status: 400, Code: "invalid_argument", Description: "unknown level, missing message, unparseable ts, or more than 20 events"},
+				{Status: 401, Code: "unauthenticated", Description: "no key, or one matching no active public key"},
+				{Status: 403, Code: "permission_denied", Description: "no Origin header, or an Origin this key does not allow"},
+				{Status: 413, Code: "resource_exhausted", Description: "the body exceeds 128 KB"},
+				{Status: 429, Code: "rate_limited", Description: "more than 60 requests per minute for this key and IP, or the key's daily quota is spent"},
+			},
+		},
 	},
 }
 
@@ -243,7 +268,7 @@ var apiKeysModule = Module{
 			Path:         "/apikeys",
 			Summary:      "List API keys",
 			Auth:         "bearer",
-			ResponseBody: `{"keys":[{"id":int64,"app":string,"prefix":string,"created_at":string,"revoked_at":string|null}]}`,
+			ResponseBody: `{"keys":[{"id":int64,"app":string,"kind":string,"prefix":string,"allowed_origins":[string],"daily_quota":int,"used_today":int64,"created_at":string,"revoked_at":string|null}]}`,
 			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
 		},
 		{
@@ -251,9 +276,12 @@ var apiKeysModule = Module{
 			Path:    "/apikeys",
 			Summary: "Mint an API key for one app",
 			Description: "app must match ^[a-z0-9][a-z0-9-]{0,63}$. Returns 201, and token is the only time the full credential is visible. " +
-				"Several active keys per app are allowed, which is what makes zero-downtime rotation possible: mint the new key, redeploy the shipper, then revoke the old one.",
+				"Several active keys per app are allowed, which is what makes zero-downtime rotation possible: mint the new key, redeploy the shipper, then revoke the old one.\n\n" +
+				"kind is secret (default) for a server credential, or public for a key meant to be pasted into a JavaScript bundle. " +
+				"A public key requires allowed_origins (1 to 8 exact scheme://host[:port] entries, no wildcards, normalized on save) and a daily_quota of at least 1, " +
+				"and it authenticates POST /ingest/browser only.",
 			Auth:         "bearer",
-			RequestBody:  `{"app":string}`,
+			RequestBody:  `{"app":string,"kind":string,"allowed_origins":[string],"daily_quota":int}`,
 			ResponseBody: `{"key":APIKey,"token":string}`,
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "app does not match ^[a-z0-9][a-z0-9-]{0,63}$"},
