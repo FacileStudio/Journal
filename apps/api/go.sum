@@ -2,6 +2,8 @@ github.com/FacileStudio/porte v0.2.10 h1:Ix7HG7XqQ2/bWeTJejaAmvJOBq70QbNOtKWJnVV
 github.com/FacileStudio/porte v0.2.10/go.mod h1:TwhQS97DMQRMUAX6p+8EuLabJIx5Lc03rc8j5/6R4Tw=
 github.com/FacileStudio/tronc v0.11.0 h1:wWPNh9f3vCYzm7Ekif2XyL6J3BrYjQTqybkWh+9yCNo=
 github.com/FacileStudio/tronc v0.11.0/go.mod h1:n+msHH6RQLvhcIQfFzeWaAgwqL8UkNuLPTqbu+C02so=
+github.com/FacileStudio/tronc v0.12.0 h1:KJB/Z2Y6BeCNMT7vSmr0nX8C+cRJAjzVjxKL9WJQ7fw=
+github.com/FacileStudio/tronc v0.12.0/go.mod h1:n+msHH6RQLvhcIQfFzeWaAgwqL8UkNuLPTqbu+C02so=
 github.com/coreos/go-oidc/v3 v3.20.0 h1:EtE0WIBHk03N+DqGkY4+UONzzZHk7amKt6IyNd7OsZE=
 github.com/coreos/go-oidc/v3 v3.20.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

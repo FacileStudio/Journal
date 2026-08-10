@@ -214,12 +214,20 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	// limiters below see it, so it is a security setting and not a logging
 	// one. Unset it defaults to loopback plus the private ranges, which is
 	// Traefik; TRUSTED_PROXIES narrows it to one address, or to none.
+	//
+	// CDNProxies and CDNHeader ride along from the same variable. They are
+	// not redundant with the trust set: Traefik replaces the incoming
+	// X-Forwarded-For instead of extending it, so behind Cloudflare the
+	// chain this app sees holds only the edge and the visitor survives
+	// nowhere but Cf-Connecting-Ip.
 	router := httpx.NewRouter(httpx.Config{
 		Logger: appLogger,
 		CORS: troncmiddleware.CORSConfig{
 			AllowedOrigins: appEnv.CORSAllowedOrigins,
 		},
 		TrustedProxies: appEnv.TrustedProxies,
+		CDNProxies:     appEnv.CDNProxies,
+		CDNHeader:      appEnv.CDNHeader,
 	})
 	router.Use(middleware.SecurityHeaders)
 

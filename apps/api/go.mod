@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/FacileStudio/porte v0.2.10
-	github.com/FacileStudio/tronc v0.11.0
+	github.com/FacileStudio/tronc v0.12.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.15.0
 	gorm.io/driver/postgres v1.6.0
