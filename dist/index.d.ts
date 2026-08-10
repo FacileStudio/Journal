@@ -62,3 +62,20 @@ export type Journal = {
     install(): () => void;
 };
 export declare function createJournal(options: JournalOptions): Journal;
+/**
+ * createDeferredJournal returns a working Journal before its configuration
+ * exists, and connects it once `load` resolves.
+ *
+ * Every Facile front is `adapter-static` served by its own Go binary, so there
+ * is no runtime environment in the browser and the key arrives from an HTTP
+ * call. That call is asynchronous, but `handleError` has to be exported
+ * synchronously and the errors worth catching most are the ones that happen
+ * during boot — so something has to hold them in the meantime. Doing it here
+ * means the fifteen apps that need it do not each invent their own buffer.
+ *
+ * `load` returning null means "not configured": the client stays inert for the
+ * rest of the page's life and drops what it buffered. A load that throws is the
+ * same thing, quietly — an unreachable Journal must not become an error the
+ * page has to handle.
+ */
+export declare function createDeferredJournal(load: () => Promise<JournalOptions | null>): Journal;

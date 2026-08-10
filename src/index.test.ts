@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 
-import { createJournal, type JournalEvent } from './index.js';
+import { createDeferredJournal, createJournal, type JournalEvent } from './index.js';
 
 type Sent = { events: JournalEvent[]; release?: string };
 
@@ -172,4 +172,73 @@ test('a failed delivery keeps the events for the next flush', async () => {
 
 	expect(sent).toHaveLength(1);
 	expect(sent[0].events[0].message).toContain('boom');
+});
+
+test('a deferred client holds errors thrown before its config arrives', async () => {
+	let resolve!: (o: Parameters<typeof createJournal>[0]) => void;
+	const client = createDeferredJournal(
+		() => new Promise((r) => (resolve = r as unknown as typeof resolve))
+	);
+
+	client.captureError(new Error('thrown during boot'));
+	expect(sent).toHaveLength(0);
+
+	resolve({ url: 'https://journal.facile.studio/api', key: 'journal_pub_shop_test', flushIntervalMs: 10_000 });
+	await client.flush();
+
+	expect(sent).toHaveLength(1);
+	expect(sent[0].events[0].message).toContain('thrown during boot');
+});
+
+// An app with no key configured must go quiet, not accumulate forever.
+test('a deferred client that resolves to null stays inert', async () => {
+	const client = createDeferredJournal(async () => null);
+	client.captureError(new Error('nobody is listening'));
+	await client.flush();
+	client.captureError(new Error('still nobody'));
+	await client.flush();
+
+	expect(sent).toHaveLength(0);
+});
+
+// An unreachable Journal is not the page's problem to handle.
+test('a deferred client whose loader throws stays inert', async () => {
+	const client = createDeferredJournal(async () => {
+		throw new Error('config endpoint is down');
+	});
+	client.captureError(new Error('boom'));
+	await client.flush();
+
+	expect(sent).toHaveLength(0);
+});
+
+test('setUser before the config arrives still reaches the report', async () => {
+	const client = createDeferredJournal(async () => ({
+		url: 'https://journal.facile.studio/api',
+		key: 'journal_pub_shop_test',
+		flushIntervalMs: 10_000
+	}));
+	client.setUser({ email: 'early@facile.studio' });
+	client.setContext({ tenant: 'acme' });
+	client.captureError(new Error('boom'));
+	await client.flush();
+
+	expect(sent[0].events[0].user?.email).toBe('early@facile.studio');
+	expect(sent[0].events[0].meta?.tenant).toBe('acme');
+});
+
+// The buffer is bounded: a boot loop must not grow it without limit.
+test('a deferred client bounds what it holds', async () => {
+	let resolve!: (o: Parameters<typeof createJournal>[0]) => void;
+	const client = createDeferredJournal(
+		() => new Promise((r) => (resolve = r as unknown as typeof resolve))
+	);
+
+	for (let i = 0; i < 500; i++) client.captureError(new Error(`boom ${i}`));
+	resolve({ url: 'https://journal.facile.studio/api', key: 'journal_pub_shop_test', flushIntervalMs: 10_000 });
+	await client.flush();
+	await client.flush();
+	await client.flush();
+
+	expect(sent.flatMap((b) => b.events).length).toBeLessThanOrEqual(50);
 });
