@@ -199,14 +199,14 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
 	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
-	// Two buckets guard the browser endpoint, because one of them can be
-	// walked around. The per (key, IP) bucket is small — a page that manages
-	// 60 requests in a minute is a render loop, which is exactly the traffic
-	// this refuses — but its IP comes from chi's RealIP, which trusts
-	// X-Forwarded-For from any peer, so a rotating header mints fresh
-	// buckets. The per-key ceiling above it does not move for any header,
-	// and the daily quota below it is the bound that actually holds when a
-	// public key leaks.
+	// Two buckets guard the browser endpoint. The per (key, IP) bucket is
+	// small — a page that manages 60 requests in a minute is a render loop,
+	// which is exactly the traffic this refuses — and since tronc v0.12.0
+	// its IP really is the visitor's rather than Traefik's or Cloudflare's.
+	// The per-key ceiling above it and the daily quota below it are kept
+	// anyway: a bound that owes nothing to the network layer is worth having
+	// even when the network layer is correct, and it is what actually holds
+	// when a public key leaks.
 	browserIngestLimiter := httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKeyAndIP), rateLimitExceeded)
 	browserKeyCeiling := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKey), rateLimitExceeded)
 
