@@ -13,12 +13,15 @@ Live at [journal.facile.studio](https://journal.facile.studio).
 
 - Accepts single or batched log entries on `POST /api/ingest`, gzip bodies included
 - Authenticates ingest with per-app API keys scoped to one `app` name, or a legacy shared token
+- Collects browser errors on `POST /api/ingest/browser` — a public key restricted to an exact
+  origin allowlist and bounded by a daily quota, with a scrubbed, server-stamped context
 - Stores entries in PostgreSQL with a generated `tsvector` column and a GIN index
 - Searches by app, level, free text, `request_id`, and time range, with keyset pagination
 - Renders a level histogram and pulls the surrounding lines for any entry
 - Saves named queries and turns them into threshold alerts delivered to a webhook
 - Prunes entries older than `RETENTION_DAYS` every hour
-- Ships a Go SDK (`sdk/journal`) and a Docker log collector sidecar (`apps/collector`)
+- Ships a Go SDK (`sdk/journal`), a browser SDK (`sdk/browser`, `@facile/journal`) and a Docker
+  log collector sidecar (`apps/collector`)
 
 ## Stack
 
@@ -47,6 +50,30 @@ curl -X POST http://localhost:4010/api/ingest \
   -H "Content-Type: application/json" \
   -d '{"app":"nuage","level":"error","message":"failed to upload file","meta":{"file_id":42}}'
 ```
+
+### Catch browser errors
+
+Mint a **public** key under Settings → API, listing the origins your app is served from, then
+two lines in SvelteKit:
+
+```sh
+bun add github:FacileStudio/Journal#ts
+```
+
+```ts
+// src/hooks.client.ts
+import { createJournal } from '@facile/journal';
+import { handleErrorWith } from '@facile/journal/sveltekit';
+
+const journal = createJournal({ url: 'https://journal.facile.studio/api', key: PUBLIC_JOURNAL_KEY });
+
+journal.install();
+export const handleError = handleErrorWith(journal);
+```
+
+The key belongs in the bundle — it is not a secret. What protects the instance is the origin
+allowlist, a per-key rate limit and the daily quota, all enforced server-side. See
+[`sdk/browser`](sdk/browser).
 
 ### Local development
 
@@ -88,6 +115,7 @@ apps/
   collector/   Docker log collector sidecar, its own Go module
 sdk/
   journal/     Go client and slog handler, its own Go module
+  browser/     @facile/journal — browser SDK and SvelteKit handleError, dependency-free
 docs/          Architecture, configuration, development, deployment, API
 ```
 

@@ -23,7 +23,8 @@ router.
 | public | No credential |
 | session | Dashboard session token |
 | admin | Session token whose user has `is_admin` |
-| ingest | Per-app API key, or the legacy `INGEST_TOKEN` |
+| ingest | Per-app **secret** API key, or the legacy `INGEST_TOKEN` |
+| browser | Per-app **public** API key, plus an allowed `Origin` |
 
 ## Health
 
@@ -109,6 +110,67 @@ body above 8 MB is rejected**, so a shipper batching large `meta` payloads must 
 Rate limiting is 600/min per token hash, answered as `429` with `Retry-After: 60`.
 
 Response `201 {"ingested": n}`. Entries are written in batches of 500.
+
+## Browser ingest
+
+| Method | Path | Auth |
+|---|---|---|
+| POST | `/api/ingest/browser` | browser |
+
+The write path for errors caught in a page. The credential is a **public** key
+(`journal_pub_<app>_…`) sent as `?key=…` or as a bearer token — the query string is what makes
+`navigator.sendBeacon` usable, and a public key is not a secret, so a URL costs it nothing.
+
+The two kinds of key never cross: a public key on `/api/ingest` is `401`, a secret key here is
+`401`. That is the point of the split — a token living in a JavaScript bundle must not reach
+the endpoint that takes 1000 entries per request with no quota.
+
+```json
+{
+  "release": "v1.2.3",
+  "environment": "production",
+  "events": [
+    {
+      "message": "TypeError: cart is undefined",
+      "stack": "at Cart.svelte:12",
+      "url": "https://shop.example/cart",
+      "route": "/cart",
+      "count": 3,
+      "user": { "email": "someone@facile.studio" },
+      "meta": { "cart_id": 42 }
+    }
+  ]
+}
+```
+
+There is **no `app` field**: the key's app is authoritative. `level` defaults to `error`, `ts`
+is clamped like `/api/ingest`, and `message` is required.
+
+**Send the body as `text/plain`.** That keeps the request a CORS *simple* request, so no
+preflight is sent. `application/json` triggers one, and the preflight is answered by the
+app-wide CORS middleware from `CORS_ALLOWED_ORIGINS`, which knows nothing about this key's
+allowed origins — so a correct request would be refused before reaching the route.
+
+What bounds a leaked key, in order:
+
+| Layer | Behaviour |
+|---|---|
+| Origin allowlist | `Origin` must exactly match one of the key's stored origins, else `403`. Missing `Origin` is also `403`. This is a server-side check, not CORS — CORS only decides whether a script may *read* the response |
+| 60/min per (key, IP) | Traffic shaping. Advisory only: see the rate-limit note below |
+| 600/min per key | Cannot be moved by any request header |
+| Daily quota | Entries per UTC day, reserved before the write. `429` with `Retry-After` counting down to midnight. This is the bound that holds |
+| Payload caps | 20 events, 128 KB body |
+
+Context is sanitised on the way in: `meta` keys that look like credentials (`password`,
+`token`, `cookie`, `authorization`, …) become `"[scrubbed]"`, nesting is cut at depth 6, arrays
+at 50 items, strings at 2 KB, `stack` at 8 KB, and the whole object at 8 KB. The server then
+stamps `source: "browser"`, `origin` and `user_agent` **after** the client's own meta, so a
+page cannot claim any of the three.
+
+Response `201 {"ingested": n}`. Entries land in `log_entries` like any other, so search,
+histogram, context, saved queries and alerts work on them unchanged.
+
+Client: [`sdk/browser`](../sdk/browser) — `bun add github:FacileStudio/Journal#ts`.
 
 ## Logs
 
@@ -237,5 +299,14 @@ forbidden, `404` not found, `409` conflict, `429` rate limited, `500` internal.
 | `/api/auth/register`, `/api/auth/login` | 20/min | client IP and endpoint |
 | Other session routes | 300/min | client IP |
 | `/api/ingest` | 600/min | SHA-256 of the bearer token |
+| `/api/ingest/browser` | 600/min | SHA-256 of the public key |
+| `/api/ingest/browser` | 60/min | SHA-256 of the public key, and the client IP |
 
 Health and readiness are exempt.
+
+**The per-IP limits are advisory.** `tronc/httpx` installs chi's `RealIP`, which rewrites
+`RemoteAddr` from `X-Forwarded-For` without checking who the peer is, so anything able to set
+a header can mint itself a fresh bucket. Measured on a local build: 70 requests with a
+rotating `X-Forwarded-For` were all accepted where the 60/min bucket should have refused 10.
+The limits keyed on the credential alone — and the browser endpoint's daily quota — are the
+ones that hold. Tracked in `ROADMAP.md` §2b; the fix belongs in tronc.

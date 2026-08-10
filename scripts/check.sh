@@ -14,6 +14,7 @@
 set -eu
 
 GO_MODULES="apps/api apps/collector sdk/journal"
+TS_PACKAGES="sdk/browser"
 CLIENT_DIR="apps/client"
 
 mode="all"
@@ -89,6 +90,30 @@ for dir in $GO_MODULES; do
 done
 
 if [ "$mode" = "all" ]; then
+  for dir in $TS_PACKAGES; do
+    echo "==> $dir"
+    (
+      cd "$dir" || exit 1
+      if ! command -v bun >/dev/null 2>&1; then
+        echo "check: no 'bun' on PATH, skipping $dir" >&2
+        exit 0
+      fi
+      [ -d node_modules ] || bun install >/dev/null
+      s=0
+      bun run typecheck || s=1
+      bun test || s=1
+      # dist/ is what `bun add github:FacileStudio/Journal#ts` installs, so a
+      # stale build ships old behaviour to every consumer while the source in
+      # this repo looks correct.
+      bun run build >/dev/null || s=1
+      if ! git diff --quiet -- dist 2>/dev/null; then
+        echo "$dir/dist is out of date with src; commit the rebuilt dist"
+        s=1
+      fi
+      exit "$s"
+    ) || status=1
+  done
+
   echo "==> $CLIENT_DIR"
   (
     cd "$CLIENT_DIR" || exit 1

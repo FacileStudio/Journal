@@ -12,9 +12,9 @@ func RegisterRoutes(router chi.Router, service *Service, limiter, ingestAuth fun
 }
 
 // RegisterBrowserRoutes mounts the public endpoint separately, with its own
-// limiter and its own auth, so no change to the server route can widen it by
+// limiters and its own auth, so no change to the server route can widen it by
 // accident.
-func RegisterBrowserRoutes(router chi.Router, service *Service, limiter, browserAuth func(http.Handler) http.Handler) {
+func RegisterBrowserRoutes(router chi.Router, service *Service, browserAuth func(http.Handler) http.Handler, limiters ...func(http.Handler) http.Handler) {
 	handler := newHandler(service)
-	router.With(limiter, browserAuth).Post("/ingest/browser", handler.browser)
+	router.With(append(limiters, browserAuth)...).Post("/ingest/browser", handler.browser)
 }

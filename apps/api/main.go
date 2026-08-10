@@ -199,17 +199,27 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
 	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
-	// The browser bucket is small and per (key, IP) rather than per token:
-	// one page is not a shipper, and a page that manages 60 distinct errors
-	// in a minute is a render loop, which is exactly the traffic this is
-	// here to refuse.
+	// Two buckets guard the browser endpoint, because one of them can be
+	// walked around. The per (key, IP) bucket is small — a page that manages
+	// 60 requests in a minute is a render loop, which is exactly the traffic
+	// this refuses — but its IP comes from chi's RealIP, which trusts
+	// X-Forwarded-For from any peer, so a rotating header mints fresh
+	// buckets. The per-key ceiling above it does not move for any header,
+	// and the daily quota below it is the bound that actually holds when a
+	// public key leaks.
 	browserIngestLimiter := httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKeyAndIP), rateLimitExceeded)
+	browserKeyCeiling := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKey), rateLimitExceeded)
 
+	// TrustedProxies decides what RemoteAddr is by the time the rate
+	// limiters below see it, so it is a security setting and not a logging
+	// one. Unset it defaults to loopback plus the private ranges, which is
+	// Traefik; TRUSTED_PROXIES narrows it to one address, or to none.
 	router := httpx.NewRouter(httpx.Config{
 		Logger: appLogger,
 		CORS: troncmiddleware.CORSConfig{
 			AllowedOrigins: appEnv.CORSAllowedOrigins,
 		},
+		TrustedProxies: appEnv.TrustedProxies,
 	})
 	router.Use(middleware.SecurityHeaders)
 
@@ -223,7 +233,7 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		kit.Mount(api.With(sessionLimiter))
 		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
-		ingest.RegisterBrowserRoutes(api, ingestService, browserIngestLimiter, middleware.RequireBrowserIngestAuth(apiKeysService))
+		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
 
 		api.Group(func(protected chi.Router) {
 			protected.Use(sessionLimiter)

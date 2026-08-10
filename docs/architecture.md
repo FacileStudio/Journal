@@ -31,9 +31,13 @@ middleware. Postgres runs as an internal compose service with no published ports
 | Client | `apps/client` | SvelteKit dashboard built with `adapter-static`, served by the Go binary |
 | Collector | `apps/collector` | Optional sidecar tailing Docker containers into `/api/ingest` |
 | SDK | `sdk/journal` | Go client plus a `slog` tee handler for suite apps |
+| Browser SDK | `sdk/browser` | `@facile/journal`: window handlers and a SvelteKit `handleError`, dependency-free |
 
 `apps/collector` and `sdk/journal` are separate Go modules with their own `go.mod`, so an
 app can `go get github.com/FacileStudio/Journal/sdk/journal` without pulling the API in.
+`sdk/browser` is a TypeScript package consumed the same way the suite consumes every other
+cross-repo library: `bun add github:FacileStudio/Journal#ts`, off a branch whose root is that
+directory with `dist/` committed.
 
 ## Request lifecycle
 
@@ -93,7 +97,8 @@ constant time and is unscoped, so every entry must carry its own `app`.
 | `users.avatar_url` | the avatar fetched from the identity provider, written under `AVATAR_DIR` and served from `/avatars` |
 | `log_entries` | `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
 | `users` | `email` unique, `name`, `password_hash`, `is_admin` |
-| `api_keys` | `app`, `prefix`, `key_hash` unique, `revoked_at` |
+| `api_keys` | `app`, `kind` (`secret`\|`public`), `prefix`, `key_hash` unique, `allowed_origins` jsonb, `daily_quota`, `revoked_at` |
+| `api_key_usage` | `(api_key_id, day)` primary key, `count` — one row per public key per UTC day, incremented before the write |
 | `saved_queries` | `name` unique, `params` jsonb (`app`, `levels`, `q`, `request_id`) |
 | `alert_rules` | `saved_query_id` FK, `threshold`, `window_minutes`, `webhook_url`, `webhook_header`, `webhook_secret`, `enabled`, `last_fired_at` |
 

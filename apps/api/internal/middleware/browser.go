@@ -101,10 +101,26 @@ func OriginAllowed(origin string, allowed []string) bool {
 // Per key alone would let one hostile page exhaust the limit for every real
 // visitor; per IP alone would let a hundred keys share one bucket behind a
 // corporate NAT. The pair is what a burst from one browser actually looks like.
+//
+// It shapes honest traffic and nothing more. The IP comes from chi's RealIP,
+// which rewrites RemoteAddr from X-Forwarded-For without checking who the peer
+// is, so anything that can set a header can mint itself a fresh bucket — see
+// KeyByBrowserKey for the bound that holds anyway.
 func KeyByBrowserKeyAndIP(request *http.Request) (string, error) {
 	ip, err := httprate.KeyByIP(request)
 	if err != nil {
 		return "", err
 	}
 	return authcrypto.HashToken(BrowserKeyToken(request)) + "|" + ip, nil
+}
+
+// KeyByBrowserKey buckets on the credential alone.
+//
+// This is the ceiling that survives a spoofed X-Forwarded-For: the key is
+// verified against the database, so no header rotates it. It is deliberately
+// far above what any real page produces — it exists to bound write pressure
+// when a public key leaks, not to shape traffic. The daily quota is the other
+// bound that owes nothing to the network layer.
+func KeyByBrowserKey(request *http.Request) (string, error) {
+	return authcrypto.HashToken(BrowserKeyToken(request)), nil
 }

@@ -107,12 +107,26 @@ export type LogContextResponse = {
 	anchor_id: number;
 };
 
+export type ApiKeyKind = 'secret' | 'public';
+
 export type ApiKey = {
 	id: number;
 	app: string;
+	kind: ApiKeyKind;
 	prefix: string;
+	/* Public keys only: the exact origins the browser endpoint accepts. */
+	allowed_origins: string[];
+	daily_quota: number;
+	used_today: number;
 	created_at: string;
 	revoked_at: string | null;
+};
+
+export type NewApiKey = {
+	app: string;
+	kind: ApiKeyKind;
+	allowed_origins?: string[];
+	daily_quota?: number;
 };
 
 export type ListApiKeysResponse = {
@@ -293,10 +307,10 @@ export const backend = {
 		return apiFetch<ListApiKeysResponse>('/apikeys');
 	},
 
-	createApiKey(app: string) {
+	createApiKey(key: NewApiKey) {
 		return apiFetch<CreateApiKeyResponse>('/apikeys', {
 			method: 'POST',
-			body: JSON.stringify({ app })
+			body: JSON.stringify(key)
 		});
 	},
 

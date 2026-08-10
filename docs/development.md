@@ -110,7 +110,8 @@ mise run format       # rewrite Go sources in place
 ```
 
 All three call `scripts/check.sh`, which runs `gofmt -l`, `go vet ./...`, and `go test ./...`
-in `apps/api`, `apps/collector`, and `sdk/journal`, then `bun run check` in `apps/client`.
+in `apps/api`, `apps/collector`, and `sdk/journal`, then `bun run typecheck`, `bun test` and a
+`dist/` freshness check in `sdk/browser`, then `bun run check` in `apps/client`.
 It reports and never rewrites, except under `--format`.
 
 `.githooks/pre-push` execs the same script, so a push runs the full gate. Bypass a

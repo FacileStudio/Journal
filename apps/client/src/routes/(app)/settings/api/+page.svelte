@@ -3,24 +3,29 @@
 	import { goto } from '$app/navigation';
 	import {
 		Alert,
+		Badge,
 		Button,
 		ConfirmModal,
 		Drawer,
 		EmptyState,
 		Field,
 		Input,
+		OptionCards,
 		SecretField,
 		SettingsRow,
 		SettingsSection,
 		Spinner,
 		Table,
+		Textarea,
 		icons,
 		toast
 	} from '@facile/muse';
-	import { backend, type ApiKey, type AuthUser } from '$lib/backend';
+	import { backend, type ApiKey, type ApiKeyKind, type AuthUser } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 
 	const APP_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+	const ORIGIN = /^https?:\/\/[^/?#\s]+$/;
+	const DEFAULT_QUOTA = 10000;
 
 	const auth = getContext<{ user: AuthUser | null }>('auth');
 
@@ -30,15 +35,50 @@
 
 	let open = $state(false);
 	let appName = $state('');
+	let kind = $state<ApiKeyKind>('secret');
+	let originsText = $state('');
+	let quota = $state(String(DEFAULT_QUOTA));
 	let creating = $state(false);
 	let createError = $state('');
-	let issued = $state<{ app: string; token: string } | null>(null);
+	let issued = $state<{ app: string; kind: ApiKeyKind; token: string } | null>(null);
 
 	let pending = $state<ApiKey | null>(null);
 
 	const appNameValid = $derived(APP_NAME.test(appName.trim()));
-	const ingestUrl = $derived(
-		typeof window === 'undefined' ? '/api/ingest' : `${window.location.origin}/api/ingest`
+	const origins = $derived(
+		originsText
+			.split(/[\n,]/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+	);
+	const originsValid = $derived(
+		kind === 'secret' || (origins.length > 0 && origins.length <= 8 && origins.every((o) => ORIGIN.test(o)))
+	);
+	const quotaValid = $derived(kind === 'secret' || (Number(quota) >= 1 && Number(quota) <= 10_000_000));
+	const canCreate = $derived(appNameValid && originsValid && quotaValid);
+
+	const baseUrl = $derived(typeof window === 'undefined' ? '' : window.location.origin);
+	const ingestUrl = $derived(`${baseUrl}/api/ingest`);
+	const browserUrl = $derived(`${baseUrl}/api/ingest/browser`);
+
+	/*
+	 * The snippet is the whole point of showing the token: a public key is
+	 * useless until it is wired into hooks.client.ts, and pasting it wrong is
+	 * how the reports end up in nobody's dashboard.
+	 */
+	const snippet = $derived(
+		issued
+			? `import { createJournal } from '@facile/journal';
+import { handleErrorWith } from '@facile/journal/sveltekit';
+
+const journal = createJournal({
+	url: '${baseUrl}/api',
+	key: '${issued.token}'
+});
+
+journal.install();
+export const handleError = handleErrorWith(journal);`
+			: ''
 	);
 
 	async function load() {
@@ -55,20 +95,28 @@
 	/* Reopening must never resurrect the previous token — it is shown exactly once. */
 	function reset() {
 		appName = '';
+		kind = 'secret';
+		originsText = '';
+		quota = String(DEFAULT_QUOTA);
 		createError = '';
 		issued = null;
 	}
 
 	async function create() {
-		if (!appNameValid) {
-			createError = 'App name must match ^[a-z0-9][a-z0-9-]{0,63}$.';
+		if (!canCreate) {
+			createError = 'Check the app name, the origins and the quota.';
 			return;
 		}
 		creating = true;
 		createError = '';
 		try {
-			const res = await backend.createApiKey(appName.trim());
-			issued = { app: res.key.app, token: res.token };
+			const res = await backend.createApiKey({
+				app: appName.trim(),
+				kind,
+				allowed_origins: kind === 'public' ? origins : undefined,
+				daily_quota: kind === 'public' ? Number(quota) : undefined
+			});
+			issued = { app: res.key.app, kind: res.key.kind, token: res.token };
 			await load();
 		} catch (err) {
 			createError = err instanceof Error ? err.message : 'Could not create the key';
@@ -101,13 +149,20 @@
 </script>
 
 <div class="flex flex-col gap-10">
-	<SettingsSection title="Ingest endpoint" description="Where shippers POST their entries.">
+	<SettingsSection title="Ingest endpoints" description="Where shippers and pages send their entries.">
 		<SettingsRow
-			label="URL"
+			label="Servers"
 			description="The trailing /api is load-bearing — without it the dashboard's catch-all answers 200 and every line is discarded."
 			stacked
 		>
 			<SecretField value={ingestUrl} sensitive={false} />
+		</SettingsRow>
+		<SettingsRow
+			label="Browsers"
+			description="Authenticated by a public key, restricted to that key's origins, and capped by its daily quota. Used by the @facile/journal SDK."
+			stacked
+		>
+			<SecretField value={browserUrl} sensitive={false} />
 		</SettingsRow>
 	</SettingsSection>
 
@@ -146,7 +201,9 @@
 				<thead>
 					<tr>
 						<th scope="col">App</th>
+						<th scope="col">Kind</th>
 						<th scope="col">Prefix</th>
+						<th scope="col">Scope</th>
 						<th scope="col">Created</th>
 						<th scope="col">Status</th>
 						<th scope="col" aria-label="Actions"></th>
@@ -157,7 +214,24 @@
 						<!-- Revoked keys stay listed: the audit trail has to keep naming them. -->
 						<tr class={key.revoked_at ? 'opacity-55' : ''}>
 							<td class="font-fc-mono text-fc-xs">{key.app}</td>
+							<td>
+								<Badge tone={key.kind === 'public' ? 'warning' : 'neutral'}>
+									{key.kind === 'public' ? 'public' : 'secret'}
+								</Badge>
+							</td>
 							<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{key.prefix}…</td>
+							<td class="text-fc-fg-muted">
+								{#if key.kind === 'public'}
+									<div class="flex flex-col gap-1">
+										<span class="font-fc-mono text-fc-xs">{key.allowed_origins.join(', ')}</span>
+										<span class="text-fc-xs">
+											{key.used_today.toLocaleString()} / {key.daily_quota.toLocaleString()} today
+										</span>
+									</div>
+								{:else}
+									<span class="text-fc-xs">servers, no quota</span>
+								{/if}
+							</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">{formatDate(key.created_at)}</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">
 								{key.revoked_at ? `revoked ${formatDate(key.revoked_at)}` : 'active'}
@@ -192,16 +266,43 @@
 >
 	{#if issued}
 		<div class="flex flex-col gap-4">
-			<Alert tone="warning" title="Copy it now">
-				This is the only time the token is shown. Journal stores nothing but its SHA-256.
-			</Alert>
-			<SecretField value={issued.token} label="Token for {issued.app}" autoHideMs={0} />
+			{#if issued.kind === 'public'}
+				<Alert tone="info" title="This one belongs in your bundle">
+					A public key is meant to be shipped to browsers. What protects Journal is the origin
+					allowlist, the rate limit and the daily quota — not the secrecy of this string.
+				</Alert>
+			{:else}
+				<Alert tone="warning" title="Copy it now">
+					This is the only time the token is shown. Journal stores nothing but its SHA-256.
+				</Alert>
+			{/if}
+			<SecretField
+				value={issued.token}
+				label="Token for {issued.app}"
+				sensitive={issued.kind === 'secret'}
+				autoHideMs={0}
+			/>
+			{#if issued.kind === 'public'}
+				<Field label="src/hooks.client.ts" helper="bun add github:FacileStudio/Journal#ts">
+					<Textarea value={snippet} rows={11} readonly class="font-fc-mono text-fc-xs" />
+				</Field>
+			{/if}
 		</div>
 	{:else}
 		<div class="flex flex-col gap-4">
 			{#if createError}
 				<Alert tone="danger" title="Could not create the key">{createError}</Alert>
 			{/if}
+
+			<OptionCards
+				label="Kind"
+				bind:value={kind}
+				options={[
+					{ value: 'secret', label: 'Secret — servers', icon: icons.server },
+					{ value: 'public', label: 'Public — browsers', icon: icons.globe }
+				]}
+			/>
+
 			<Field
 				label="App name"
 				helper="Lowercase letters, digits and hyphens."
@@ -215,6 +316,32 @@
 					spellcheck={false}
 				/>
 			</Field>
+
+			{#if kind === 'public'}
+				<Field
+					label="Allowed origins"
+					helper="One per line, scheme://host[:port], no path and no wildcard. Up to 8. Anything else is refused."
+					error={originsText && !originsValid
+						? 'Each line must look like https://shop.example or http://localhost:5173, 8 at most.'
+						: undefined}
+				>
+					<Textarea
+						bind:value={originsText}
+						rows={3}
+						class="font-fc-mono text-fc-xs"
+						placeholder={'https://shop.example\nhttp://localhost:5173'}
+						spellcheck={false}
+					/>
+				</Field>
+
+				<Field
+					label="Daily quota"
+					helper="Entries accepted per UTC day. The bound that holds if this key is abused — set it to a few times what a normal day looks like."
+					error={quota && !quotaValid ? 'Between 1 and 10000000.' : undefined}
+				>
+					<Input bind:value={quota} class="font-fc-mono" inputmode="numeric" autocomplete="off" />
+				</Field>
+			{/if}
 		</div>
 	{/if}
 
@@ -224,7 +351,7 @@
 				<Button size="lg" onclick={() => (open = false)}>Done</Button>
 			{:else}
 				<Button size="lg" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-				<Button size="lg" disabled={creating || !appNameValid} onclick={create}>
+				<Button size="lg" disabled={creating || !canCreate} onclick={create}>
 					{creating ? 'Creating…' : 'Create key'}
 				</Button>
 			{/if}

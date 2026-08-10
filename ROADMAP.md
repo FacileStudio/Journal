@@ -107,6 +107,61 @@ Found in review; none require design work.
 - [x] **Docker log collector sidecar** — tail container json-file logs on la ruche and ship to
       `/ingest`, so apps that only `console.log` are captured with zero code change.
 
+## 2b. v1.3 — browser errors (the Sentry question)
+
+The suite ships ~15 SvelteKit fronts and had **zero** visibility into what breaks in the
+browser. Journal already owned ingest, search, retention and alerting, so the cheapest path to
+that visibility was a second, narrower write path — not a second product.
+
+**Shipped.**
+
+- [x] **Public ingest keys** — `api_keys.kind` splits a server credential from a key meant to
+      be pasted into a bundle. A public key carries an exact origin allowlist (1–8 entries, no
+      wildcards, normalized to what a browser actually sends) and a mandatory daily quota, and
+      each kind authenticates exactly one route. Minted from Settings → API.
+- [x] **`POST /ingest/browser`** — 20 events, 128 KB, no `app` in the payload (the key's app is
+      authoritative), `meta` scrubbed of credential-shaped keys, depth-limited and capped at
+      8 KB, with `source`/`origin`/`user_agent` stamped server-side. The key rides in `?key=`
+      so `sendBeacon` works, and the body is `text/plain` so no preflight is involved.
+- [x] **Daily quota** — reserved before the write in one conditional upsert, so two concurrent
+      requests cannot both read "just under the limit". 429 with `Retry-After` to UTC midnight.
+- [x] **`@facile/journal`** (`sdk/browser`) — dependency-free browser SDK: window handlers, a
+      SvelteKit `handleError`, 60s dedup with counts, noise filter, sampling, per-session cap,
+      beacon on page hide, mute on 429, retry on network failure.
+
+**Not built, and deliberately so.** These are what separate a log tool from Sentry, and each
+one only pays at a volume this instance does not have yet:
+
+| Feature | Trigger |
+|---|---|
+| **Issue grouping** — `issues` table, fingerprint = type + normalized message + top in-app frame, `first_seen`/`last_seen`/status, a list-of-issues UI | the error stream is too noisy to read as a stream. Watch for a single fingerprint dominating a day |
+| **Source maps** — upload at build time keyed on `release`, resolve frames on read | the first time a stack trace reads `chunk-A1B2.js:1:48291` and nobody can act on it. Independent of grouping, and probably the piece to build first |
+| **Breadcrumbs** — clicks, navigations, failed fetches, console, in a 50-entry ring | triage keeps ending in "I cannot reproduce it" |
+| **Wildcard origins** (`https://*.facile.studio`) | preview deployments per branch make an 8-entry exact list impractical |
+| **Preflight support** on `/ingest/browser` | a consumer that cannot send `text/plain`. Needs the app-wide CORS middleware to defer to the key's allowlist, which today it does not |
+
+If two of those trigger at once, reconsider **GlitchTip** (self-hosted, Sentry-protocol,
+OIDC against porte) before building the third — the argument for building was that the first
+90% was nearly free, and it stops applying once grouping and source maps are on the table.
+
+### Closed: the per-IP rate limits were spoofable — fixed in tronc v0.10.0
+
+- [x] `tronc/httpx` applied chi's `middleware.RealIP`, which rewrites `RemoteAddr` from
+      `X-Forwarded-For` **without checking who the peer is**, so every per-IP limit in this app
+      — login, session routes, browser ingest — was bypassable by rotating a header. Measured
+      against a local build: 70 requests with a rotating `X-Forwarded-For` all returned 201
+      where the 60/min bucket should have refused 10.
+
+      Fixed in **tronc v0.10.0** with `middleware.RealIP(trusted)`, which believes the header
+      only from a trusted peer and walks the chain right to left. Journal is on it, and
+      `internal/middleware/realip.go` — the local implementation nothing ever called — is
+      deleted. Re-measured after the bump with the app's trust set pointed away from the
+      caller: the same 70 requests give **60 accepted, 10 refused**. `TRUSTED_PROXIES` narrows
+      the set; unset is loopback plus the private ranges, so prod needed no new variable.
+
+      The browser endpoint keeps its per-key ceiling and daily quota anyway. A bound that owes
+      nothing to the network layer is worth having even when the network layer is correct.
+
 ## 3. Later drawer (open only on trigger)
 
 | Feature | Trigger |

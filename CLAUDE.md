@@ -11,7 +11,7 @@ Docker-deployed.
 | API | Go 1.24, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
 | Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.4.0`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
-| Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: per-app API keys (SHA256-hashed, admin-managed) with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
+| Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: per-app API keys (SHA256-hashed, admin-managed) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
 ## Key Commands
@@ -39,6 +39,13 @@ go run .
 cd apps/client
 bun install
 bun run dev
+```
+
+### Browser SDK
+
+```sh
+cd sdk/browser
+bun install && bun test && bun run build   # dist/ is committed: it is what consumers install
 ```
 
 ### Ingest a test log
@@ -82,6 +89,7 @@ Journal/
       modules/
         auth/                      # /api/auth/{config,register,login,logout,me} — sessions
         ingest/                    # POST /api/ingest (single + batch, gzip), per-app key or legacy token
+                                   # + POST /api/ingest/browser (public key, origin-checked, quotaed)
         logs/                      # GET /api/logs, /api/logs/histogram, /api/logs/{id}/context, GET /api/apps — session-protected
         apikeys/                   # /api/apikeys CRUD — session + admin only
         queries/                   # /api/queries CRUD (saved filter sets) — session-protected
@@ -111,6 +119,8 @@ Journal/
       static/                      # favicon, logo — fonts and iconify come from the muse package
   sdk/
     journal/                       # Go SDK: batching client + slog tee handler (stdlib-only, go-gettable)
+    browser/                       # @facile/journal: dependency-free browser SDK + SvelteKit handleError
+                                   # dist/ is committed — it is what github:FacileStudio/Journal#ts installs
 ```
 
 ## Architecture
@@ -192,8 +202,13 @@ Extra indexes: GIN on `search`, composite `(app, created_at DESC)`, composite
 raw SQL for the generated column + indexes (GORM can't express a generated `tsvector` column
 or a `DESC` composite index).
 
-Table `api_keys`: `id` PK, `app` text, `prefix` text (display only), `key_hash` text unique
-(SHA256 hex of the full token), `created_at`, `revoked_at` nullable.
+Table `api_keys`: `id` PK, `app` text, `kind` text (`secret`|`public`, default `secret`),
+`prefix` text (display only), `key_hash` text unique (SHA256 hex of the full token),
+`allowed_origins` jsonb (public keys only), `daily_quota` int (`0` = unlimited, legal on secret
+keys only), `created_at`, `revoked_at` nullable.
+
+Table `api_key_usage`: `(api_key_id, day)` PK, `count` bigint. One row per key per UTC day,
+incremented by the browser endpoint *before* it writes. FK cascades on key delete.
 
 ## API Contract
 
@@ -231,8 +246,24 @@ and in the OIDC upsert alike). Login opportunistically deletes expired session r
 requires `is_admin`. `/health` and `/ready` stay public and rate-limit exempt.
 
 Rate limits: login/register 20/min per IP per endpoint; ingest 600/min per token hash;
-session routes 300/min per IP. Client IP honors the last `X-Forwarded-For` hop only when the
-peer is loopback/private (Traefik), so it can't be spoofed from outside.
+browser ingest 60/min per (key, IP) under a 600/min per-key ceiling; session routes 300/min
+per IP.
+
+**The per-IP buckets hold as of tronc v0.10.0.** Until then `httpx` installed chi's `RealIP`,
+which rewrote `RemoteAddr` from `X-Forwarded-For` with no check on the peer, so a rotating
+header minted fresh buckets — measured here at 70 spoofed requests accepted where 10 should
+have been refused. tronc's own `RealIP` believes the header only from a trusted peer and walks
+the chain right to left; re-measured after the bump, the same 70 requests give 60 accepted and
+10 refused. `internal/middleware/realip.go` was Journal's local (unwired) implementation and is
+**deleted** — the chassis owns this now.
+
+`TRUSTED_PROXIES` configures it. Unset means loopback plus the private ranges, which is
+Traefik, so production needs no new variable; set it to Traefik's address to stop a neighbour
+on the Docker network speaking for a visitor, or to `none` to key everything on the connection
+address. A value that does not parse fails at boot.
+
+The browser endpoint keeps its per-key ceiling and daily quota regardless: a bound that owes
+nothing to the network layer is worth having even when the network layer is correct.
 
 ### `POST /ingest`
 
@@ -255,6 +286,39 @@ future → server receipt time), `meta` (optional object). Rate-limited response
 ```
 
 Response `201`: `{ "ingested": <n> }`. An explicit `{ "entries": [] }` → `{ "ingested": 0 }`.
+
+### `POST /ingest/browser`
+
+The browser write path — Journal's answer to "where do client-side errors go". Authenticated
+by a **public** key (`journal_pub_<app>_…`) passed as `?key=` or as a bearer token. The two
+kinds never cross: a public key is rejected on `/ingest`, a secret key is rejected here.
+
+A public key ships inside a JavaScript bundle, so it is not a secret and nothing pretends it
+is. Four things bound the damage if one is abused, and they are layered on purpose:
+
+1. **Origin allowlist** — the request's `Origin` must exactly match one of the key's stored
+   origins, else 403. This is a server-side authorization check, *not* CORS: CORS only governs
+   whether a script may read the response, and the request is sent either way. It stops other
+   people's pages; it does not stop curl, which is what the next three are for.
+2. **60/min per (key, IP)** — shapes honest traffic. Walkable around: see the gotcha below.
+3. **600/min per key** — no header moves this one.
+4. **Daily quota** per key, reserved before the write in one conditional upsert, so two
+   concurrent requests cannot both read "just under the limit". 429 + `Retry-After` counting
+   down to UTC midnight. This is the bound that actually holds.
+
+Body: `{ release, environment, events: [{ message, level, ts, kind, stack, url, route, count,
+user: { id, email }, meta }] }`. At most **20 events** and **128 KB**. There is no `app` field —
+the key's app is authoritative. `meta` is scrubbed of credential-shaped keys
+(`password`, `token`, `cookie`, `authorization`, …→ `"[scrubbed]"`), depth-limited to 6, arrays
+cut at 50, strings at 2 KB (stack at 8 KB), and the whole object capped at 8 KB with a fallback
+that keeps `origin`, `url` and half the stack. The server then stamps `source: "browser"`,
+`origin` and `user_agent` **last**, so a page cannot claim any of the three.
+
+Entries land in `log_entries` like everything else, so search, histogram, context, saved
+queries and alerts all work on them unchanged.
+
+Client: [`sdk/browser`](sdk/browser) (`@facile/journal`), consumed as
+`bun add github:FacileStudio/Journal#ts`.
 
 ### `GET /logs`
 
@@ -281,8 +345,8 @@ Unfiltered stream around one entry (defaults 50, max 200 each; 404 unknown id). 
 
 ### `/apikeys` (session + admin)
 
-- `GET /apikeys` → `{ "keys": [ { "id", "app", "prefix", "created_at", "revoked_at" } ] }`
-- `POST /apikeys` body `{ "app" }` (`^[a-z0-9][a-z0-9-]{0,63}$`) → 201 `{ "key", "token" }` — full token shown once, only its SHA256 stored. Multiple active keys per app allowed (zero-downtime rotation: add new → redeploy app → revoke old).
+- `GET /apikeys` → `{ "keys": [ { "id", "app", "kind", "prefix", "allowed_origins", "daily_quota", "used_today", "created_at", "revoked_at" } ] }`
+- `POST /apikeys` body `{ "app", "kind"?, "allowed_origins"?, "daily_quota"? }` (app `^[a-z0-9][a-z0-9-]{0,63}$`) → 201 `{ "key", "token" }` — full token shown once, only its SHA256 stored. Multiple active keys per app allowed (zero-downtime rotation: add new → redeploy app → revoke old). `kind: "public"` requires 1–8 `allowed_origins` and a `daily_quota` ≥ 1; origins are normalized on save (scheme + host lowercased, default port dropped, no path, no wildcard) so they match what a browser sends byte for byte.
 - `DELETE /apikeys/{id}` → 204, sets `revoked_at` (idempotent).
 
 ### `/queries` (session)
@@ -347,6 +411,11 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
   (`https://journal.facile.studio/api` publicly, `http://journal-api:4010/api` on the
   compose network); point it at the bare host and every log line is accepted, discarded, and
   never reported.
+- **`/ingest/browser` must be called with `Content-Type: text/plain`.** That keeps it a CORS
+  *simple* request, so no preflight is sent. An `application/json` body triggers one, and the
+  preflight is answered by the app-wide CORS middleware from `CORS_ALLOWED_ORIGINS` — which
+  knows nothing about a key's allowed origins — so it 403s before the route is ever reached.
+  The SDK does this already; hand-rolled callers get a confusing failure.
 - Ingest auth is per-app API keys (created under **Settings → API**, admin only; the page used to
   live at `/keys`). The legacy
   `INGEST_TOKEN` still works if set; empty (the default) disables it — with no keys and no legacy
