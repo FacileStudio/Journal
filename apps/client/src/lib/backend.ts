@@ -104,6 +104,28 @@ export type HistogramResponse = {
 	buckets: HistogramBucket[];
 };
 
+export type StackFrame = {
+	raw: string;
+	function?: string;
+	file?: string;
+	line?: number;
+	column?: number;
+	resolved: boolean;
+	source?: string;
+	source_line?: number;
+	source_column?: number;
+	name?: string;
+};
+
+export type ResolvedStack = {
+	release: string;
+	frames: StackFrame[];
+	/* How many frames a source map explained. Zero with a release set means the
+	   maps for that build were never uploaded — a different problem from an
+	   entry that carries no release at all. */
+	resolved: number;
+};
+
 export type LogContextResponse = {
 	entries: LogEntry[];
 	anchor_id: number;
@@ -298,6 +320,10 @@ export const backend = {
 		if (params.until) qs.set('until', params.until);
 		const query = qs.size ? `?${qs}` : '';
 		return apiFetch<HistogramResponse>(`/logs/histogram${query}`);
+	},
+
+	logStack(id: number) {
+		return apiFetch<ResolvedStack>(`/logs/${id}/stack`);
 	},
 
 	logContext(id: number, before = 50, after = 50) {

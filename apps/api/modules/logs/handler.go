@@ -1,12 +1,14 @@
 package logs
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
+	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
@@ -24,10 +26,49 @@ var histogramBucketOptions = []int64{60, 300, 900, 3600, 21600, 86400}
 
 type Handler struct {
 	service *Service
+	// stacks resolves a minified trace through an uploaded source map. It is
+	// optional: nil simply means every frame comes back unresolved, which is
+	// what an instance holding no maps should do.
+	stacks StackResolver
 }
 
-func newHandler(service *Service) *Handler {
-	return &Handler{service: service}
+// StackResolver is the one thing this module needs from sourcemaps, named here
+// so the dependency points this way and the two packages do not import each
+// other.
+type StackResolver interface {
+	Resolve(ctx context.Context, app, release, stack string) sourcemaps.Stack
+}
+
+func newHandler(service *Service, stacks StackResolver) *Handler {
+	return &Handler{service: service, stacks: stacks}
+}
+
+// stack resolves one entry's trace on demand.
+//
+// On demand, rather than as part of the list: resolving is the expensive half
+// of a source map, a page holds a hundred entries and a reader opens one. It
+// also keeps the stored stack untouched — the raw trace is the evidence, and a
+// resolution is an interpretation of it that a later upload can improve.
+func (h *Handler) stack(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		httpjson.WriteError(w, errors.Invalid("id must be an integer"))
+		return
+	}
+
+	entry, err := h.service.Entry(r.Context(), id)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+
+	raw, _ := entry.Meta["stack"].(string)
+	release, _ := entry.Meta["release"].(string)
+	if h.stacks == nil {
+		httpjson.WriteJSON(w, http.StatusOK, sourcemaps.Stack{Release: release, Frames: []sourcemaps.Frame{}})
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, h.stacks.Resolve(r.Context(), entry.App, release, raw))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

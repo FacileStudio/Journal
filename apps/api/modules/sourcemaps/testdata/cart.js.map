@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["cart.js"],
+  "sourcesContent": ["export function addToCart(item) {\n  if (!item) {\n    throw new Error(\"cart is undefined\");\n  }\n  return item.id;\n}\n"],
+  "mappings": "AAAO,SAASA,EAAUC,EAAM,CAC9B,GAAI,CAACA,EACH,MAAM,IAAI,MAAM,mBAAmB,EAErC,OAAOA,EAAK,EACd",
+  "names": ["addToCart", "item"]
+}

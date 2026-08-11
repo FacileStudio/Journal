@@ -79,6 +79,19 @@ func (s *Service) Histogram(ctx context.Context, params ListParams, bucketSecond
 	return buckets, nil
 }
 
+// Entry returns one entry, for the endpoints that work on a single line
+// rather than a page.
+func (s *Service) Entry(ctx context.Context, id int64) (schemas.LogEntry, error) {
+	var entry schemas.LogEntry
+	if err := s.orm.WithContext(ctx).First(&entry, id).Error; err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return schemas.LogEntry{}, errors.NotFound("log entry not found")
+		}
+		return schemas.LogEntry{}, errors.Internal("failed to load the log entry", err)
+	}
+	return entry, nil
+}
+
 func (s *Service) Context(ctx context.Context, id int64, before, after int) ([]schemas.LogEntry, error) {
 	var anchor schemas.LogEntry
 	if err := s.orm.WithContext(ctx).First(&anchor, id).Error; err != nil {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button, EmptyState, Spinner, Table, icons } from '@facile/muse';
-	import type { LogEntry, LogLevel } from '$lib/backend';
+	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
 
@@ -33,6 +33,7 @@
 	const gaps = $derived(new Set(gapIds));
 
 	function toggle(id: number) {
+		if (expandedId !== id) void resolveStack(id);
 		expandedId = expandedId === id ? null : id;
 	}
 
@@ -53,6 +54,31 @@
 	/* A stack trace inside JSON.stringify is one long line of \n escapes, which
 	   is the difference between a usable browser error and an unreadable one.
 	   It comes out into its own block and the rest of meta keeps the JSON. */
+	/* One resolved stack per expanded row, fetched when the row opens rather
+	   than with the page: resolving is the expensive half of a source map, a
+	   page holds a hundred entries, and a reader opens one. */
+	let resolved = $state<Record<number, ResolvedStack | 'loading'>>({});
+
+	async function resolveStack(id: number) {
+		if (resolved[id]) return;
+		resolved[id] = 'loading';
+		try {
+			resolved[id] = await backend.logStack(id);
+		} catch {
+			/* The raw stack is already on screen; failing to improve it is not
+			   worth an error message. */
+			delete resolved[id];
+		}
+	}
+
+	function frameLabel(frame: StackFrame): string {
+		const where = frame.resolved
+			? `${frame.source}:${frame.source_line}:${frame.source_column}`
+			: `${frame.file ?? ''}${frame.line ? `:${frame.line}:${frame.column}` : ''}`;
+		const fn = frame.name || frame.function;
+		return fn ? `${fn} — ${where}` : where;
+	}
+
 	function stackOf(entry: LogEntry): string | null {
 		const value = entry.meta?.['stack'];
 		return typeof value === 'string' && value ? value : null;
@@ -141,10 +167,35 @@
 									{entry.message}
 								</p>
 								{#if stackOf(entry)}
-									<pre
-										class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed text-fc-fg-muted">{stackOf(
-											entry
-										)}</pre>
+									{@const stack = resolved[entry.id]}
+									{#if stack && stack !== 'loading' && stack.resolved > 0}
+										<!-- Resolved frames read as source locations; the ones no map
+										     explained keep their bundle position so the trace stays whole. -->
+										<div
+											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed"
+										>
+											{#each stack.frames as frame (frame.raw)}
+												<div class={frame.resolved ? 'text-fc-fg' : 'text-fc-fg-muted'}>
+													{frameLabel(frame)}
+												</div>
+											{/each}
+										</div>
+										<p class="text-fc-xs text-fc-fg-muted">
+											{stack.resolved} of {stack.frames.length} frames mapped from release
+											<span class="font-fc-mono">{stack.release}</span>.
+										</p>
+									{:else}
+										<pre
+											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed text-fc-fg-muted">{stackOf(
+												entry
+											)}</pre>
+										{#if stack && stack !== 'loading' && stack.release && stack.resolved === 0}
+											<p class="text-fc-xs text-fc-fg-muted">
+												No source map uploaded for release
+												<span class="font-fc-mono">{stack.release}</span>.
+											</p>
+										{/if}
+									{/if}
 								{/if}
 								{#if metaOf(entry)}
 									<pre

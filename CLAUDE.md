@@ -351,6 +351,33 @@ Unfiltered stream around one entry (defaults 50, max 200 each; 404 unknown id). 
 - `POST /apikeys` body `{ "app", "kind"?, "allowed_origins"?, "daily_quota"? }` (app `^[a-z0-9][a-z0-9-]{0,63}$`) → 201 `{ "key", "token" }` — full token shown once, only its SHA256 stored. Multiple active keys per app allowed (zero-downtime rotation: add new → redeploy app → revoke old). `kind: "public"` requires 1–8 `allowed_origins` and a `daily_quota` ≥ 1; origins are normalized on save (scheme + host lowercased, default port dropped, no path, no wildcard) so they match what a browser sends byte for byte.
 - `DELETE /apikeys/{id}` → 204, sets `revoked_at` (idempotent).
 
+### `/sourcemaps`
+
+Makes a browser stack trace readable: `chunk-A1B2.js:1:48291` becomes
+`src/lib/Cart.svelte:12:5`.
+
+- `POST /sourcemaps` (ingest, **per-app key only**) body `{release, file, map}` → `{stored}`.
+  `file` is the bundle **basename** (`BxYz1234.js`), because a frame carries a URL whose origin
+  depends on how the app is served while Vite hashes every name. Idempotent — a re-upload answers
+  `stored: false`, which is what every restart does. The map is parsed before storing: one that
+  cannot be read would look present and resolve nothing. 24 MB cap. The unscoped `INGEST_TOKEN`
+  is refused, or one shipper's token could overwrite another app's resolution.
+- `GET /sourcemaps?release=` (ingest) → `{release, files}`. An uploader reads this and sends only
+  the difference.
+- `GET /sourcemaps/releases` (session + admin) → what is stored, per app and release.
+- `DELETE /sourcemaps?app=&release=` (session + admin) → 204, and evicts the parsed-map cache so
+  a rollback stops resolving against the build that was rolled back.
+
+**Resolution happens on read**, per entry, via `GET /logs/{id}/stack` — not at ingest. The stored
+stack stays the raw evidence, a map uploaded late still improves old errors, and the cost is paid
+only when somebody opens a row rather than on every ingest. Parsed maps are cached, bounded at 32.
+
+Apps upload their own maps at boot with `journal.UploadSourceMaps` from `sdk/journal`. That
+placement is the point: the maps ride in the same image as the bundle they explain, so there is no
+CI step and no way for the two to drift. `.git` is excluded from every Docker context here, which
+rules out Go's VCS stamping — the release is read from the client's `_app/version.json`, the exact
+string the browser reports.
+
 ### `/queries` (session)
 
 Saved filter sets: `params` = `{ app?, levels? (string[]), q?, source?, request_id? }` — no time

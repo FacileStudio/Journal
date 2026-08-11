@@ -15,6 +15,7 @@ var Registry = Response{Modules: []Module{
 	apiKeysModule,
 	queriesModule,
 	alertsModule,
+	sourceMapsModule,
 }}
 
 var idParam = []Field{{Name: "id", Type: "int64", Description: "Numeric identifier."}}
@@ -197,6 +198,64 @@ var ingestModule = Module{
 	},
 }
 
+var sourceMapsModule = Module{
+	Name: "sourcemaps",
+	Description: "Source maps, so a browser stack trace resolves to real file names instead of a hashed chunk and a column number. " +
+		"An app uploads its own maps at boot with the per-app key it already ships logs with, keyed on the release the client reports; " +
+		"resolution happens on read, per entry, so the stored stack stays the raw evidence and a late upload still improves old errors.",
+	Routes: []Route{
+		{
+			Method:  "POST",
+			Path:    "/sourcemaps",
+			Summary: "Upload one source map",
+			Description: "Body {release, file, map}. There is no app field: the key's app is authoritative, as on /ingest. " +
+				"file is the *basename* of the generated bundle (\"BxYz1234.js\"), not a path or URL — a stack frame carries a URL whose origin depends on how the app is served, while Vite hashes every name, so the basename is what identifies it. " +
+				"Idempotent: re-uploading one already held answers 200 with stored=false, which is what every restart does. The map is parsed before it is stored, because one that cannot be read looks present and silently resolves nothing. Bodies are capped at 24 MB.",
+			Auth:         "bearer",
+			RequestBody:  `{"release":string,"file":string,"map":string}`,
+			ResponseBody: `{"stored":bool}`,
+			Errors: []Error{
+				{Status: 400, Code: "invalid_argument", Description: "release or map missing, file is not a bare name, or the map does not parse"},
+				{Status: 401, Code: "unauthenticated", Description: "no bearer token, or one matching no active API key"},
+				{Status: 403, Code: "permission_denied", Description: "the credential is the unscoped INGEST_TOKEN; uploading needs a per-app key"},
+				{Status: 413, Code: "resource_exhausted", Description: "the body exceeds 24 MB"},
+			},
+		},
+		{
+			Method:       "GET",
+			Path:         "/sourcemaps",
+			Summary:      "List the maps already held for a release",
+			Description:  "Takes ?release=. An uploader reads this first and sends only the difference, so a restart costs one request instead of re-uploading a whole build.",
+			Auth:         "bearer",
+			ResponseBody: `{"release":string,"files":[string]}`,
+			Errors: []Error{
+				{Status: 400, Code: "invalid_argument", Description: "release is missing"},
+				{Status: 401, Code: "unauthenticated", Description: "no bearer token, or one matching no active API key"},
+				{Status: 403, Code: "permission_denied", Description: "the credential is the unscoped INGEST_TOKEN"},
+			},
+		},
+		{
+			Method:       "GET",
+			Path:         "/sourcemaps/releases",
+			Summary:      "Summarise every release holding maps",
+			Auth:         "bearer",
+			ResponseBody: `{"releases":[{"app":string,"release":string,"files":int,"bytes":int64,"created_at":string}]}`,
+			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
+		},
+		{
+			Method:      "DELETE",
+			Path:        "/sourcemaps",
+			Summary:     "Drop one release's maps",
+			Description: "Takes ?app= and ?release=. Also evicts the parsed-map cache, so a rollback stops resolving against the build that was rolled back.",
+			Auth:        "bearer",
+			Errors: []Error{
+				{Status: 400, Code: "invalid_argument", Description: "app or release is missing"},
+				errUnauth, errNotAdmin, errSessionRate,
+			},
+		},
+	},
+}
+
 var logsModule = Module{
 	Name:        "logs",
 	Description: "The read path behind the dashboard: search, histogram, and surrounding-context queries over log_entries.",
@@ -230,6 +289,21 @@ var logsModule = Module{
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "until is not after since, or a timestamp is not RFC3339"},
 				errUnauth,
+				errSessionRate,
+			},
+		},
+		{
+			Method:  "GET",
+			Path:    "/logs/{id}/stack",
+			Summary: "Resolve one entry's stack through its source maps",
+			Description: "Reads meta.stack and meta.release from the entry and maps each frame it can. Never fails: an entry with no release, no uploaded map or an unparseable line still comes back frame by frame with raw set, " +
+				"because a half-resolved trace is useful and a refusal is not. resolved counts the frames a map explained — zero with a release set means that build's maps were never uploaded, which is a different problem from carrying no release at all. Capped at 60 frames.",
+			Auth:         "bearer",
+			ResponseBody: `{"release":string,"resolved":int,"frames":[{"raw":string,"function":string,"file":string,"line":int,"column":int,"resolved":bool,"source":string,"source_line":int,"source_column":int,"name":string}]}`,
+			Errors: []Error{
+				errBadID,
+				errUnauth,
+				{Status: 404, Code: "not_found", Description: "no entry with that id"},
 				errSessionRate,
 			},
 		},

@@ -21,6 +21,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
+	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte/avatarfs"
 	"github.com/FacileStudio/porte/local"
@@ -189,6 +190,7 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	authService := auth.NewService(db, passwords)
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
+	sourceMapsService := sourcemaps.NewService(db)
 	alertsService := alerts.NewService(db)
 
 	rateLimitExceeded := httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -242,16 +244,20 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
+		// Source maps ride the same per-app credential an app already ships
+		// logs with, so adopting them adds no new secret to a deployment.
+		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
 		api.Group(func(protected chi.Router) {
 			protected.Use(sessionLimiter)
 			protected.Use(requireAuth)
-			logs.RegisterRoutes(protected, logsService)
+			logs.RegisterRoutes(protected, logsService, sourceMapsService)
 			queries.RegisterRoutes(protected, queriesService)
 			protected.Group(func(admin chi.Router) {
 				admin.Use(middleware.RequireAdmin)
 				apikeys.RegisterRoutes(admin, apiKeysService)
 				alerts.RegisterRoutes(admin, alertsService)
+				sourcemaps.RegisterAdminRoutes(admin, sourceMapsService)
 			})
 		})
 	})
