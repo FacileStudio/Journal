@@ -126,6 +126,17 @@ if [ "$mode" = "all" ]; then
   ) || status=1
 fi
 
+echo "==> filet"
+if command -v filet >/dev/null 2>&1; then
+  filet check . || status=1
+else
+  # Skipped rather than fatal, like the client type-check above: this gate is
+  # meant to run on a machine with nothing but go and bun. CI pins the version
+  # and is the authority — see .github/workflows/filet.yml.
+  echo "check: no 'filet' on PATH, skipping the style gate" >&2
+  echo "check: GOBIN=\$HOME/go/bin go install github.com/FacileStudio/filet@v0.3.0" >&2
+fi
+
 if [ "$status" -ne 0 ]; then
   echo "check failed"
 fi
