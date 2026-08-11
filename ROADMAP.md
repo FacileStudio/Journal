@@ -135,7 +135,7 @@ one only pays at a volume this instance does not have yet:
 | Feature | Trigger |
 |---|---|
 | **Issue grouping** — `issues` table, fingerprint = type + normalized message + top in-app frame, `first_seen`/`last_seen`/status, a list-of-issues UI | the error stream is too noisy to read as a stream. Watch for a single fingerprint dominating a day |
-| **Source maps** — upload at build time keyed on `release`, resolve frames on read | the first time a stack trace reads `chunk-A1B2.js:1:48291` and nobody can act on it. Independent of grouping, and probably the piece to build first |
+| ~~**Source maps**~~ | **Shipped 2026-08-11.** Uploaded by the app at boot from inside its own image, keyed on the release in `_app/version.json`; resolved on read via `GET /logs/{id}/stack`. Sablier is the first consumer |
 | **Breadcrumbs** — clicks, navigations, failed fetches, console, in a 50-entry ring | triage keeps ending in "I cannot reproduce it" |
 | **Wildcard origins** (`https://*.facile.studio`) | preview deployments per branch make an 8-entry exact list impractical |
 | **Preflight support** on `/ingest/browser` | a consumer that cannot send `text/plain`. Needs the app-wide CORS middleware to defer to the key's allowlist, which today it does not |
