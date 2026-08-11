@@ -169,5 +169,14 @@ func tidySource(source string) string {
 	if cut := strings.Index(source, "/./"); cut >= 0 {
 		source = source[cut+3:]
 	}
-	return strings.TrimPrefix(source, "./")
+	source = strings.TrimPrefix(source, "./")
+
+	// Vite writes sources relative to the emitted chunk, which sits six
+	// directories deep, so every path arrives behind a run of "../". They say
+	// nothing — the repository root is the only anchor a reader has — and they
+	// push the part that matters off the edge of a narrow column.
+	for strings.HasPrefix(source, "../") {
+		source = strings.TrimPrefix(source, "../")
+	}
+	return source
 }

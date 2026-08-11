@@ -17,10 +17,11 @@ import (
 // SourceMapResult reports what an upload run did.
 type SourceMapResult struct {
 	// Found is how many .map files were on disk, Uploaded how many the server
-	// did not already hold, Skipped the rest.
+	// did not already hold, Skipped the rest, and Failed the ones it refused.
 	Found    int
 	Uploaded int
 	Skipped  int
+	Failed   int
 }
 
 // UploadSourceMaps ships every .map in dir to Journal for one release.
@@ -70,6 +71,7 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 		return result, err
 	}
 
+	var firstFailure error
 	for _, path := range maps {
 		// The server keys on the bundle's basename, because a stack frame
 		// carries a URL whose origin and prefix depend on how the app is
@@ -84,9 +86,21 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 			return result, fmt.Errorf("journal: reading %s: %w", path, err)
 		}
 		if err := uploadOne(ctx, client, base, cfg.Token, release, name, content); err != nil {
-			return result, err
+			// One rejected map must not cost the rest of the build. A
+			// bundler emits maps of wildly different shapes and a single
+			// odd one is not a reason to leave every other trace
+			// unreadable, so the run continues and reports.
+			result.Failed++
+			if firstFailure == nil {
+				firstFailure = err
+			}
+			continue
 		}
 		result.Uploaded++
+	}
+
+	if firstFailure != nil {
+		return result, fmt.Errorf("journal: %d of %d source maps were refused, first: %w", result.Failed, result.Found, firstFailure)
 	}
 	return result, nil
 }

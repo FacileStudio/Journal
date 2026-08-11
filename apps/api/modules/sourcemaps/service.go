@@ -2,6 +2,7 @@ package sourcemaps
 
 import (
 	"context"
+	"encoding/json"
 	"path"
 	"regexp"
 	"strings"
@@ -34,6 +35,19 @@ func NewService(orm *gorm.DB) *Service {
 
 var fileNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,200}$`)
 
+// isEmptyMap reports a well-formed v3 map that maps nothing, which a bundler
+// emits routinely and which is not a reason to refuse an upload.
+func isEmptyMap(content string) bool {
+	var probe struct {
+		Version  int    `json:"version"`
+		Mappings string `json:"mappings"`
+	}
+	if json.Unmarshal([]byte(content), &probe) != nil {
+		return false
+	}
+	return probe.Version == 3 && strings.TrimSpace(probe.Mappings) == ""
+}
+
 // Store saves one map, ignoring a re-upload of one already held.
 //
 // Idempotent because the uploader runs at application boot: a restart, a
@@ -50,7 +64,16 @@ func (s *Service) Store(ctx context.Context, app, release, file, content string)
 	}
 	// Parse before storing: a map that cannot be read is worse than no map,
 	// because it looks uploaded and silently resolves nothing.
+	//
+	// A map with empty mappings is a separate case and not an error. Vite
+	// emits them for assets that compile to nothing worth mapping, they are
+	// perfectly valid v3 documents, and failing the upload over one would fail
+	// the deploy of a build whose real maps are fine. Nothing is stored,
+	// because a map that explains nothing is a row and a lookup for no gain.
 	if _, err := sourcemap.Parse("", []byte(content)); err != nil {
+		if isEmptyMap(content) {
+			return false, nil
+		}
 		return false, errors.Invalid("the map is not a valid source map: " + err.Error())
 	}
 

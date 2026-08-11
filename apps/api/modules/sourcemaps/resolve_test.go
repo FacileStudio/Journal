@@ -76,6 +76,9 @@ func TestTidySource(t *testing.T) {
 		"./src/routes/+page.svelte":           "src/routes/+page.svelte",
 		"src/lib/Cart.svelte":                 "src/lib/Cart.svelte",
 		"file:///app/src/main.ts":             "/app/src/main.ts",
+		// What Vite actually emits: the chunk sits six directories deep, so
+		// every source arrives behind a run of "../" that says nothing.
+		"../../../../../../src/routes/(app)/settings/advanced/+page.svelte": "src/routes/(app)/settings/advanced/+page.svelte",
 	}
 	for input, want := range cases {
 		if got := tidySource(input); got != want {
