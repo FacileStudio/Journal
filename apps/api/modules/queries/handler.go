@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Handler serves the saved-query endpoints.
 type Handler struct {
 	service *Service
 }

@@ -25,7 +25,10 @@ import (
 // go test runs one binary per package concurrently, so two of them dropping
 // and recreating the same schema race in a way that surfaces as a nonsense
 // error a long way from the cause — a missing log_entries table, a duplicate
-// key in pg_type — and blames whichever test happened to lose.
+// key in pg_type — and blames whichever test happened to lose. The search path
+// is put in the connection string rather than a SET, because GORM hands out
+// pooled connections and a SET reaches exactly the one it ran on, so half the
+// test would silently address public instead.
 func Open(t *testing.T) *gorm.DB {
 	t.Helper()
 	url := os.Getenv("JOURNAL_TEST_DATABASE_URL")
@@ -45,9 +48,6 @@ func Open(t *testing.T) *gorm.DB {
 		t.Fatalf("create the test schema: %v", err)
 	}
 
-	// The search path goes in the connection string, not in a SET: GORM
-	// hands out pooled connections and a SET reaches exactly the one it ran
-	// on, so half the test would silently address public instead.
 	db, err := gorm.Open(postgres.Open(withSearchPath(url, name)), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
 		t.Fatalf("open with the search path: %v", err)

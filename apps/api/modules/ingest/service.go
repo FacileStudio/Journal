@@ -9,10 +9,12 @@ import (
 	"gorm.io/gorm"
 )
 
+// Service stores log entries and enforces the per-key ingest quota.
 type Service struct {
 	orm *gorm.DB
 }
 
+// NewService wires an ingest service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }

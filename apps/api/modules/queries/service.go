@@ -13,10 +13,12 @@ import (
 
 var validLevels = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 
+// Service stores and lists saved queries.
 type Service struct {
 	orm *gorm.DB
 }
 
+// NewService wires a saved-query service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }

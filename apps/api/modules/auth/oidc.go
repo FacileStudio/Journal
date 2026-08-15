@@ -21,10 +21,13 @@ import (
 // becomes the administrator. That rule is product behaviour, it has to survive
 // the switch to SSO, and it is precisely why porte asks the app to own this
 // method instead of owning the write itself.
+// UserStore reads and writes the users porte owns, and is the adapter Journal
+// hands to the porte kit so its password and federated flows fit this database.
 type UserStore struct {
 	orm *gorm.DB
 }
 
+// NewUserStore wires a UserStore onto the database.
 func NewUserStore(orm *gorm.DB) *UserStore {
 	return &UserStore{orm: orm}
 }
@@ -39,7 +42,12 @@ var (
 //
 // The advisory lock is the one Register already takes: without it two people
 // signing in for the first time at the same moment both count zero users and
-// both become admin.
+// both become admin. Matching an existing account on the address alone is an
+// account-takeover primitive when the provider lets a user claim any address
+// without proving it, so an unverified claim is refused. An SSO account stores
+// an empty password_hash — not a valid Argon2id encoding, so VerifyPassword
+// refuses every input and no password can sign it in — and the first account
+// ever created becomes admin.
 func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (int64, error) {
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if _, err := mail.ParseAddress(email); err != nil {
@@ -70,9 +78,6 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		err = tx.Where("email = ?", email).First(&existing).Error
 		switch {
 		case err == nil:
-			// Matching an existing account on the address alone is an
-			// account takeover primitive when the provider lets a user
-			// claim any address without proving it.
 			if !claims.EmailVerified {
 				return errors.Conflict("an account with this email already exists and the identity provider did not verify the address")
 			}
@@ -86,10 +91,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		if err := tx.Model(&schemas.User{}).Count(&count).Error; err != nil {
 			return errors.Internal("failed to count users", err)
 		}
-		// password_hash is NOT NULL and no password exists for an SSO
-		// account. The empty string is not a valid Argon2id encoding, so
-		// VerifyPassword refuses it for every input and there is no
-		// password that signs this user in.
+
 		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0, AvatarURL: claims.AvatarURL}
 		if err := tx.Create(&user).Error; err != nil {
 			return errors.Internal("failed to create the account", err)

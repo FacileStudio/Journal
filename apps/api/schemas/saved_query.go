@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// SavedQueryParams is the filter a saved query captures.
 type SavedQueryParams struct {
 	App       string   `json:"app,omitempty"`
 	Levels    []string `json:"levels,omitempty"`
@@ -10,6 +11,7 @@ type SavedQueryParams struct {
 	RequestID string   `json:"request_id,omitempty"`
 }
 
+// SavedQuery is a named, reusable log filter.
 type SavedQuery struct {
 	ID        int64            `json:"id" gorm:"column:id;primaryKey"`
 	Name      string           `json:"name" gorm:"column:name;uniqueIndex;not null"`

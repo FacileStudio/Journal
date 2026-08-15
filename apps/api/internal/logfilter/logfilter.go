@@ -6,6 +6,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// Params is a log query: filters plus the since/until window.
+//
+// Source filters on meta->>'source', which is what separates entries a server
+// shipped from the ones a browser reported. Both land in the same table on
+// purpose — one search, one retention, one alert rule — but a stack trace out
+// of somebody's browser and a line out of an API are different work, and
+// without this the browser half is only reachable by knowing to full-text
+// search for it.
 type Params struct {
 	App    string
 	Levels []string
@@ -24,6 +32,8 @@ type Params struct {
 	Until *time.Time
 }
 
+// Apply narrows a log query to the filters in params, in a fixed order:
+// app, levels, full-text, source, request id, then the time window.
 func Apply(query *gorm.DB, params Params) *gorm.DB {
 	if params.App != "" {
 		query = query.Where("app = ?", params.App)

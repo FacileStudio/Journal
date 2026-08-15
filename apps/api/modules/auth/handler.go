@@ -10,6 +10,7 @@ import (
 	"github.com/FacileStudio/tronc/httpjson"
 )
 
+// Handler serves the auth endpoints.
 type Handler struct {
 	service *Service
 }

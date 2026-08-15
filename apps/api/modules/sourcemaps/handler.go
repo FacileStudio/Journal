@@ -14,6 +14,7 @@ import (
 // 413 rather than an out-of-memory.
 const maxMapBytes = 24 << 20
 
+// Handler serves the source-map endpoints.
 type Handler struct {
 	service *Service
 }

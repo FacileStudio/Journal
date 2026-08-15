@@ -16,10 +16,12 @@ import (
 
 const maxWindowMinutes = 1440
 
+// Service evaluates and stores alert rules.
 type Service struct {
 	orm *gorm.DB
 }
 
+// NewService wires an alert service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }

@@ -1,5 +1,6 @@
 package alerts
 
+// CreateRequest is the body of an alert definition.
 type CreateRequest struct {
 	Name          string `json:"name"`
 	SavedQueryID  int64  `json:"saved_query_id"`
@@ -10,10 +11,12 @@ type CreateRequest struct {
 	WebhookSecret string `json:"webhook_secret"`
 }
 
+// UpdateRequest is the body of an alert update — currently just enable/disable.
 type UpdateRequest struct {
 	Enabled *bool `json:"enabled"`
 }
 
+// AlertResponse describes one alert for the client.
 type AlertResponse struct {
 	ID            int64   `json:"id"`
 	Name          string  `json:"name"`
@@ -28,10 +31,12 @@ type AlertResponse struct {
 	CreatedAt     string  `json:"created_at"`
 }
 
+// ListResponse is the list of every alert.
 type ListResponse struct {
 	Alerts []AlertResponse `json:"alerts"`
 }
 
+// AlertEnvelope wraps the fired alert, what the webhook posts.
 type AlertEnvelope struct {
 	Alert AlertResponse `json:"alert"`
 }

@@ -24,6 +24,7 @@ const (
 
 var validLevels = map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 
+// Handler serves the log ingest endpoints.
 type Handler struct {
 	service *Service
 }

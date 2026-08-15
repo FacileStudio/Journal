@@ -12,14 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// Service queries the log entry table: list, context, histogram and app
+// summary, all through a shared logfilter.
 type Service struct {
 	orm *gorm.DB
 }
 
+// NewService wires a log query service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }
 
+// ListParams is a log query: filter, page size and the backwards cursor.
 type ListParams struct {
 	logfilter.Params
 	Limit    int

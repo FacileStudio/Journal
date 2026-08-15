@@ -2,6 +2,7 @@ package queries
 
 import "github.com/go-chi/chi/v5"
 
+// RegisterRoutes mounts the saved-query endpoints.
 func RegisterRoutes(router chi.Router, service *Service) {
 	handler := newHandler(service)
 	router.Get("/queries", handler.list)

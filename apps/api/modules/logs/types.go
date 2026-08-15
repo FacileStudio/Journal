@@ -1,5 +1,6 @@
 package logs
 
+// LogResponse is one log entry shaped for the client.
 type LogResponse struct {
 	ID         int64          `json:"id"`
 	App        string         `json:"app"`
@@ -10,36 +11,43 @@ type LogResponse struct {
 	ReceivedAt string         `json:"received_at"`
 }
 
+// Cursor is the opaque position used to page backwards in time.
 type Cursor struct {
 	Ts string `json:"ts"`
 	ID int64  `json:"id"`
 }
 
+// ListResponse is a page of log entries plus the cursor for the next one.
 type ListResponse struct {
 	Entries    []LogResponse `json:"entries"`
 	NextBefore *Cursor       `json:"next_before"`
 }
 
+// AppSummary names an app and how much it has logged recently.
 type AppSummary struct {
 	Name     string `json:"name"`
 	Count    int64  `json:"count"`
 	LastSeen string `json:"last_seen"`
 }
 
+// AppsResponse is the list of every app that has logged.
 type AppsResponse struct {
 	Apps []AppSummary `json:"apps"`
 }
 
+// HistogramBucket is the count for one level within one time bucket.
 type HistogramBucket struct {
 	Ts     string           `json:"ts"`
 	Counts map[string]int64 `json:"counts"`
 }
 
+// HistogramResponse carries per-level counts across time buckets.
 type HistogramResponse struct {
 	BucketSeconds int64             `json:"bucket_seconds"`
 	Buckets       []HistogramBucket `json:"buckets"`
 }
 
+// ContextResponse is a page of log entries around one anchor entry.
 type ContextResponse struct {
 	Entries  []LogResponse `json:"entries"`
 	AnchorID int64         `json:"anchor_id"`

@@ -2,6 +2,17 @@ package schemas
 
 import "gorm.io/gorm"
 
+// Migrate brings the schema up to date on every boot, including the replica
+// that comes up second, so every statement has to be a no-op the second time.
+// It runs AutoMigrate for the GORM-owned tables, then the hand-written
+// statements that GORM cannot express. The meta_source index is partial,
+// like request_id: only browser entries carry a source, so the index stays
+// small and a filtered explorer view is a lookup rather than a scan of
+// everything the suite has ever logged. And every key that predates the
+// browser endpoint is a server credential — saying so in kind matters because
+// an empty kind would fall through the secret check and the public check
+// alike, and a key that authenticates nothing is a silent outage on the next
+// deploy.
 func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}, &SourceMap{}); err != nil {
 		return err
@@ -19,15 +30,7 @@ func Migrate(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_created_at_id ON log_entries (created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_request_id ON log_entries ((meta->>'request_id')) WHERE meta ? 'request_id'`,
-		// Partial, like request_id: only browser entries carry a source, so
-		// the index stays small and a filtered explorer view is a lookup
-		// rather than a scan of everything the suite has ever logged.
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_source ON log_entries ((meta->>'source'), created_at DESC) WHERE meta ? 'source'`,
-		// Every key that predates the browser endpoint is a server
-		// credential. Saying so explicitly matters more than it looks:
-		// an empty kind would fall through the secret check and the
-		// public check alike, and a key that authenticates nothing is a
-		// silent outage on the next deploy.
 		`UPDATE api_keys SET kind = 'secret' WHERE kind IS NULL OR kind = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_kind ON api_keys (kind) WHERE revoked_at IS NULL`,
 		`ALTER TABLE api_key_usage DROP CONSTRAINT IF EXISTS fk_api_key_usage_key`,

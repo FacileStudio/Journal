@@ -46,6 +46,8 @@ func (d webhookDelivery) clientFor(host string) *http.Client {
 	return d.guarded
 }
 
+// RunEvaluator scans enabled alert rules on a loop and posts a webhook when
+// one fires, until ctx is cancelled.
 func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger, allowedHosts []string) {
 	delivery := webhookDelivery{
 		guarded:      guardedClient(webhookTimeout),

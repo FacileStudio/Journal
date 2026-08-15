@@ -8,6 +8,8 @@ type UploadRequest struct {
 	Map     string `json:"map"`
 }
 
+// UploadResponse reports whether the upload stored anything, i.e. the map was
+// not already held.
 type UploadResponse struct {
 	Stored bool `json:"stored"`
 }
@@ -28,6 +30,7 @@ type ReleaseSummary struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// ReleasesResponse lists every release with stored maps, for the dashboard.
 type ReleasesResponse struct {
 	Releases []ReleaseSummary `json:"releases"`
 }

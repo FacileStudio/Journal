@@ -15,6 +15,8 @@ const (
 	KeyKindPublic = "public"
 )
 
+// APIKey is one ingest credential: a server secret or a browser public key
+// with an origin allowlist.
 type APIKey struct {
 	ID      int64  `json:"id" gorm:"column:id;primaryKey"`
 	App     string `json:"app" gorm:"column:app;not null"`

@@ -37,7 +37,11 @@ type SourceMapResult struct {
 // It asks the server what it already holds and sends only the difference, so a
 // restart, a rollback or a second replica costs one request. Failures are
 // returned, never fatal: an app that cannot upload its maps must still boot,
-// because unreadable stack traces are a worse day, not a broken one.
+// because unreadable stack traces are a worse day, not a broken one. The HTTP
+// client is taught a generous timeout here — a map is megabytes and this runs
+// once at boot rather than on a request path — and the server keys each map on
+// the bundle's basename because a stack frame carries a URL whose origin and
+// prefix depend on how the app is served while the file itself does not.
 func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (SourceMapResult, error) {
 	var result SourceMapResult
 
@@ -52,8 +56,6 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 
 	client := cfg.HTTPClient
 	if client == nil {
-		// Generous next to the SDK's own 10s: a map is megabytes, and this
-		// runs once at boot rather than on a request path.
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 
@@ -73,9 +75,6 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 
 	var firstFailure error
 	for _, path := range maps {
-		// The server keys on the bundle's basename, because a stack frame
-		// carries a URL whose origin and prefix depend on how the app is
-		// served while the file itself does not.
 		name := strings.TrimSuffix(filepath.Base(path), ".map")
 		if held[name] {
 			result.Skipped++
@@ -86,10 +85,6 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 			return result, fmt.Errorf("journal: reading %s: %w", path, err)
 		}
 		if err := uploadOne(ctx, client, base, cfg.Token, release, name, content); err != nil {
-			// One rejected map must not cost the rest of the build. A
-			// bundler emits maps of wildly different shapes and a single
-			// odd one is not a reason to leave every other trace
-			// unreadable, so the run continues and reports.
 			result.Failed++
 			if firstFailure == nil {
 				firstFailure = err
@@ -105,6 +100,9 @@ func UploadSourceMaps(ctx context.Context, cfg Config, dir, release string) (Sou
 	return result, nil
 }
 
+// findSourceMaps walks dir for .map files. A deployment that ships no maps is
+// the normal case, not a failure: most apps have not adopted this, so a missing
+// directory is an empty run rather than an error.
 func findSourceMaps(dir string) ([]string, error) {
 	if dir == "" {
 		return nil, nil
@@ -112,8 +110,6 @@ func findSourceMaps(dir string) ([]string, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// A deployment that ships no maps is the normal case, not a
-			// failure: most apps have not adopted this.
 			return nil, nil
 		}
 		return nil, fmt.Errorf("journal: source map directory: %w", err)

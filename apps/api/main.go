@@ -51,6 +51,13 @@ func main() {
 	os.Exit(run())
 }
 
+// run wires the process and serves until a signal arrives. oidc.New is the
+// boot path: it performs discovery, so an unreachable or half-configured issuer
+// fails here rather than on somebody's first login attempt, while a kit with no
+// OIDC_ISSUER is still valid — it serves /auth/config and /auth/logout and
+// authenticates every session this app issues. One manager owns one table, and
+// both kits issue through it, so a password login and a federated one are the
+// same row, the same cookie and the same logout.
 func run() int {
 	appEnv, err := env.Load()
 	appLogger := logger.New(logger.Config{})
@@ -85,17 +92,9 @@ func run() int {
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// oidc.New is the boot path: it performs discovery, so an unreachable
-	// or half-configured issuer fails here rather than on somebody's first
-	// login attempt. A kit with no OIDC_ISSUER is not an error — it still
-	// serves /auth/config and /auth/logout and authenticates every session
-	// this app issues.
 	identityStore := portepg.New(sqlDB)
 	users := auth.NewUserStore(db)
 
-	// One manager over one table. Both kits issue through it, so a password
-	// login and a federated one are the same row, the same cookie and the
-	// same logout.
 	sessions, err := session.New(appEnv.Porte, session.Deps{
 		Sessions: identityStore.Sessions(),
 		Logger:   appLogger,
@@ -184,6 +183,22 @@ func run() int {
 	return 0
 }
 
+// buildRouter assembles the HTTP tree exactly as run() serves it. Two buckets
+// guard the browser endpoint: the per (key, IP) bucket is small — a page that
+// manages 60 requests in a minute is a render loop, which is exactly the
+// traffic this refuses — and since tronc v0.12.0 its IP really is the visitor's
+// rather than Traefik's or Cloudflare's. The per-key ceiling and the daily
+// quota are kept anyway: a bound that owes nothing to the network layer is
+// worth having even when the network layer is correct, and it is what actually
+// holds when a public key leaks.
+//
+// TrustedProxies decides what RemoteAddr is by the time the rate limiters see
+// it, so it is a security setting and not a logging one — unset it defaults to
+// loopback plus the private ranges, which is Traefik. CDNProxies and CDNHeader
+// ride along from the same variable; they are not redundant with the trust set
+// because Traefik replaces the incoming X-Forwarded-For instead of extending
+// it, so behind Cloudflare the chain this app sees holds only the edge and the
+// visitor survives nowhere but Cf-Connecting-Ip.
 func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
@@ -201,27 +216,9 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
 	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
-	// Two buckets guard the browser endpoint. The per (key, IP) bucket is
-	// small — a page that manages 60 requests in a minute is a render loop,
-	// which is exactly the traffic this refuses — and since tronc v0.12.0
-	// its IP really is the visitor's rather than Traefik's or Cloudflare's.
-	// The per-key ceiling above it and the daily quota below it are kept
-	// anyway: a bound that owes nothing to the network layer is worth having
-	// even when the network layer is correct, and it is what actually holds
-	// when a public key leaks.
 	browserIngestLimiter := httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKeyAndIP), rateLimitExceeded)
 	browserKeyCeiling := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKey), rateLimitExceeded)
 
-	// TrustedProxies decides what RemoteAddr is by the time the rate
-	// limiters below see it, so it is a security setting and not a logging
-	// one. Unset it defaults to loopback plus the private ranges, which is
-	// Traefik; TRUSTED_PROXIES narrows it to one address, or to none.
-	//
-	// CDNProxies and CDNHeader ride along from the same variable. They are
-	// not redundant with the trust set: Traefik replaces the incoming
-	// X-Forwarded-For instead of extending it, so behind Cloudflare the
-	// chain this app sees holds only the edge and the visitor survives
-	// nowhere but Cf-Connecting-Ip.
 	router := httpx.NewRouter(httpx.Config{
 		Logger: appLogger,
 		CORS: troncmiddleware.CORSConfig{
@@ -244,8 +241,6 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
-		// Source maps ride the same per-app credential an app already ships
-		// logs with, so adopting them adds no new secret to a deployment.
 		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
 		api.Group(func(protected chi.Router) {

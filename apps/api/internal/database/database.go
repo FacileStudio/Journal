@@ -8,6 +8,9 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// Open connects to the PostgreSQL database named by databaseURL with a quiet
+// logger and translated errors, so callers can distinguish constraint
+// violations without parsing driver strings.
 func Open(databaseURL string) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
 		Logger:         logger.Default.LogMode(logger.Silent),

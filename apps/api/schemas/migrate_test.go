@@ -13,13 +13,17 @@ import (
 // store the SHA-256 hex of a 32 byte token and nothing else, so the rows can
 // be carried across and the credential already in somebody's browser keeps
 // working. If this test fails, the deploy signs every user out.
+// TestAdoptingPorteDoesNotSignAnybodyOut checks a pre-Porte session today is
+// still a session tomorrow. users is created by AutoMigrate rather than by
+// hand because the fidelity of this fixture is the whole point: GORM names the
+// unique index behind uniqueIndex itself, and a hand-written UNIQUE produces
+// the same constraint under a different name and the test would not actually
+// be exercising the shipped migration. Carrying created_at over would put this
+// session 40 days into the idle window porte retires at 7, so last_used_at is
+// re-stamped rather than copied.
 func TestAdoptingPorteDoesNotSignAnybodyOut(t *testing.T) {
 	db := testdb.Open(t)
 
-	// users is created by AutoMigrate rather than by hand, because the
-	// fidelity of this fixture is the whole point: GORM names the unique
-	// index behind `uniqueIndex` itself, and a hand-written UNIQUE produces
-	// a table the second AutoMigrate then tries to fix and fails on.
 	if err := db.AutoMigrate(&schemas.User{}); err != nil {
 		t.Fatalf("seed the pre-porte users table: %v", err)
 	}
@@ -58,9 +62,6 @@ func TestAdoptingPorteDoesNotSignAnybodyOut(t *testing.T) {
 	if carried.UserID != 1 {
 		t.Fatal("the live session did not survive the migration")
 	}
-	// Carrying created_at over would have put this session 40 days into the
-	// idle window porte retires at 7, logging the user out on the deploy
-	// that was meant to keep them.
 	if time.Since(carried.LastUsedAt) > time.Hour {
 		t.Fatalf("last_used_at was carried over instead of stamped: %v", carried.LastUsedAt)
 	}
@@ -81,8 +82,6 @@ func TestAdoptingPorteDoesNotSignAnybodyOut(t *testing.T) {
 		t.Fatal("the legacy sessions table survived the migration")
 	}
 
-	// Migrate runs on every boot, including the replica that comes up
-	// second, so it has to be a no-op the second time.
 	if err := schemas.Migrate(db); err != nil {
 		t.Fatalf("migrate is not idempotent: %v", err)
 	}

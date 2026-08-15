@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Handler serves the alert endpoints.
 type Handler struct {
 	service *Service
 }

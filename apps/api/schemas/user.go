@@ -2,6 +2,8 @@ package schemas
 
 import "time"
 
+// User is the local identity row: credentials plus the OIDC source that
+// created or last synced the account.
 type User struct {
 	ID           int64     `json:"id" gorm:"column:id;primaryKey"`
 	Email        string    `json:"email" gorm:"column:email;uniqueIndex;not null"`

@@ -21,6 +21,8 @@ import (
 // Bounded because a map is megabytes once parsed and releases accumulate.
 const maxCachedConsumers = 32
 
+// Service stores source maps and resolves minified traces against a bounded
+// in-memory consumer cache.
 type Service struct {
 	orm *gorm.DB
 
@@ -29,6 +31,7 @@ type Service struct {
 	order    []string
 }
 
+// NewService wires a source-map service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm, consumer: map[string]*sourcemap.Consumer{}}
 }
@@ -52,7 +55,13 @@ func isEmptyMap(content string) bool {
 //
 // Idempotent because the uploader runs at application boot: a restart, a
 // rollback and a scaled-up replica all re-offer the same maps, and none of
-// those is an error worth surfacing.
+// those is an error worth surfacing. The map is parsed before it is stored:
+// one that cannot be read is worse than no map, because it looks uploaded and
+// silently resolves nothing. An empty-mappings map is the one exception — Vite
+// emits them for assets that compile to nothing worth mapping, they are
+// perfectly valid v3 documents, and failing the upload over one would fail the
+// deploy of a build whose real maps are fine — so it is accepted and nothing
+// is stored.
 func (s *Service) Store(ctx context.Context, app, release, file, content string) (bool, error) {
 	release = strings.TrimSpace(release)
 	file = path.Base(strings.TrimSpace(file))
@@ -62,14 +71,6 @@ func (s *Service) Store(ctx context.Context, app, release, file, content string)
 	if !fileNamePattern.MatchString(file) {
 		return false, errors.Invalid("file must be a bare file name matching ^[A-Za-z0-9._-]{1,200}$")
 	}
-	// Parse before storing: a map that cannot be read is worse than no map,
-	// because it looks uploaded and silently resolves nothing.
-	//
-	// A map with empty mappings is a separate case and not an error. Vite
-	// emits them for assets that compile to nothing worth mapping, they are
-	// perfectly valid v3 documents, and failing the upload over one would fail
-	// the deploy of a build whose real maps are fine. Nothing is stored,
-	// because a map that explains nothing is a row and a lookup for no gain.
 	if _, err := sourcemap.Parse("", []byte(content)); err != nil {
 		if isEmptyMap(content) {
 			return false, nil

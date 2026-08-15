@@ -61,6 +61,9 @@ func call(t *testing.T, router chi.Router, method, path, token string, body any)
 // not carry, and porte's logout revokes it. Any one of those four failing
 // leaves the dashboard unusable, and none of them can be checked without a
 // database.
+// TestPasswordLoginRunsThroughPorteEndToEnd exercises a full password login
+// against the real middleware chain, and asserts that RequireAdmin actually
+// reads is_admin out of the context Journal hydrates.
 func TestPasswordLoginRunsThroughPorteEndToEnd(t *testing.T) {
 	router := liveRouter(t)
 
@@ -88,8 +91,6 @@ func TestPasswordLoginRunsThroughPorteEndToEnd(t *testing.T) {
 		t.Fatalf("me = %d: %s", me.Code, me.Body)
 	}
 
-	// RequireAdmin reads is_admin out of the context Journal hydrates, so
-	// this is the assertion that the hydration actually ran.
 	keys := call(t, router, http.MethodGet, "/api/apikeys", created.Token, nil)
 	if keys.Code != http.StatusOK {
 		t.Fatalf("an admin was refused an admin route: %d %s", keys.Code, keys.Body)
@@ -147,6 +148,10 @@ func TestASecondAccountIsNotAnAdmin(t *testing.T) {
 // becomes the admin, a second sign-in finds the same row by (provider,
 // subject) even though the address changed in the identity provider, and an
 // unverified address may never adopt an account that already exists.
+// TestUpsertFromOIDCOwnsTheAccountRules checks the upsert's edge rules: porte
+// writes the identity row after the upsert returns, so the second sign-in is
+// what reads it; and matching an existing account on an address the provider
+// will not vouch for is an account-takeover primitive, so it is refused.
 func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	db := testdb.Migrated(t)
 	users := auth.NewUserStore(db)
@@ -167,8 +172,6 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 		t.Fatal("an SSO account was given a password hash")
 	}
 
-	// porte writes the identity row after the upsert returns; the second
-	// sign-in is what reads it.
 	if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, ?, ?)`,
 		userID, "https://sso.test/", "abc").Error; err != nil {
 		t.Fatalf("link the identity: %v", err)
@@ -188,8 +191,6 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 		t.Fatalf("the address the provider asserts did not win: %q", user.Email)
 	}
 
-	// Matching an existing account on an address the provider will not
-	// vouch for is an account takeover primitive.
 	if _, err := users.UpsertFromOIDC(ctx, claims("other", "renamed@facile.studio", "Someone Else", false)); err == nil {
 		t.Fatal("an unverified address adopted an existing account")
 	}

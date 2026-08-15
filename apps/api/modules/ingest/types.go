@@ -1,5 +1,6 @@
 package ingest
 
+// IngestEntry is one log line to be stored.
 type IngestEntry struct {
 	App     string         `json:"app"`
 	Level   string         `json:"level"`
@@ -8,6 +9,7 @@ type IngestEntry struct {
 	Meta    map[string]any `json:"meta"`
 }
 
+// IngestRequest is the body of the server-to-server ingest endpoint.
 type IngestRequest struct {
 	Entries []IngestEntry  `json:"entries"`
 	App     string         `json:"app"`
@@ -17,6 +19,7 @@ type IngestRequest struct {
 	Meta    map[string]any `json:"meta"`
 }
 
+// IngestResponse reports how many entries were actually stored.
 type IngestResponse struct {
 	Ingested int `json:"ingested"`
 }
@@ -29,6 +32,7 @@ type BrowserRequest struct {
 	Events      []BrowserEvent `json:"events"`
 }
 
+// BrowserEvent is one event posted by the JavaScript SDK.
 type BrowserEvent struct {
 	Level   string         `json:"level"`
 	Message string         `json:"message"`

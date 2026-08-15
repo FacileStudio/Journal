@@ -2,6 +2,8 @@ package schemas
 
 import "time"
 
+// AlertRule is one configured alert: a saved query, a threshold and a webhook
+// to hit when the count crosses it.
 type AlertRule struct {
 	ID            int64      `json:"id" gorm:"column:id;primaryKey"`
 	Name          string     `json:"name" gorm:"column:name;not null"`

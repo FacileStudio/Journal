@@ -7,6 +7,8 @@ import (
 	troncenv "github.com/FacileStudio/tronc/env"
 )
 
+// Config is the process configuration: the tronc core plus Journal's ingest,
+// registration, retention and OIDC policy.
 type Config struct {
 	troncenv.Core
 	IngestToken         string
@@ -22,6 +24,8 @@ type Config struct {
 	Porte porte.Config
 }
 
+// Load reads and validates the environment, wiring the OIDC config through
+// porte's own Config.
 func Load() (Config, error) {
 	core, err := troncenv.LoadCore()
 	if err != nil {

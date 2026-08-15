@@ -2,6 +2,7 @@ package apikeys
 
 import "github.com/go-chi/chi/v5"
 
+// RegisterRoutes mounts the API key endpoints.
 func RegisterRoutes(router chi.Router, service *Service) {
 	handler := newHandler(service)
 	router.Get("/apikeys", handler.list)

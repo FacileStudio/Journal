@@ -2,6 +2,10 @@ package middleware
 
 import "net/http"
 
+// SecurityHeaders sets the hardening headers every response should carry:
+// nosniff, frame denial, HSTS, referrer policy, a locked-down permissions
+// policy, and X-XSS-Protection turned off because modern browsers no longer
+// want it.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

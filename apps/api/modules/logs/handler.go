@@ -24,12 +24,13 @@ const (
 
 var histogramBucketOptions = []int64{60, 300, 900, 3600, 21600, 86400}
 
+// Handler serves the log-reading endpoints. stacks resolves a minified trace
+// through an uploaded source map; it is optional — nil simply means every
+// frame comes back unresolved, which is what an instance holding no maps
+// should do.
 type Handler struct {
 	service *Service
-	// stacks resolves a minified trace through an uploaded source map. It is
-	// optional: nil simply means every frame comes back unresolved, which is
-	// what an instance holding no maps should do.
-	stacks StackResolver
+	stacks  StackResolver
 }
 
 // StackResolver is the one thing this module needs from sourcemaps, named here

@@ -39,10 +39,13 @@ type NewKey struct {
 	DailyQuota     int
 }
 
+// Service stores and verifies API keys, separating secret (server) and
+// browser keys.
 type Service struct {
 	orm *gorm.DB
 }
 
+// NewService wires an API key service onto the database.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }
@@ -190,6 +193,8 @@ func NormalizeOrigins(origins []string) ([]string, error) {
 	return normalized, nil
 }
 
+// NormalizeOrigin trims and validates an allowed-origin string, rejecting
+// empty values.
 func NormalizeOrigin(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

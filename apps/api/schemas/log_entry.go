@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// LogEntry is one stored log line, full-text searchable.
 type LogEntry struct {
 	ID         int64          `json:"id" gorm:"column:id;primaryKey"`
 	App        string         `json:"app" gorm:"column:app;index;not null"`

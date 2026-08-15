@@ -8,6 +8,7 @@ import (
 	"github.com/FacileStudio/tronc/httpjson"
 )
 
+// RequireAdmin rejects the request unless the authenticated caller IsAdmin.
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := authcontext.From(request.Context())

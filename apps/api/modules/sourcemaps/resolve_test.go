@@ -70,14 +70,15 @@ func TestUnparseableFrameKeepsItsLine(t *testing.T) {
 	}
 }
 
+// TestTidySource checks the scheme and .. run stripping. What Vite actually
+// emits is the interesting case: the chunk sits six directories deep, so every
+// source arrives behind a run of "../" that says nothing.
 func TestTidySource(t *testing.T) {
 	cases := map[string]string{
 		"webpack://app/./src/lib/Cart.svelte": "src/lib/Cart.svelte",
 		"./src/routes/+page.svelte":           "src/routes/+page.svelte",
 		"src/lib/Cart.svelte":                 "src/lib/Cart.svelte",
 		"file:///app/src/main.ts":             "/app/src/main.ts",
-		// What Vite actually emits: the chunk sits six directories deep, so
-		// every source arrives behind a run of "../" that says nothing.
 		"../../../../../../src/routes/(app)/settings/advanced/+page.svelte": "src/routes/(app)/settings/advanced/+page.svelte",
 	}
 	for input, want := range cases {
@@ -132,6 +133,9 @@ func TestResolveCapsFrameCount(t *testing.T) {
 // The end-to-end case, against a map esbuild actually produced: a minified
 // position becomes the original file, line and column. Everything above this
 // tests the plumbing; this tests the feature.
+// TestResolveAgainstARealMap resolves a real minified trace. The throw sits at
+// column 20 of the single minified line, and a browser reports columns
+// 1-based, which is what a stack carries.
 func TestResolveAgainstARealMap(t *testing.T) {
 	db := testdb.Migrated(t)
 	service := NewService(db)
@@ -148,8 +152,6 @@ func TestResolveAgainstARealMap(t *testing.T) {
 		t.Fatal("the first upload reported nothing stored")
 	}
 
-	// The throw sits at column 20 of the single minified line. A browser
-	// reports columns 1-based, which is what a stack carries.
 	stack := "    at n (https://sablier.facile.studio/_app/immutable/chunks/cart.js:1:21)"
 	out := service.Resolve(context.Background(), "sablier", "v1", stack)
 
