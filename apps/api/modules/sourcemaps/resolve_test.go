@@ -75,10 +75,10 @@ func TestUnparseableFrameKeepsItsLine(t *testing.T) {
 // source arrives behind a run of "../" that says nothing.
 func TestTidySource(t *testing.T) {
 	cases := map[string]string{
-		"webpack://app/./src/lib/Cart.svelte": "src/lib/Cart.svelte",
-		"./src/routes/+page.svelte":           "src/routes/+page.svelte",
-		"src/lib/Cart.svelte":                 "src/lib/Cart.svelte",
-		"file:///app/src/main.ts":             "/app/src/main.ts",
+		"webpack://app/./src/lib/Cart.svelte":                               "src/lib/Cart.svelte",
+		"./src/routes/+page.svelte":                                         "src/routes/+page.svelte",
+		"src/lib/Cart.svelte":                                               "src/lib/Cart.svelte",
+		"file:///app/src/main.ts":                                           "/app/src/main.ts",
 		"../../../../../../src/routes/(app)/settings/advanced/+page.svelte": "src/routes/(app)/settings/advanced/+page.svelte",
 	}
 	for input, want := range cases {
