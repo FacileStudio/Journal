@@ -94,6 +94,10 @@ await journal.flush();
 
 ## Behaviour worth knowing
 
+- **Every batch carries a session id.** One per tab, kept in `sessionStorage` so a reload stays
+  in the same session, landing on the server as `meta.session_id`. Clicking it in the explorer
+  is how one error becomes everything else that tab did. Nothing to configure; if storage is
+  blocked the id lasts one page load instead.
 - **Repeats collapse.** Identical `level + message + top frame` within 60s become one event
   with a `count`. A repeat that arrives after its batch was already sent is dropped until the
   window expires, so `count` is a floor on what happened, never the total.

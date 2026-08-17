@@ -2,7 +2,15 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 
 import { createDeferredJournal, createJournal, type JournalEvent } from './index.js';
 
-type Sent = { events: JournalEvent[]; release?: string };
+type Sent = { events: JournalEvent[]; release?: string; session_id?: string };
+
+function withSessionStorage(storage: unknown, run: () => Promise<void>) {
+	const previous = (globalThis as { sessionStorage?: unknown }).sessionStorage;
+	(globalThis as { sessionStorage?: unknown }).sessionStorage = storage;
+	return run().finally(() => {
+		(globalThis as { sessionStorage?: unknown }).sessionStorage = previous;
+	});
+}
 
 let sent: Sent[] = [];
 let status = 201;
@@ -241,4 +249,56 @@ test('a deferred client bounds what it holds', async () => {
 	await client.flush();
 
 	expect(sent.flatMap((b) => b.events).length).toBeLessThanOrEqual(50);
+});
+
+// The point of the id: every batch a tab sends carries the same one, including
+// the batches sent after a reload, because a reload is part of the same session
+// and is regularly the bug itself.
+test('every batch carries the tab session id, across reloads', async () => {
+	const store = new Map<string, string>();
+	await withSessionStorage(
+		{
+			getItem: (key: string) => store.get(key) ?? null,
+			setItem: (key: string, value: string) => void store.set(key, value)
+		},
+		async () => {
+			const client = journal();
+			client.captureError(new Error('one'));
+			await client.flush();
+			client.captureError(new Error('two'));
+			await client.flush();
+
+			// A reload is a new client reading the same tab storage.
+			const reloaded = journal();
+			reloaded.captureError(new Error('three'));
+			await reloaded.flush();
+
+			expect(sent).toHaveLength(3);
+			expect(sent[0].session_id).toBeTruthy();
+			expect(sent[1].session_id).toBe(sent[0].session_id as string);
+			expect(sent[2].session_id).toBe(sent[0].session_id as string);
+		}
+	);
+});
+
+// Safari's private mode throws on the storage itself. An error reporter that
+// throws inside a page which is already broken is worse than a session id that
+// only lasts one page load.
+test('a blocked sessionStorage still yields a session id', async () => {
+	const blocked = {
+		getItem() {
+			throw new Error('SecurityError');
+		},
+		setItem() {
+			throw new Error('SecurityError');
+		}
+	};
+	await withSessionStorage(blocked, async () => {
+		const client = journal();
+		client.captureError(new Error('boom'));
+		await client.flush();
+
+		expect(sent).toHaveLength(1);
+		expect(sent[0].session_id).toBeTruthy();
+	});
 });
