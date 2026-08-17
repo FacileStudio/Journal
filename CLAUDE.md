@@ -330,9 +330,17 @@ The SDK's `trace` option wraps `fetch`, sends `X-Request-Id` on same-origin requ
 origins only when named — a custom header costs a preflight) and reports 5xx and network
 failures as `kind: 'fetch'` events carrying `meta.request_id`. That is the same key the
 explorer's request_id pivot reads, so a browser failure and the handler behind it are one click
-apart — **once the server half exists**. Nothing in the suite echoes or logs an inbound
-`X-Request-Id` yet; that belongs in tronc, like `RealIP` did, and until it lands the id is the
-client's own and correlates browser events with each other rather than with server logs.
+apart.
+
+The server half is **tronc v0.14.0's `middleware.RequestID`**, which this app runs through
+`httpx.NewRouter`: it accepts the caller's `X-Request-Id` when it is well formed (≤128 bytes of
+alphanumerics and `-_.:/`), mints an opaque one when it is not, echoes it on the response, and
+logs it as `request_id` on the request line. `CORS` exposes the header — a response header is
+invisible to a script otherwise — and allows it inbound. Journal sets only `AllowedOrigins`, so it
+takes both defaults; **an app that sets `AllowedHeaders` or `ExposedHeaders` explicitly must
+include `X-Request-Id` or it silently breaks the correlation.** A request id is a hint, never a
+credential: it is caller-controlled by design, which is why it is bounded before it reaches a log
+line and why nothing authorizes on it.
 
 Client: [`sdk/browser`](sdk/browser) (`@facile/journal`), consumed as
 `bun add github:FacileStudio/Journal#ts`.

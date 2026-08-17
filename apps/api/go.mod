@@ -4,9 +4,10 @@ go 1.25.0
 
 require (
 	github.com/FacileStudio/porte v0.2.10
-	github.com/FacileStudio/tronc v0.12.0
+	github.com/FacileStudio/tronc v0.14.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.15.0
+	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
@@ -14,7 +15,6 @@ require (
 require (
 	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.10.0 // indirect

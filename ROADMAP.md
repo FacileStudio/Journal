@@ -188,17 +188,24 @@ caps the whole meta object at 8 KB** and falls back to a five-key map, silently.
 50 and strings at 2 KB. Nothing large can ride in `meta`; it needs its own wire field, its own
 budget, and an explicit place in the fallback.
 
-### Owed: the server half of tracing
+### The server half: shipped in tronc v0.14.0
 
-Fetch tracing is half a feature. Nothing in the suite accepts, logs or echoes an inbound
-`X-Request-Id` — `request_id` is pure convention from `sdk/journal`'s README — so the id today
-correlates browser events with each other, which `session_id` already does better.
+- [x] **`middleware.RequestID`** — accepts a well-formed inbound `X-Request-Id`, mints an opaque
+      one otherwise, **echoes it on the response**, and keeps chi's context key so `GetReqID`,
+      `RequestLogger` and `Recoverer` need no changes anywhere. `CORS` gained `ExposedHeaders`
+      (default `X-Request-Id`) and allows the header inbound. Journal is on it as of the bump to
+      v0.14.0.
 
-The missing middleware belongs in **tronc**, not here, for the same reason `RealIP` did: accept or
-mint the header, stamp it into the slog attrs the Go SDK ships, echo it on the response, and add
-`Access-Control-Expose-Headers: X-Request-Id` so a browser can read the echo back. One version
-bump then lights it up in every suite app at once. Until that lands, `CLAUDE.md` says so plainly
-rather than implying the loop is closed.
+It went in tronc rather than here for the same reason `RealIP` did: one version bump lights it up
+in every app on the chassis. Two defects in chi's middleware came out while writing it, and both
+had been live in every one of those apps — the header was taken **verbatim** into every log line
+(unbounded, any bytes, and in this app it lands in `meta.request_id` and a clickable filter), and
+chi's minted id embeds `os.Hostname()`, which is harmless until something echoes it. See tronc's
+CHANGELOG 0.14.0.
+
+**Still one-way until an app bumps.** Journal itself is on v0.14.0; every other suite app is on
+0.12/0.13, so a browser error from *those* fronts still carries only the id its own SDK minted.
+The remaining work is a `go get github.com/FacileStudio/tronc@v0.14.0` per app, not more design.
 
 ### Still not built here
 
