@@ -44,7 +44,12 @@ func Apply(query *gorm.DB, params Params) *gorm.DB {
 	if params.Query != "" {
 		query = query.Where("search @@ websearch_to_tsquery('simple', ?)", params.Query)
 	}
-	if params.Source != "" {
+	if params.Source == "server" {
+		// "server" is a reserved logical value: the complement of a stamped source.
+		// Only the browser ingest stamps meta.source, so this is "everything the
+		// server half shipped" — every SDK/collector entry that did not rewrite it.
+		query = query.Where("meta->>'source' IS NULL OR meta->>'source' = ''")
+	} else if params.Source != "" {
 		query = query.Where("meta->>'source' = ?", params.Source)
 	}
 	if params.RequestID != "" {

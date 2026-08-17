@@ -268,11 +268,6 @@
 		apply();
 	}
 
-	function toggleSource() {
-		source = source === 'browser' ? '' : 'browser';
-		apply();
-	}
-
 	/* Browser entries carry meta.source; nothing else does. Clicking it is what
 	   makes the client-error view reachable without knowing the schema. */
 	function pivotSource(value: string) {
@@ -425,19 +420,15 @@
 
 			<div class="flex flex-col gap-1">
 				<span class="text-fc-xs text-fc-fg-muted">Source</span>
-				<div class="flex h-11 flex-wrap items-center gap-1.5">
-					<button
-						type="button"
-						aria-pressed={source === 'browser'}
-						class="rounded-fc-pill px-2.5 py-1 text-fc-xs uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring {source ===
-							'browser'
-							? 'bg-fc-accent text-fc-accent-fg'
-							: 'bg-fc-surface text-fc-fg-muted hover:text-fc-fg'}"
-						onclick={toggleSource}
-					>
-						Client
-					</button>
-				</div>
+				<Select
+					bind:value={source}
+					onchange={apply}
+					aria-label="Filter by source"
+				>
+					<option value="">All sources</option>
+					<option value="browser">Client (browser)</option>
+					<option value="server">Server (no source)</option>
+				</Select>
 			</div>
 
 			<label class="flex flex-col gap-1">
@@ -481,19 +472,6 @@
 
 		{#if activeCount > 0}
 			<div class="flex flex-wrap items-center gap-2 border-t border-fc-border pt-4">
-				{#if source}
-					<button
-						type="button"
-						class="flex max-w-full items-center gap-1 rounded-fc-pill bg-fc-surface px-2.5 py-1 font-fc-mono text-fc-xs"
-						onclick={() => {
-							source = '';
-							apply();
-						}}
-					>
-						<span class="truncate">source:{source}</span>
-						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
-					</button>
-				{/if}
 				{#if requestId}
 					<button
 						type="button"

@@ -324,7 +324,9 @@ Client: [`sdk/browser`](sdk/browser) (`@facile/journal`), consumed as
 
 Query params: `app`, `level` (repeatable or CSV), `q` (full-text via
 `websearch_to_tsquery('simple', q)`), `source` (matches `meta->>'source'`; browser entries carry `source=browser`, so `?source=browser`
-is the client-error view — partial index on `((meta->>'source'), created_at DESC)`),
+is the client-error view — partial index on `((meta->>'source'), created_at DESC)`; `source=server` is a reserved value
+meaning "no stamped source" (`meta->>'source' IS NULL OR ''`), i.e. every SDK/collector entry; the client's Source selector offers both,
+"Client (browser)" and "Server (no source)"),
 `request_id` (matches `meta->>'request_id'`),
 `since`/`until` (RFC3339 on `created_at`), `limit` (default 100, max 1000), and keyset cursor
 `before_ts` (RFC3339Nano) + `before_id` (int64) — both or neither, predicate

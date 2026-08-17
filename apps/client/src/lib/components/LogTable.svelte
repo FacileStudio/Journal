@@ -142,12 +142,13 @@
 							<LevelBadge level={entry.level} />
 						</button>
 					</td>
-					<!-- `max-w-0` is the only thing that makes a cell in an auto-layout table
-					     truncate instead of growing to fit its longest line. -->
-					<td class="max-w-0">
+					<!-- The message is the reason anyone opened this page. This column claims
+					     the remaining table width and the preview clamps at two lines with an
+					     ellipsis, so a row shows the start of the body without expanding it. -->
+					<td class="w-full">
 						<button
 							type="button"
-							class="block w-full truncate text-left font-fc-mono text-fc-xs text-fc-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
+							class="block w-full line-clamp-2 text-left font-fc-mono text-fc-xs text-fc-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
 							aria-expanded={expandedId === entry.id}
 							onclick={(event) => {
 								event.stopPropagation();
