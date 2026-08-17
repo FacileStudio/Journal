@@ -71,6 +71,7 @@ export type ListLogsParams = {
 	q?: string;
 	source?: string;
 	request_id?: string;
+	session_id?: string;
 	since?: string;
 	until?: string;
 	limit?: number;
@@ -83,6 +84,7 @@ export type HistogramParams = {
 	q?: string;
 	source?: string;
 	request_id?: string;
+	session_id?: string;
 	since?: string;
 	until?: string;
 };
@@ -298,6 +300,7 @@ export const backend = {
 		if (params.q) qs.set('q', params.q);
 		if (params.source) qs.set('source', params.source);
 		if (params.request_id) qs.set('request_id', params.request_id);
+		if (params.session_id) qs.set('session_id', params.session_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);
 		if (params.limit != null) qs.set('limit', String(params.limit));
@@ -316,6 +319,7 @@ export const backend = {
 		if (params.q) qs.set('q', params.q);
 		if (params.source) qs.set('source', params.source);
 		if (params.request_id) qs.set('request_id', params.request_id);
+		if (params.session_id) qs.set('session_id', params.session_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);
 		const query = qs.size ? `?${qs}` : '';

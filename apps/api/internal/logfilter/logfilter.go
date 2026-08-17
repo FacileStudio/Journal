@@ -28,12 +28,18 @@ type Params struct {
 	Source    string
 	RequestID string
 
+	// SessionID filters on meta->>'session_id', which only the browser endpoint
+	// writes. A request id groups one call across services; a session id groups
+	// everything one tab did, which is the difference between reading an error
+	// and reading what led to it.
+	SessionID string
+
 	Since *time.Time
 	Until *time.Time
 }
 
 // Apply narrows a log query to the filters in params, in a fixed order:
-// app, levels, full-text, source, request id, then the time window.
+// app, levels, full-text, source, request id, session id, then the time window.
 func Apply(query *gorm.DB, params Params) *gorm.DB {
 	if params.App != "" {
 		query = query.Where("app = ?", params.App)
@@ -54,6 +60,9 @@ func Apply(query *gorm.DB, params Params) *gorm.DB {
 	}
 	if params.RequestID != "" {
 		query = query.Where("meta->>'request_id' = ?", params.RequestID)
+	}
+	if params.SessionID != "" {
+		query = query.Where("meta->>'session_id' = ?", params.SessionID)
 	}
 	if params.Since != nil {
 		query = query.Where("created_at >= ?", *params.Since)

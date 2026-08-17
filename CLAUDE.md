@@ -198,7 +198,9 @@ Table `log_entries`:
 
 Extra indexes: GIN on `search`, composite `(app, created_at DESC)`, composite
 `(created_at DESC, id DESC)` (keyset cursor + context queries), partial expression btree on
-`(meta->>'request_id') WHERE meta ? 'request_id'`. `schemas.Migrate` runs `AutoMigrate` then
+`(meta->>'request_id') WHERE meta ? 'request_id'` and the same shape on
+`(meta->>'session_id')` — both partial on key presence, so the server never writes a null
+under either key. `schemas.Migrate` runs `AutoMigrate` then
 raw SQL for the generated column + indexes (GORM can't express a generated `tsvector` column
 or a `DESC` composite index).
 
@@ -306,9 +308,16 @@ is. Four things bound the damage if one is abused, and they are layered on purpo
    concurrent requests cannot both read "just under the limit". 429 + `Retry-After` counting
    down to UTC midnight. This is the bound that actually holds.
 
-Body: `{ release, environment, events: [{ message, level, ts, kind, stack, url, route, count,
-user: { id, email }, meta }] }`. At most **20 events** and **128 KB**. There is no `app` field —
-the key's app is authoritative. `meta` is scrubbed of credential-shaped keys
+Body: `{ release, environment, session_id, events: [{ message, level, ts, kind, stack, url, route,
+count, user: { id, email }, meta }] }`. At most **20 events** and **128 KB**. There is no `app`
+field — the key's app is authoritative.
+
+`session_id` identifies the tab, not the failure, so it rides on the batch rather than on each
+event and the server writes it to `meta.session_id`. It is a wire field rather than something the
+page puts in `meta` for two reasons: `session` is on the scrub list, and an event that could
+name its own session could file errors under another tab's. Any `session_id` inside an event's
+`meta` is dropped. The SDK keeps it in `sessionStorage`, so it survives a reload and dies with the
+tab. `meta` is scrubbed of credential-shaped keys
 (`password`, `token`, `cookie`, `authorization`, …→ `"[scrubbed]"`), depth-limited to 6, arrays
 cut at 50, strings at 2 KB (stack at 8 KB), and the whole object capped at 8 KB with a fallback
 that keeps `origin`, `url` and half the stack. The server then stamps `source: "browser"`,
@@ -328,6 +337,8 @@ is the client-error view — partial index on `((meta->>'source'), created_at DE
 meaning "no stamped source" (`meta->>'source' IS NULL OR ''`), i.e. every SDK/collector entry; the client's Source selector offers both,
 "Client (browser)" and "Server (no source)"),
 `request_id` (matches `meta->>'request_id'`),
+`session_id` (matches `meta->>'session_id'`; browser entries only — one tab's whole stream,
+which is the pivot next to `request_id` in an expanded row),
 `since`/`until` (RFC3339 on `created_at`), `limit` (default 100, max 1000), and keyset cursor
 `before_ts` (RFC3339Nano) + `before_id` (int64) — both or neither, predicate
 `(created_at, id) < (?, ?)`. Ordered `created_at desc, id desc`.

@@ -30,6 +30,7 @@ func Migrate(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_created_at_id ON log_entries (created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_request_id ON log_entries ((meta->>'request_id')) WHERE meta ? 'request_id'`,
+		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_session_id ON log_entries ((meta->>'session_id')) WHERE meta ? 'session_id'`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_meta_source ON log_entries ((meta->>'source'), created_at DESC) WHERE meta ? 'source'`,
 		`UPDATE api_keys SET kind = 'secret' WHERE kind IS NULL OR kind = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_kind ON api_keys (kind) WHERE revoked_at IS NULL`,

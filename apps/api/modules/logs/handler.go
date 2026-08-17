@@ -171,6 +171,7 @@ func parseListParams(r *http.Request) (ListParams, error) {
 			Query:     q.Get("q"),
 			Source:    q.Get("source"),
 			RequestID: q.Get("request_id"),
+			SessionID: q.Get("session_id"),
 			Levels:    parseLevels(q["level"]),
 		},
 		Limit: 100,

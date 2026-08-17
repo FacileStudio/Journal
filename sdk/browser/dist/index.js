@@ -10,6 +10,7 @@
 const MAX_BATCH = 20;
 const DEDUPE_WINDOW_MS = 60000;
 const MAX_QUEUE = 50;
+const SESSION_KEY = 'journal.session';
 /**
  * Noise every page produces and nobody has ever fixed. Reporting it trains
  * people to ignore the dashboard, which costs more than the errors it hides.
@@ -25,6 +26,7 @@ const DEFAULT_IGNORE = [
 ];
 export function createJournal(options) {
     const endpoint = buildEndpoint(options.url, options.key);
+    const sessionId = sessionIdentifier();
     const flushIntervalMs = options.flushIntervalMs ?? 4000;
     const maxEvents = options.maxEventsPerSession ?? 100;
     const sampleRate = options.sampleRate ?? 1;
@@ -106,6 +108,7 @@ export function createJournal(options) {
         const body = JSON.stringify({
             release: options.release,
             environment: options.environment,
+            session_id: sessionId,
             events
         });
         // text/plain keeps this a CORS simple request, so no preflight is
@@ -341,6 +344,35 @@ function matches(pattern, message) {
 }
 function currentURL() {
     return typeof location === 'undefined' ? undefined : location.href;
+}
+/**
+ * The tab's identity, stable across reloads.
+ *
+ * sessionStorage rather than a module constant, because a reload belongs to the
+ * same debugging session — often it *is* the bug — and a per-page id would cut
+ * the story in half. It dies with the tab, which is the scope the word session
+ * is supposed to mean.
+ *
+ * Both halves have a fallback: storage throws outright in Safari's private
+ * mode, and `crypto.randomUUID` does not exist outside a secure context. An id
+ * that is merely unlikely to collide beats a reporter that throws inside a page
+ * which is already having a bad day.
+ */
+function sessionIdentifier() {
+    const generate = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    try {
+        const existing = sessionStorage.getItem(SESSION_KEY);
+        if (existing)
+            return existing;
+        const fresh = generate();
+        sessionStorage.setItem(SESSION_KEY, fresh);
+        return fresh;
+    }
+    catch {
+        return generate();
+    }
 }
 function safely(fn, fallback) {
     try {

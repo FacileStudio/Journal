@@ -153,6 +153,11 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 	put("kind", event.Kind, 64)
 	put("release", req.Release, 200)
 	put("environment", req.Environment, 64)
+	// The batch owns the session id. Without the delete an event whose meta
+	// carries one keeps it whenever the batch does not, which would let a page
+	// file its errors under another tab's session.
+	delete(meta, "session_id")
+	put("session_id", req.SessionID, 64)
 	put("user_email", event.User.Email, 320)
 	put("user_id", event.User.ID, 200)
 	if event.Count > 1 {
@@ -163,14 +168,24 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 	meta["origin"] = scope.Origin
 	put("user_agent", r.Header.Get("User-Agent"), 512)
 
+	// The fallback keeps what triage cannot work without. session_id belongs in
+	// it for the same reason url does: an oversized payload is exactly the noisy
+	// page whose other events are worth finding, and dropping the key that finds
+	// them would defeat the correlation in the only case that needs it.
 	if encoded, err := json.Marshal(meta); err == nil && len(encoded) > maxBrowserMetaBytes {
-		return map[string]any{
+		reduced := map[string]any{
 			"source":     "browser",
 			"origin":     scope.Origin,
 			"url":        meta["url"],
 			"stack":      capString(fmt.Sprint(meta["stack"]), maxBrowserStackBytes/2),
 			"meta_error": "context exceeded 8KB and was dropped",
 		}
+		// Written only when it exists: the session index is partial on key
+		// presence, so a null here would put every oversized event in it.
+		if session, ok := meta["session_id"]; ok {
+			reduced["session_id"] = session
+		}
+		return reduced
 	}
 	return meta
 }

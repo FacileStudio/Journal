@@ -56,6 +56,7 @@
 	let selectedLevels = $state<LogLevel[]>([]);
 	let query = $state('');
 	let requestId = $state('');
+	let sessionId = $state('');
 	let source = $state('');
 	let range = $state('24h');
 	let customSince = $state('');
@@ -88,7 +89,8 @@
 		selectedLevels.length +
 		(query.trim() ? 1 : 0) +
 		(source ? 1 : 0) +
-		(requestId ? 1 : 0)
+		(requestId ? 1 : 0) +
+		(sessionId ? 1 : 0)
 	);
 
 	function timeRange(): { since?: string; until?: string } {
@@ -110,6 +112,7 @@
 			q: query.trim() || undefined,
 			source: source || undefined,
 			request_id: requestId || undefined,
+			session_id: sessionId || undefined,
 			...timeRange()
 		};
 	}
@@ -121,6 +124,7 @@
 		if (query.trim()) params.set('q', query.trim());
 		if (source) params.set('source', source);
 		if (requestId) params.set('request_id', requestId);
+		if (sessionId) params.set('session_id', sessionId);
 		if (range !== '24h') params.set('range', range);
 		if (range === 'custom') {
 			if (customSince) params.set('since', customSince);
@@ -137,6 +141,7 @@
 		query = params.get('q') ?? '';
 		source = params.get('source') ?? '';
 		requestId = params.get('request_id') ?? '';
+		sessionId = params.get('session_id') ?? '';
 		const wanted = params.get('range');
 		range = wanted && RANGES.some((entry) => entry.id === wanted) ? wanted : '24h';
 		customSince = params.get('since') ?? '';
@@ -282,12 +287,22 @@
 		apply();
 	}
 
+	/* A session is one tab, and one tab can hit several fronts, so the app filter
+	   goes with it. The level filter stays: the error that led here is usually
+	   not the only thing worth seeing, but the reader asked for a level. */
+	function pivotSession(id: string) {
+		sessionId = id;
+		selectedApp = '';
+		apply();
+	}
+
 	function clearFilters() {
 		selectedApp = '';
 		selectedLevels = [];
 		query = '';
 		source = '';
 		requestId = '';
+		sessionId = '';
 		apply();
 	}
 
@@ -485,6 +500,20 @@
 						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
 					</button>
 				{/if}
+				{#if sessionId}
+					<button
+						type="button"
+						title={sessionId}
+						class="flex max-w-[16rem] items-center gap-1 rounded-fc-pill bg-fc-surface px-2.5 py-1 font-fc-mono text-fc-xs"
+						onclick={() => {
+							sessionId = '';
+							apply();
+						}}
+					>
+						<span class="truncate">session:{sessionId}</span>
+						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
+					</button>
+				{/if}
 				<Button size="sm" variant="ghost" icon={icons.close} onclick={clearFilters}>
 					Clear {activeCount} filter{activeCount === 1 ? '' : 's'}
 				</Button>
@@ -510,6 +539,7 @@
 		onPivotApp={pivotApp}
 		onPivotLevel={toggleLevel}
 		onPivotRequest={pivotRequest}
+		onPivotSession={pivotSession}
 		onPivotSource={pivotSource}
 		onContext={(id) => (contextAnchor = id)}
 	/>

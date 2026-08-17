@@ -26,9 +26,15 @@ type IngestResponse struct {
 
 // BrowserRequest is what the JavaScript SDK posts. It carries no app: the app
 // comes from the key, because the payload is written by code anyone can edit.
+//
+// SessionID rides on the batch rather than on each event because it identifies
+// the tab, not the failure: every event in a batch comes from the same page.
+// It is its own field rather than a meta key because meta is scrubbed, and the
+// scrub list already contains "session".
 type BrowserRequest struct {
 	Release     string         `json:"release"`
 	Environment string         `json:"environment"`
+	SessionID   string         `json:"session_id"`
 	Events      []BrowserEvent `json:"events"`
 }
 

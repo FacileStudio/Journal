@@ -13,6 +13,7 @@
 		onPivotApp,
 		onPivotLevel,
 		onPivotRequest,
+		onPivotSession,
 		onPivotSource,
 		onContext
 	}: {
@@ -24,6 +25,7 @@
 		onPivotApp?: (app: string) => void;
 		onPivotLevel?: (level: LogLevel) => void;
 		onPivotRequest?: (requestId: string) => void;
+		onPivotSession?: (sessionId: string) => void;
 		onPivotSource?: (source: string) => void;
 		onContext?: (id: number) => void;
 	} = $props();
@@ -49,6 +51,19 @@
 		if (typeof value === 'string' && value) return value;
 		if (typeof value === 'number') return String(value);
 		return null;
+	}
+
+	/* Only the browser endpoint writes this one. It is what turns a single error
+	   into everything else that tab did. */
+	function sessionIdOf(entry: LogEntry): string | null {
+		const value = entry.meta?.['session_id'];
+		return typeof value === 'string' && value ? value : null;
+	}
+
+	/* A UUID in a pivot button is mostly noise: the first segment is enough to
+	   recognise, and the whole value still goes to the filter. */
+	function shortId(value: string): string {
+		return value.length > 12 ? `${value.slice(0, 8)}…` : value;
 	}
 
 	/* A stack trace inside JSON.stringify is one long line of \n escapes, which
@@ -235,6 +250,16 @@
 											onclick={() => onPivotRequest?.(requestIdOf(entry) as string)}
 										>
 											request_id: {requestIdOf(entry)}
+										</Button>
+									{/if}
+									{#if sessionIdOf(entry) && onPivotSession}
+										<Button
+											size="sm"
+											variant="ghost"
+											icon={icons.filter}
+											onclick={() => onPivotSession?.(sessionIdOf(entry) as string)}
+										>
+											session: {shortId(sessionIdOf(entry) as string)}
 										</Button>
 									{/if}
 									<span class="ml-auto text-fc-xs text-fc-fg-muted">
