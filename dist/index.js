@@ -27,10 +27,14 @@ const DEFAULT_IGNORE = [
 export function createJournal(options) {
     const endpoint = buildEndpoint(options.url, options.key);
     const sessionId = sessionIdentifier();
+    /* Journal's own API is never traced: reporting a failed report is how a
+       reporter turns one outage into a loop. */
+    const apiBase = options.url.replace(/\/+$/, '');
     const flushIntervalMs = options.flushIntervalMs ?? 4000;
     const maxEvents = options.maxEventsPerSession ?? 100;
     const sampleRate = options.sampleRate ?? 1;
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
+    const traced = tracedOrigins(options.trace);
     let user = options.user ?? null;
     let context = { ...(options.context ?? {}) };
     let queue = [];
@@ -168,6 +172,88 @@ export function createJournal(options) {
         }
         schedule();
     }
+    /**
+     * Wraps `fetch` so a failed request carries the id the server logged it
+     * under. Journal already holds both halves of the suite's logs, so once a
+     * browser event has a `request_id` the existing pivot walks straight from
+     * the error to the handler that produced it.
+     *
+     * Only failures become events. A 4xx is usually the application working —
+     * an expired session, a 404 probe — and reporting those trains people to
+     * ignore the dashboard, which is the one thing this package must not do.
+     */
+    function instrument() {
+        if (!traced || typeof globalThis.fetch !== 'function')
+            return () => { };
+        const original = globalThis.fetch;
+        if (original[TRACED])
+            return () => { };
+        const wrapped = async (input, init) => {
+            let target = null;
+            let id;
+            let nextInit = init;
+            try {
+                target = requestTarget(input);
+                if (target && allowedByTrace(target, traced) && !target.startsWith(apiBase)) {
+                    id = randomId();
+                    nextInit = withRequestID(input, init, id);
+                }
+                else {
+                    target = null;
+                }
+            }
+            catch {
+                /* Instrumentation is never worth a failed request. Whatever went
+                   wrong here, the call still goes out exactly as it was. */
+                target = null;
+                id = undefined;
+                nextInit = init;
+            }
+            if (!target)
+                return original(input, init);
+            const method = requestMethod(input, init);
+            try {
+                const response = await original(input, nextInit);
+                if (response.status >= 500) {
+                    report(method, target, response.status, headerId(response) ?? id);
+                }
+                return response;
+            }
+            catch (error) {
+                report(method, target, 0, id);
+                throw error;
+            }
+        };
+        wrapped[TRACED] = true;
+        globalThis.fetch = wrapped;
+        return () => {
+            if (globalThis.fetch === wrapped)
+                globalThis.fetch = original;
+        };
+    }
+    /**
+     * The request URL keeps its query string in meta and loses it in the
+     * message, so a hundred failures against the same endpoint collapse into one
+     * event with a count instead of a hundred unique ones.
+     */
+    function report(method, url, status, id) {
+        const outcome = status === 0 ? 'network error' : String(status);
+        enqueue({
+            level: 'error',
+            message: `${method} ${withoutQuery(url)} failed: ${outcome}`,
+            kind: 'fetch',
+            ts: new Date().toISOString(),
+            url: currentURL(),
+            user: user ?? undefined,
+            meta: {
+                ...context,
+                request_url: url,
+                request_method: method,
+                ...(status > 0 ? { status } : {}),
+                ...(id ? { request_id: id } : {})
+            }
+        });
+    }
     function install() {
         if (!enabled)
             return () => { };
@@ -190,11 +276,13 @@ export function createJournal(options) {
         window.addEventListener('unhandledrejection', onRejection);
         window.addEventListener('pagehide', onPageHide);
         document.addEventListener('visibilitychange', onVisibilityChange);
+        const uninstrument = instrument();
         return () => {
             window.removeEventListener('error', onError);
             window.removeEventListener('unhandledrejection', onRejection);
             window.removeEventListener('pagehide', onPageHide);
             document.removeEventListener('visibilitychange', onVisibilityChange);
+            uninstrument();
         };
     }
     return {
@@ -359,20 +447,100 @@ function currentURL() {
  * which is already having a bad day.
  */
 function sessionIdentifier() {
-    const generate = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     try {
         const existing = sessionStorage.getItem(SESSION_KEY);
         if (existing)
             return existing;
-        const fresh = generate();
+        const fresh = randomId();
         sessionStorage.setItem(SESSION_KEY, fresh);
         return fresh;
     }
     catch {
-        return generate();
+        return randomId();
     }
+}
+/** Marks a wrapped fetch, so two clients on one page do not stack wrappers. */
+const TRACED = Symbol.for('journal.traced');
+/**
+ * Resolves the trace option into the origins allowed to receive the header.
+ *
+ * Same-origin is the default and the safe one: a custom header makes a
+ * cross-origin request non-simple, so it earns a preflight the other server has
+ * to answer. Naming an origin here is opting into that, and into teaching that
+ * server to allow `X-Request-Id`.
+ */
+function tracedOrigins(option) {
+    if (!option)
+        return null;
+    const own = typeof location === 'undefined' ? [] : [new URL(location.href).origin];
+    if (option === true)
+        return own;
+    return [...own, ...option.map((origin) => origin.replace(/\/+$/, ''))];
+}
+function allowedByTrace(url, origins) {
+    try {
+        return origins.includes(new URL(url).origin);
+    }
+    catch {
+        return false;
+    }
+}
+/** Absolute, because a relative URL cannot be matched against an origin. */
+function requestTarget(input) {
+    const raw = typeof input === 'string'
+        ? input
+        : input instanceof URL
+            ? input.href
+            : (input?.url ?? null);
+    if (!raw)
+        return null;
+    return typeof location === 'undefined' ? raw : new URL(raw, location.href).href;
+}
+function requestMethod(input, init) {
+    const method = init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : '');
+    return (method || 'GET').toUpperCase();
+}
+/**
+ * Returns the init to call with, carrying the id.
+ *
+ * A bare `Request` is mutated in place: rebuilding one would clone a body that
+ * may already be locked, and losing the request is a far worse bug than losing
+ * the correlation. Everything else gets a copied init, so the caller's own
+ * object is never edited underneath it.
+ */
+function withRequestID(input, init, id) {
+    const carriesHeaders = typeof input === 'object' && 'headers' in input;
+    if (carriesHeaders && !init) {
+        input.headers.set('X-Request-Id', id);
+        return init;
+    }
+    const next = { ...(init ?? {}) };
+    const headers = new Headers(next.headers ?? (carriesHeaders ? input.headers : undefined));
+    headers.set('X-Request-Id', id);
+    next.headers = headers;
+    return next;
+}
+/**
+ * The server's own id wins when it sends one back: whatever it logged under is
+ * the value that will match. Reading it cross-origin needs
+ * `Access-Control-Expose-Headers`, so cross-origin falls back to ours.
+ */
+function headerId(response) {
+    try {
+        return response.headers.get('X-Request-Id') ?? undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+function withoutQuery(url) {
+    const cut = url.indexOf('?');
+    return cut === -1 ? url : url.slice(0, cut);
+}
+function randomId() {
+    return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 function safely(fn, fallback) {
     try {

@@ -87,6 +87,7 @@ await journal.flush();
 | `sampleRate` | `1` | 0–1, applied before queueing |
 | `maxEventsPerSession` | `100` | hard stop per page load, so a render loop cannot bill the quota |
 | `flushIntervalMs` | `4000` | batches also flush at 20 events and on page hide |
+| `trace` | `false` | `true` traces same-origin requests, an array adds origins; see below |
 | `ignore` | — | extra `string`/`RegExp` patterns, added to the built-in noise list |
 | `beforeSend` | — | last word before an event leaves; return `null` to drop it |
 | `user`, `context` | — | initial values for `setUser` / `setContext` |
@@ -98,6 +99,19 @@ await journal.flush();
   in the same session, landing on the server as `meta.session_id`. Clicking it in the explorer
   is how one error becomes everything else that tab did. Nothing to configure; if storage is
   blocked the id lasts one page load instead.
+- **`trace` ties a failed request to the server logs that explain it.** `install()` wraps
+  `fetch`, sends an `X-Request-Id` on every allowed request, and reports the ones that fail as
+  `kind: 'fetch'` events carrying `meta.request_id` — which is the key Journal's explorer already
+  pivots on, so the browser error and the handler that produced it are one click apart. The
+  server's own `X-Request-Id` wins when it echoes one back.
+
+  Only **5xx and network failures** are reported. A 4xx is usually the application working — an
+  expired session, a 404 probe — and reporting those is how a dashboard becomes noise.
+
+  **Same-origin by default, and widen it deliberately.** A custom header makes a cross-origin
+  request non-*simple*, so naming an origin here earns a preflight that server has to answer and
+  has to allow `X-Request-Id` on. Journal's own API is never traced: reporting a failed report is
+  how a reporter turns one outage into a loop.
 - **Repeats collapse.** Identical `level + message + top frame` within 60s become one event
   with a `count`. A repeat that arrives after its batch was already sent is dropped until the
   window expires, so `count` is a floor on what happened, never the total.

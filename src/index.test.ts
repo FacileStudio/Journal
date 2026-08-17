@@ -21,8 +21,14 @@ beforeEach(() => {
 	status = 201;
 	headers = {};
 	// The SDK is inert outside a browser on purpose, so the test has to
-	// look like one before the client is created.
-	(globalThis as unknown as { window: unknown }).window = {};
+	// look like one before the client is created. The listener stubs are what
+	// make install() callable, which is where fetch tracing is wired.
+	const listeners = { addEventListener() {}, removeEventListener() {} };
+	(globalThis as unknown as { window: unknown }).window = listeners;
+	(globalThis as unknown as { document: unknown }).document = {
+		...listeners,
+		visibilityState: 'visible'
+	};
 	(globalThis as unknown as { location: unknown }).location = { href: 'https://shop.example/cart' };
 	globalThis.fetch = (async (_url: string, init: { body: string }) => {
 		sent.push(JSON.parse(init.body));
@@ -37,8 +43,39 @@ beforeEach(() => {
 
 afterEach(() => {
 	delete (globalThis as unknown as { window?: unknown }).window;
+	delete (globalThis as unknown as { document?: unknown }).document;
 	delete (globalThis as unknown as { location?: unknown }).location;
 });
+
+/**
+ * Replaces fetch with one that answers Journal's own endpoint the way the
+ * default mock does, and everything else the way the test asks. Returns the
+ * non-Journal calls, so a test can look at the headers that actually went out.
+ */
+function appFetch(app: { status?: number; headers?: Record<string, string>; reject?: boolean }) {
+	const calls: { url: string; headers: Headers }[] = [];
+	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+		const url = typeof input === 'string' ? input : ((input as Request).url ?? String(input));
+		if (url.startsWith('https://journal.facile.studio/api')) {
+			sent.push(JSON.parse(String(init?.body)));
+			return {
+				ok: status < 400,
+				status,
+				headers: { get: (name: string) => headers[name] ?? null },
+				text: async () => ''
+			};
+		}
+		calls.push({ url, headers: new Headers(init?.headers ?? undefined) });
+		if (app.reject) throw new TypeError('Failed to fetch');
+		return {
+			ok: (app.status ?? 200) < 400,
+			status: app.status ?? 200,
+			headers: new Headers(app.headers ?? {}),
+			text: async () => ''
+		};
+	}) as unknown as typeof fetch;
+	return calls;
+}
 
 function journal(options: Partial<Parameters<typeof createJournal>[0]> = {}) {
 	return createJournal({
@@ -279,6 +316,108 @@ test('every batch carries the tab session id, across reloads', async () => {
 			expect(sent[2].session_id).toBe(sent[0].session_id as string);
 		}
 	);
+});
+
+// Wrapping the global fetch is invasive enough that it has to be asked for.
+test('tracing is off unless it is asked for', async () => {
+	const calls = appFetch({ status: 500 });
+	const client = journal();
+	const undo = client.install();
+
+	await fetch('https://shop.example/api/cart');
+
+	expect(calls[0].headers.get('X-Request-Id')).toBeNull();
+	expect(sent).toHaveLength(0);
+	undo();
+});
+
+// The whole point: the id on the failed request is the id the server logged it
+// under, so the explorer's request_id pivot walks from the browser error to the
+// handler that produced it.
+test('a traced failure reports the request id it sent', async () => {
+	const calls = appFetch({ status: 503 });
+	const client = journal({ trace: true });
+	const undo = client.install();
+
+	const response = await fetch('https://shop.example/api/cart?page=2');
+	expect(response.status).toBe(503);
+
+	const id = calls[0].headers.get('X-Request-Id');
+	expect(id).toBeTruthy();
+
+	await client.flush();
+	const [event] = sent[0].events;
+	expect(event.kind).toBe('fetch');
+	// The query string stays out of the message so repeats still collapse.
+	expect(event.message).toBe('GET https://shop.example/api/cart failed: 503');
+	expect(event.meta?.request_id).toBe(id as string);
+	expect(event.meta?.request_url).toBe('https://shop.example/api/cart?page=2');
+	expect(event.meta?.status).toBe(503);
+	undo();
+});
+
+// If the server sends its own id back, that is the one it wrote to its logs.
+test('the server echo wins over the id we minted', async () => {
+	appFetch({ status: 500, headers: { 'X-Request-Id': 'server-side-id' } });
+	const client = journal({ trace: true });
+	const undo = client.install();
+
+	await fetch('https://shop.example/api/cart');
+	await client.flush();
+
+	expect(sent[0].events[0].meta?.request_id).toBe('server-side-id');
+	undo();
+});
+
+// A custom header makes a cross-origin request non-simple, so an unasked-for
+// origin would earn a preflight the other server never agreed to answer.
+test('a cross-origin request is left alone', async () => {
+	const calls = appFetch({ status: 500 });
+	const client = journal({ trace: true });
+	const undo = client.install();
+
+	await fetch('https://stripe.example/v1/charges');
+
+	expect(calls[0].headers.get('X-Request-Id')).toBeNull();
+	expect(sent).toHaveLength(0);
+	undo();
+});
+
+test('a network failure is reported and still thrown', async () => {
+	appFetch({ reject: true });
+	const client = journal({ trace: true });
+	const undo = client.install();
+
+	await expect(fetch('https://shop.example/api/cart')).rejects.toThrow('Failed to fetch');
+
+	await client.flush();
+	expect(sent[0].events[0].message).toBe('GET https://shop.example/api/cart failed: network error');
+	undo();
+});
+
+// Reporting a failed report is how a reporter turns one outage into a loop.
+test("Journal's own endpoint is never traced", async () => {
+	appFetch({ status: 200 });
+	status = 500;
+	const client = journal({ trace: true });
+	const undo = client.install();
+
+	client.captureError(new Error('boom'));
+	await client.flush();
+	await client.flush();
+
+	expect(sent.length).toBeGreaterThan(0);
+	expect(sent.every((batch) => batch.events.every((event) => event.kind !== 'fetch'))).toBe(true);
+	undo();
+});
+
+test('uninstalling puts the original fetch back', () => {
+	const before = globalThis.fetch;
+	const client = journal({ trace: true });
+
+	client.install()();
+
+	expect(globalThis.fetch).toBe(before);
 });
 
 // Safari's private mode throws on the storage itself. An error reporter that
