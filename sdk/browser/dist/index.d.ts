@@ -30,6 +30,14 @@ export type JournalOptions = {
     user?: JournalUser;
     /** Extra meta merged into every event. */
     context?: Record<string, unknown>;
+    /**
+     * Tie a failed request to the server logs that explain it.
+     *
+     * `true` traces same-origin requests; an array adds other origins. Off by
+     * default, because it wraps the global `fetch` and that is not something a
+     * reporter should do without being asked.
+     */
+    trace?: boolean | string[];
     debug?: boolean;
 };
 export type JournalLevel = 'debug' | 'info' | 'warn' | 'error';

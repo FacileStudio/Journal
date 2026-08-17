@@ -326,6 +326,14 @@ that keeps `origin`, `url` and half the stack. The server then stamps `source: "
 Entries land in `log_entries` like everything else, so search, histogram, context, saved
 queries and alerts all work on them unchanged.
 
+The SDK's `trace` option wraps `fetch`, sends `X-Request-Id` on same-origin requests (other
+origins only when named — a custom header costs a preflight) and reports 5xx and network
+failures as `kind: 'fetch'` events carrying `meta.request_id`. That is the same key the
+explorer's request_id pivot reads, so a browser failure and the handler behind it are one click
+apart — **once the server half exists**. Nothing in the suite echoes or logs an inbound
+`X-Request-Id` yet; that belongs in tronc, like `RealIP` did, and until it lands the id is the
+client's own and correlates browser events with each other rather than with server logs.
+
 Client: [`sdk/browser`](sdk/browser) (`@facile/journal`), consumed as
 `bun add github:FacileStudio/Journal#ts`.
 
