@@ -109,9 +109,13 @@ func TestBrowserMetaCarriesSessionID(t *testing.T) {
 		t.Fatalf("session_id = %v, want the batch's %q", meta["session_id"], batch.SessionID)
 	}
 
+	// The stack is what pushes this over: scrubValue caps a single string at
+	// maxBrowserStringBytes, so meta alone cannot reach the limit no matter how
+	// much a page sends.
 	oversized := BrowserEvent{
 		Message: "boom",
 		URL:     "https://shop.example/cart",
+		Stack:   strings.Repeat("at frame\n", 4000),
 		Meta:    map[string]any{"payload": strings.Repeat("x", 100_000)},
 	}
 	reduced := browserMeta(oversized, batch, scope, browserRequest(t, batch, scope))
