@@ -268,6 +268,11 @@
 		apply();
 	}
 
+	function toggleSource() {
+		source = source === 'browser' ? '' : 'browser';
+		apply();
+	}
+
 	/* Browser entries carry meta.source; nothing else does. Clicking it is what
 	   makes the client-error view reachable without knowing the schema. */
 	function pivotSource(value: string) {
@@ -383,7 +388,7 @@
 			aria-label="Search messages"
 		/>
 
-		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 			<label class="flex flex-col gap-1">
 				<span class="text-fc-xs text-fc-fg-muted">App</span>
 				<Select
@@ -415,6 +420,23 @@
 							{level}
 						</button>
 					{/each}
+				</div>
+			</div>
+
+			<div class="flex flex-col gap-1">
+				<span class="text-fc-xs text-fc-fg-muted">Source</span>
+				<div class="flex h-11 flex-wrap items-center gap-1.5">
+					<button
+						type="button"
+						aria-pressed={source === 'browser'}
+						class="rounded-fc-pill px-2.5 py-1 text-fc-xs uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring {source ===
+							'browser'
+							? 'bg-fc-accent text-fc-accent-fg'
+							: 'bg-fc-surface text-fc-fg-muted hover:text-fc-fg'}"
+						onclick={toggleSource}
+					>
+						Client
+					</button>
 				</div>
 			</div>
 
