@@ -162,6 +162,51 @@ OIDC against porte) before building the third — the argument for building was 
       The browser endpoint keeps its per-key ceiling and daily quota anyway. A bound that owes
       nothing to the network layer is worth having even when the network layer is correct.
 
+## 2c. v1.4 — context around a browser error
+
+A stack trace answers *what* threw and never *what led to it*, which is where triage kept
+stalling. Two layers shipped ahead of breadcrumbs because both are useful on their own, both are
+an order of magnitude smaller, and having them makes the breadcrumb question easier to judge
+honestly rather than by enthusiasm.
+
+- [x] **Session id** — every browser batch carries one id per tab, kept in `sessionStorage` so it
+      survives a reload (a reload is regularly the bug), stored as `meta.session_id` and
+      filterable through `GET /logs?session_id=` with a pivot beside `request_id`. It rides on the
+      batch, not the event, and it is a wire field rather than a meta key for two reasons:
+      `session` is on the scrub list, and an event that could name its own session could file
+      errors under another tab's. Deliberately **not** available to saved queries or alert rules —
+      a rule pinned to a dead tab is noise.
+- [x] **Fetch tracing** (`trace` option, off by default) — wraps `fetch`, sends `X-Request-Id`,
+      reports 5xx and network failures as `kind: 'fetch'` events carrying `meta.request_id`, which
+      is the key the explorer already pivots on. 4xx is not reported: an expired session and a 404
+      probe are the application working. Same-origin unless an origin is named, because a custom
+      header makes a request non-*simple* and earns a preflight the other server has to answer.
+      Journal's own API is never traced.
+
+Both landed with the same constraint in view, and it governs everything below: **`browserMeta`
+caps the whole meta object at 8 KB** and falls back to a five-key map, silently. Arrays are cut at
+50 and strings at 2 KB. Nothing large can ride in `meta`; it needs its own wire field, its own
+budget, and an explicit place in the fallback.
+
+### Owed: the server half of tracing
+
+Fetch tracing is half a feature. Nothing in the suite accepts, logs or echoes an inbound
+`X-Request-Id` — `request_id` is pure convention from `sdk/journal`'s README — so the id today
+correlates browser events with each other, which `session_id` already does better.
+
+The missing middleware belongs in **tronc**, not here, for the same reason `RealIP` did: accept or
+mint the header, stamp it into the slog attrs the Go SDK ships, echo it on the response, and add
+`Access-Control-Expose-Headers: X-Request-Id` so a browser can read the echo back. One version
+bump then lights it up in every suite app at once. Until that lands, `CLAUDE.md` says so plainly
+rather than implying the loop is closed.
+
+### Still not built here
+
+| Feature | Trigger |
+|---|---|
+| **Device envelope** — viewport, DPR, language, referrer, connection type in `meta` | the next time "it only breaks on narrow screens" costs a round trip to ask. Small enough to ride in `meta` as-is |
+| **Breadcrumbs** (see §2b) | unchanged — but re-read that table's GlitchTip rule first. Breadcrumbs need a first-class wire field, their own budget, a raised body cap and a drawer timeline; they are not a `meta` key |
+
 ## 3. Later drawer (open only on trigger)
 
 | Feature | Trigger |
