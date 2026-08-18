@@ -135,6 +135,16 @@ func (h *Handler) browser(w http.ResponseWriter, r *http.Request) {
 // The client's own meta goes in first and the server's fields go in last, so a
 // page cannot claim an origin, an app or a user agent it does not have. Every
 // key here is flat and stable on purpose: the explorer pivots on meta keys.
+//
+// The batch owns the session id, so any session_id an event carries is deleted
+// before the batch's is written: put skips an empty value, and without the
+// delete a page could file its errors under another tab's session.
+//
+// An oversized meta falls back to the few keys triage cannot work without.
+// session_id is one of them, for the same reason url is — a payload too big to
+// store whole is exactly the noisy page whose other events are worth finding.
+// It is written only when it exists, because the session index is partial on
+// key presence and a null would pull every oversized event into it.
 func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.IngestScope, r *http.Request) map[string]any {
 	meta := map[string]any{}
 	for key, value := range scrubValue(event.Meta, 0).(map[string]any) {
@@ -153,9 +163,6 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 	put("kind", event.Kind, 64)
 	put("release", req.Release, 200)
 	put("environment", req.Environment, 64)
-	// The batch owns the session id. Without the delete an event whose meta
-	// carries one keeps it whenever the batch does not, which would let a page
-	// file its errors under another tab's session.
 	delete(meta, "session_id")
 	put("session_id", req.SessionID, 64)
 	put("user_email", event.User.Email, 320)
@@ -168,10 +175,6 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 	meta["origin"] = scope.Origin
 	put("user_agent", r.Header.Get("User-Agent"), 512)
 
-	// The fallback keeps what triage cannot work without. session_id belongs in
-	// it for the same reason url does: an oversized payload is exactly the noisy
-	// page whose other events are worth finding, and dropping the key that finds
-	// them would defeat the correlation in the only case that needs it.
 	if encoded, err := json.Marshal(meta); err == nil && len(encoded) > maxBrowserMetaBytes {
 		reduced := map[string]any{
 			"source":     "browser",
@@ -180,8 +183,6 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 			"stack":      capString(fmt.Sprint(meta["stack"]), maxBrowserStackBytes/2),
 			"meta_error": "context exceeded 8KB and was dropped",
 		}
-		// Written only when it exists: the session index is partial on key
-		// presence, so a null here would put every oversized event in it.
 		if session, ok := meta["session_id"]; ok {
 			reduced["session_id"] = session
 		}

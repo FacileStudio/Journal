@@ -34,7 +34,11 @@ export function createJournal(options) {
     const maxEvents = options.maxEventsPerSession ?? 100;
     const sampleRate = options.sampleRate ?? 1;
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
-    const traced = tracedOrigins(options.trace);
+    /* With no base url there is no endpoint to recognise, so the wrapper could not
+       tell the reporter's own requests from the app's and would report its own
+       failures in a loop. Tracing nothing is the safe reading of a misconfigured
+       client; buildEndpoint has already warned about it. */
+    const traced = apiBase ? tracedOrigins(options.trace) : null;
     let user = options.user ?? null;
     let context = { ...(options.context ?? {}) };
     let queue = [];

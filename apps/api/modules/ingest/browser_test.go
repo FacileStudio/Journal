@@ -95,7 +95,12 @@ func TestBrowserMetaIsCapped(t *testing.T) {
 // The session id is what turns one error into the sequence it belongs to, so it
 // comes from the batch, cannot be claimed by an event's meta, and survives the
 // oversized-meta fallback — an event too big to store whole is exactly the one
-// whose neighbours are worth finding.
+// whose neighbours are worth finding. A batch carrying none must leave the key
+// absent rather than null, because the index is partial on key presence.
+//
+// The oversized case needs the stack to get there: scrubValue caps a single
+// string at maxBrowserStringBytes, so meta alone cannot reach the limit however
+// much a page sends.
 func TestBrowserMetaCarriesSessionID(t *testing.T) {
 	scope := authcontext.IngestScope{App: "shop", Origin: "https://shop.example"}
 	batch := BrowserRequest{SessionID: "0d5f6f4e-9d2a-4a9b-8d1e-7c6b5a4f3e2d"}
@@ -109,9 +114,6 @@ func TestBrowserMetaCarriesSessionID(t *testing.T) {
 		t.Fatalf("session_id = %v, want the batch's %q", meta["session_id"], batch.SessionID)
 	}
 
-	// The stack is what pushes this over: scrubValue caps a single string at
-	// maxBrowserStringBytes, so meta alone cannot reach the limit no matter how
-	// much a page sends.
 	oversized := BrowserEvent{
 		Message: "boom",
 		URL:     "https://shop.example/cart",
@@ -126,7 +128,6 @@ func TestBrowserMetaCarriesSessionID(t *testing.T) {
 		t.Fatalf("fallback session_id = %v, want %q", reduced["session_id"], batch.SessionID)
 	}
 
-	// A batch without one must not put a null in the partial index.
 	bare := browserMeta(event, BrowserRequest{}, scope, browserRequest(t, BrowserRequest{}, scope))
 	if _, present := bare["session_id"]; present {
 		t.Fatalf("session_id = %v, want the key absent entirely", bare["session_id"])
