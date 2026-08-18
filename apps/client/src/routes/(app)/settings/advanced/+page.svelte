@@ -23,7 +23,7 @@
 <div class="flex flex-col gap-10">
 	<SettingsSection title="Instance" description="Facts about the server this dashboard is talking to.">
 		<SettingsRow label="API base" stacked>
-			<SecretField value={apiBase} sensitive={false} />
+			<div class="w-full min-w-0"><SecretField value={apiBase} sensitive={false} /></div>
 		</SettingsRow>
 		<SettingsRow label="Status" description="Whether the dashboard can reach the API right now.">
 			{#if reachable === null}

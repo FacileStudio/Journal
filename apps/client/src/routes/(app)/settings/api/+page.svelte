@@ -148,21 +148,21 @@ export const handleError = handleErrorWith(journal);`
 	});
 </script>
 
-<div class="flex flex-col gap-10">
+<div class="flex min-w-0 flex-col gap-10">
 	<SettingsSection title="Ingest endpoints" description="Where shippers and pages send their entries.">
 		<SettingsRow
 			label="Servers"
 			description="The trailing /api is load-bearing — without it the dashboard's catch-all answers 200 and every line is discarded."
 			stacked
 		>
-			<SecretField value={ingestUrl} sensitive={false} />
+			<div class="w-full min-w-0"><SecretField value={ingestUrl} sensitive={false} /></div>
 		</SettingsRow>
 		<SettingsRow
 			label="Browsers"
 			description="Authenticated by a public key, restricted to that key's origins, and capped by its daily quota. Used by the @facile/journal SDK."
 			stacked
 		>
-			<SecretField value={browserUrl} sensitive={false} />
+			<div class="w-full min-w-0"><SecretField value={browserUrl} sensitive={false} /></div>
 		</SettingsRow>
 	</SettingsSection>
 
@@ -202,9 +202,9 @@ export const handleError = handleErrorWith(journal);`
 					<tr>
 						<th scope="col">App</th>
 						<th scope="col">Kind</th>
-						<th scope="col">Prefix</th>
+						<th scope="col" class="hidden sm:table-cell">Prefix</th>
 						<th scope="col">Scope</th>
-						<th scope="col">Created</th>
+						<th scope="col" class="hidden sm:table-cell">Created</th>
 						<th scope="col">Status</th>
 						<th scope="col" aria-label="Actions"></th>
 					</tr>
@@ -219,11 +219,11 @@ export const handleError = handleErrorWith(journal);`
 									{key.kind === 'public' ? 'public' : 'secret'}
 								</Badge>
 							</td>
-							<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{key.prefix}…</td>
+							<td class="hidden font-fc-mono text-fc-xs text-fc-fg-muted sm:table-cell">{key.prefix}…</td>
 							<td class="text-fc-fg-muted">
 								{#if key.kind === 'public'}
 									<div class="flex flex-col gap-1">
-										<span class="font-fc-mono text-fc-xs">{key.allowed_origins.join(', ')}</span>
+										<span class="font-fc-mono text-fc-xs break-all">{key.allowed_origins.join(', ')}</span>
 										<span class="text-fc-xs">
 											{key.used_today.toLocaleString()} / {key.daily_quota.toLocaleString()} today
 										</span>
@@ -232,7 +232,7 @@ export const handleError = handleErrorWith(journal);`
 									<span class="text-fc-xs">servers, no quota</span>
 								{/if}
 							</td>
-							<td class="whitespace-nowrap text-fc-fg-muted">{formatDate(key.created_at)}</td>
+							<td class="hidden whitespace-nowrap text-fc-fg-muted sm:table-cell">{formatDate(key.created_at)}</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">
 								{key.revoked_at ? `revoked ${formatDate(key.revoked_at)}` : 'active'}
 							</td>
