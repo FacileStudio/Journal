@@ -3,11 +3,8 @@
 	import { browser } from '$app/environment';
 	import { Toaster } from '@facile/muse';
 	import { applyStoredTheme } from '$lib/theme.svelte';
-	import { registerJournalIcons } from '$lib/icons';
 
 	let { children } = $props();
-
-	registerJournalIcons();
 
 	if (browser) {
 		applyStoredTheme();

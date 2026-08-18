@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Icon, icons } from '@facile/muse';
-	import { NOTEBOOK } from '$lib/icons';
 	import { backend, ssoLoginUrl } from '$lib/backend';
 	import { clearToken, setToken } from '$lib/auth';
 
@@ -77,7 +76,7 @@
 <div class="flex min-h-screen">
 	<div class="hidden lg:flex lg:w-1/2 flex-col bg-black px-12 py-10">
 		<a href="/" class="flex items-center gap-3 mb-auto">
-			<Icon icon={NOTEBOOK} size={28} class="text-white" />
+			<Icon icon={icons.notebook} size={28} class="text-white" />
 			<span class="text-xl font-bold font-heading tracking-tight text-white">Journal</span>
 		</a>
 
