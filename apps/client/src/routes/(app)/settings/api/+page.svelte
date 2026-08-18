@@ -66,6 +66,12 @@
 	 * useless until it is wired into hooks.client.ts, and pasting it wrong is
 	 * how the reports end up in nobody's dashboard.
 	 */
+	/* Every origin is https and the scheme eats a third of the column on a phone,
+	   so the host carries the meaning and the full value stays in the title. */
+	function hostOf(origin: string): string {
+		return origin.replace(/^https?:\/\//, '');
+	}
+
 	const snippet = $derived(
 		issued
 			? `import { createJournal } from '@facile/journal';
@@ -220,10 +226,12 @@ export const handleError = handleErrorWith(journal);`
 								</Badge>
 							</td>
 							<td class="hidden font-fc-mono text-fc-xs text-fc-fg-muted sm:table-cell">{key.prefix}…</td>
-							<td class="text-fc-fg-muted">
+							<td class="max-w-[11rem] text-fc-fg-muted sm:max-w-none">
 								{#if key.kind === 'public'}
 									<div class="flex flex-col gap-1">
-										<span class="font-fc-mono text-fc-xs break-all">{key.allowed_origins.join(', ')}</span>
+										{#each key.allowed_origins as origin (origin)}
+											<span class="truncate font-fc-mono text-fc-xs" title={origin}>{hostOf(origin)}</span>
+										{/each}
 										<span class="text-fc-xs">
 											{key.used_today.toLocaleString()} / {key.daily_quota.toLocaleString()} today
 										</span>
