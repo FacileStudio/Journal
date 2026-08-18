@@ -161,14 +161,14 @@ export const handleError = handleErrorWith(journal);`
 			description="The trailing /api is load-bearing — without it the dashboard's catch-all answers 200 and every line is discarded."
 			stacked
 		>
-			<div class="w-full min-w-0"><SecretField value={ingestUrl} sensitive={false} /></div>
+			<SecretField value={ingestUrl} sensitive={false} />
 		</SettingsRow>
 		<SettingsRow
 			label="Browsers"
 			description="Authenticated by a public key, restricted to that key's origins, and capped by its daily quota. Used by the @facile/journal SDK."
 			stacked
 		>
-			<div class="w-full min-w-0"><SecretField value={browserUrl} sensitive={false} /></div>
+			<SecretField value={browserUrl} sensitive={false} />
 		</SettingsRow>
 	</SettingsSection>
 

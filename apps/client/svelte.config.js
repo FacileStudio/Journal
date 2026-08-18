@@ -11,7 +11,7 @@ const config = {
 			directives: {
 				'script-src': ['self'],
 				'style-src': ['self', 'unsafe-inline'],
-				'connect-src': ['self', 'https://api.iconify.design'],
+				'connect-src': ['self'],
 				'img-src': ['self', 'data:'],
 				'object-src': ['none'],
 				'base-uri': ['self']

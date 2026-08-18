@@ -6,6 +6,7 @@
 		Alert,
 		Button,
 		Card,
+		Icon,
 		Input,
 		Modal,
 		Select,
@@ -497,7 +498,7 @@
 						}}
 					>
 						<span class="truncate">req:{requestId}</span>
-						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
+						<Icon icon={icons.close} size={12} class="block" />
 					</button>
 				{/if}
 				{#if sessionId}
@@ -511,7 +512,7 @@
 						}}
 					>
 						<span class="truncate">session:{sessionId}</span>
-						<iconify-icon icon={icons.close} width="12" height="12" class="block"></iconify-icon>
+						<Icon icon={icons.close} size={12} class="block" />
 					</button>
 				{/if}
 				<Button size="sm" variant="ghost" icon={icons.close} onclick={clearFilters}>

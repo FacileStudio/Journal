@@ -36,7 +36,7 @@
 <!-- `gap-4`: pulled tighter the strip reads as an underline welded to the active pill. -->
 <div class="flex flex-col gap-4">
 	<Tabs {items} value={active} label="Settings sections" />
-	<Divider class="my-0" />
+	<Divider />
 </div>
 
 <PageTransition key={active}>

@@ -3,16 +3,13 @@
 	import { browser } from '$app/environment';
 	import { Toaster } from '@facile/muse';
 	import { applyStoredTheme } from '$lib/theme.svelte';
+	import { registerJournalIcons } from '$lib/icons';
 
 	let { children } = $props();
 
-	/*
-	 * muse renders <iconify-icon> custom elements and they stay inert until the element is
-	 * registered. Importing the package here rather than pulling a CDN script keeps the
-	 * dashboard self-hosted and satisfies the `script-src: self` CSP in svelte.config.js.
-	 */
+	registerJournalIcons();
+
 	if (browser) {
-		void import('iconify-icon');
 		applyStoredTheme();
 	}
 </script>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, EmptyState, Spinner, Table, icons } from '@facile/muse';
+	import { Icon, Button, EmptyState, Spinner, Table, icons } from '@facile/muse';
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
@@ -276,8 +276,7 @@
 					<tr class="bg-fc-warning/10">
 						<td colspan="4">
 							<span class="flex items-center gap-2 text-fc-xs text-fc-warning">
-								<iconify-icon icon={icons.warning} width="14" height="14" class="block"
-								></iconify-icon>
+								<Icon icon={icons.warning} size={14} class="block" />
 								possible gap — some entries between these rows were never fetched
 							</span>
 						</td>

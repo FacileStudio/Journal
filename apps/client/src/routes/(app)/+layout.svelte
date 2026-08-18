@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
+	import { NOTEBOOK } from '$lib/icons';
 	import { clearToken } from '$lib/auth';
 	import { setContext } from 'svelte';
 
@@ -89,7 +90,7 @@
 	<div class="flex h-dvh w-full overflow-hidden bg-fc-page">
 		<div class="hidden h-full shrink-0 p-3 md:block">
 			<SideBar
-				icon="solar:notebook-bold-duotone"
+				icon={NOTEBOOK}
 				title="Journal"
 				bind:collapsed
 				pages={navPages}
