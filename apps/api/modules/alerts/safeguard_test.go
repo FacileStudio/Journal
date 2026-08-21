@@ -42,13 +42,13 @@ func TestIsBlockedIP(t *testing.T) {
 }
 
 func TestHostAllowed(t *testing.T) {
-	allowed := []string{"nook", "Hooks.Internal"}
+	allowed := []string{"antenne", "Hooks.Internal"}
 	cases := []struct {
 		host string
 		want bool
 	}{
-		{"nook", true},
-		{"NOOK", true},
+		{"antenne", true},
+		{"ANTENNE", true},
 		{"hooks.internal", true},
 		{"other", false},
 		{"", false},

@@ -11,7 +11,7 @@ func TestValidateRule(t *testing.T) {
 		webhookURL    string
 		valid         bool
 	}{
-		{"valid https", "errors spike", 5, 15, "https://nook.example.com/hooks/abc", true},
+		{"valid https", "errors spike", 5, 15, "https://antenne.example.com/hooks/abc", true},
 		{"valid http", "errors spike", 1, 1, "http://localhost:9000/hook", true},
 		{"max window", "errors spike", 1, 1440, "https://example.com/h", true},
 		{"empty name", "", 5, 15, "https://example.com/h", false},

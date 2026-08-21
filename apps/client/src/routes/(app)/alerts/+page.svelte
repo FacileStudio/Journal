@@ -300,7 +300,7 @@
 			<Input
 				bind:value={webhookUrl}
 				class="font-fc-mono"
-				placeholder="https://nook.facile.studio/hooks/…"
+				placeholder="https://antenne.facile.studio/hooks/…"
 			/>
 		</Field>
 
@@ -309,7 +309,7 @@
 			helper="Optional. Name and secret are set together or not at all."
 			error={headerPairValid ? undefined : 'Set both the header name and its secret.'}
 		>
-			<Input bind:value={webhookHeader} class="font-fc-mono" placeholder="X-Nook-Token" />
+			<Input bind:value={webhookHeader} class="font-fc-mono" placeholder="X-Antenne-Token" />
 		</Field>
 
 		<SecretField bind:value={webhookSecret} label="Auth secret" editable mask="full" />

@@ -95,7 +95,7 @@ Found in review; none require design work.
 - [x] **Saved queries** — tiny `saved_queries` table (name, filter params), a dropdown in the
       dashboard. Prerequisite for alerting.
 - [x] **Webhook alerts** — evaluate saved queries every N minutes; if count > threshold, POST
-      to a webhook (Nook). Skip Alertmanager-style routing; one URL per rule.
+      to a webhook (Antenne). Skip Alertmanager-style routing; one URL per rule.
 - [x] **Ingest hardening** — accept `Content-Encoding: gzip` (stdlib `gzip.NewReader`), cap
       batches at 1000 entries → 400, return 429 + `Retry-After` under pressure. Document
       retryable statuses (429/5xx) in the shipper snippet.

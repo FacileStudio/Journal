@@ -134,7 +134,7 @@ webhook retries on the next tick instead of being silently swallowed.
 Webhook delivery is SSRF-guarded: the default client refuses redirects and blocks dialing
 loopback, link-local, multicast, unspecified, and private addresses. Hosts listed in
 `WEBHOOK_ALLOWED_HOSTS` use a client without the address filter, which is how an internal
-target such as Nook is reached on the compose network.
+target such as Antenne is reached on the compose network.
 
 ## Cross-app integration
 
