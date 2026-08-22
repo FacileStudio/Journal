@@ -1,10 +1,18 @@
+[settings]
+lockfile = true
+
 [tools]
+lefthook = "latest"
 go = "1.25"
+
+[hooks]
+postinstall = "lefthook install"
 
 # The API reads its configuration from the process environment, so Casier can
 # supply it directly and no .env has to exist. `casier run` is network-first
 # with a last-known-good cache, so a Casier outage degrades to the previous
 # values with a warning rather than to an empty environment.
+
 [tasks.dev]
 description = "Run the API with secrets injected from Casier"
 run = "casier run -- sh -c 'cd apps/api && go run .'"
@@ -36,7 +44,3 @@ run = "sh ./scripts/check.sh --format"
 [tasks.publish-sdk]
 description = "Publish sdk/browser to the ts branch consumers install from"
 run = "sh ./scripts/publish-ts-branch.sh"
-
-[tasks.hooks]
-description = "Enable the tracked git hooks in this clone"
-run = "git config core.hooksPath .githooks"

@@ -13,19 +13,34 @@ Local setup, the test layout, and the quality gate that runs before every push.
 
 ## Setup
 
-Enable the tracked git hooks once per clone:
+Install the pinned toolchain once per clone:
 
 ```sh
-mise run hooks
+mise install
 ```
 
-That is `git config core.hooksPath .githooks`. Without it the pre-push gate never runs.
+That also runs `lefthook install` through the `postinstall` hook, which writes the git hooks
+into the clone. Without it neither the commit-msg check nor the pre-push gate runs.
 
 Install the client dependencies:
 
 ```sh
 mise run install
 ```
+
+## Git hooks
+
+`lefthook.yml` wires two hooks.
+
+`commit-msg` comes from the shared config in
+[FacileStudio/hooks](https://github.com/FacileStudio/hooks), pinned by tag. It requires a
+Conventional Commits subject, `type(scope): summary`, and rewrites the subject with the
+gitmoji for that type, so do not type the emoji yourself.
+
+`pre-push` runs `sh scripts/check.sh`. The script is unchanged by the move to lefthook and is
+still the gate; only its caller moved. lefthook caches the shared config at the pinned `ref`,
+so there is no network call per commit. Bump that `ref` in `lefthook.yml` to pick up a new
+policy.
 
 ## Running
 
@@ -114,7 +129,7 @@ in `apps/api`, `apps/collector`, and `sdk/journal`, then `bun run typecheck`, `b
 `dist/` freshness check in `sdk/browser`, then `bun run check` in `apps/client`.
 It reports and never rewrites, except under `--format`.
 
-`.githooks/pre-push` execs the same script, so a push runs the full gate. Bypass a
+The lefthook `pre-push` job execs the same script, so a push runs the full gate. Bypass a
 known-unrelated failure with `git push --no-verify`.
 
 Two deliberate details in the script are worth knowing before you edit it. It is invoked as
