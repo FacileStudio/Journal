@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -144,6 +145,8 @@ func run() int {
 
 	if appEnv.RetentionDays > 0 {
 		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
+	} else {
+		appLogger.Warn("RETENTION_DAYS is 0: log entries are kept forever, which needs a written justification under GDPR storage-limitation rules; set it to a positive number of days unless you have one")
 	}
 	go sweepSessions(shutdownSignal, sessions, appLogger)
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
@@ -204,7 +207,7 @@ func run() int {
 func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
-	authService := auth.NewService(db, passwords)
+	authService := auth.NewService(db, passwords, removeAvatarFor(avatars))
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
 	sourceMapsService := sourcemaps.NewService(db)
@@ -277,6 +280,20 @@ func referenceConfig() apiref.Config {
 		Description: "Centralized logging for the Facile Suite: apps ship structured entries to /ingest, the dashboard searches them.",
 		Servers:     []string{"/api"},
 		Registry:    docs.Registry,
+	}
+}
+
+// removeAvatarFor adapts porte's avatar store into the erasure hook the auth
+// service calls. URLs outside this app's prefix belong to another host — an
+// identity provider's avatar, a CDN — and there is nothing local to delete,
+// so they answer nil rather than an error that would refuse the erasure.
+func removeAvatarFor(avatars *avatarfs.Store) func(ctx context.Context, avatarURL string) error {
+	prefix := avatars.URLPrefix() + "/"
+	return func(ctx context.Context, avatarURL string) error {
+		if !strings.HasPrefix(avatarURL, prefix) {
+			return nil
+		}
+		return avatars.Remove(ctx, avatarURL)
 	}
 }
 

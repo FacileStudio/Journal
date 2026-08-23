@@ -168,7 +168,7 @@ var ingestModule = Module{
 			Description: "Accepts a single entry or {\"entries\":[…]}, at most 1000 per batch. " +
 				"Entry fields: app (required with the legacy token; with a per-app key it may be omitted and is filled from the key, or must equal the key's app), " +
 				"level (debug|info|warn|error, default info), message (required, truncated at 64 KiB on a rune boundary with \" [truncated]\" appended), " +
-				"ts (optional RFC3339 stored as created_at; more than 5 minutes in the future is replaced by server time), and meta (optional object stored as jsonb).\n\n" +
+				"ts (optional RFC3339 stored as created_at; more than 5 minutes in the future is replaced by server time), and meta (optional object stored as jsonb; keys that look like credentials — password, token, cookie, secret and their variants, at any nesting depth — are replaced with \"[scrubbed]\" on the way in).\n\n" +
 				"**Body size: the 8 MB cap applies to uncompressed bodies too.** Content-Encoding: gzip is accepted, and the two limits are 8 MB on the body as it arrives and 32 MB once decompressed — " +
 				"32 MB is only the decompressed ceiling, never a licence to POST a 20 MB plain JSON batch. A plain body above 8 MB is rejected with 413, so a shipper batching large meta payloads must split them.\n\n" +
 				"Rate limiting is 600/min keyed on the SHA-256 of the bearer token and answers 429 with Retry-After: 60. " +

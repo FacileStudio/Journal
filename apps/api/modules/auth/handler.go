@@ -72,7 +72,7 @@ func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.DeleteAccount(r.Context(), identity.UserID, identity.IsAdmin); err != nil {
+	if err := h.service.DeleteAccount(r.Context(), identity.UserID); err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}

@@ -7,5 +7,6 @@
 | [Development](development.md) | Local setup, tests, the quality gate |
 | [Deployment](deployment.md) | Docker Compose, Dokploy, Traefik routing |
 | [API](api.md) | HTTP endpoints and payloads |
+| [GDPR posture](gdpr.md) | What personal data is stored, retention, erasure, backups |
 
 Back to the [README](../README.md).

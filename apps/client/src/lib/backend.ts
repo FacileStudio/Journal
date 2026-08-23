@@ -293,6 +293,10 @@ export const backend = {
 		return apiFetch<MeResponse>('/auth/me');
 	},
 
+	deleteMe() {
+		return apiFetch<void>('/auth/me', { method: 'DELETE' });
+	},
+
 	listLogs(params: ListLogsParams = {}) {
 		const qs = new URLSearchParams();
 		if (params.app) qs.set('app', params.app);

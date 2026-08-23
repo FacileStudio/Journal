@@ -98,7 +98,7 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 			App:       app,
 			Level:     level,
 			Message:   capMessage(entry.Message),
-			Meta:      entry.Meta,
+			Meta:      scrubServerMeta(entry.Meta),
 			CreatedAt: createdAt,
 		})
 	}
@@ -127,4 +127,50 @@ func capMessage(message string) string {
 		cut--
 	}
 	return message[:cut] + truncationSuffix
+}
+
+// scrubServerMeta redacts credential-shaped keys from a trusted producer's
+// meta, recursively, and changes nothing else about the shape.
+//
+// The browser path scrubs harder — caps on depth, array length and string
+// size — because its input is hostile. A server shipping through the secret
+// key is trusted to send well-formed meta, and encoding/json bounds the nest
+// before this code ever sees it, so there is no depth guard here. What even a
+// trusted producer cannot be trusted to avoid forever is dropping a password
+// into a log line by accident.
+func scrubServerMeta(value map[string]any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	out := make(map[string]any, len(value))
+	for key, nested := range value {
+		if scrubbedKeys[strings.ToLower(key)] {
+			out[key] = scrubbedValue
+			continue
+		}
+		switch typed := nested.(type) {
+		case map[string]any:
+			out[key] = scrubServerMeta(typed)
+		case []any:
+			out[key] = scrubServerSlice(typed)
+		default:
+			out[key] = nested
+		}
+	}
+	return out
+}
+
+func scrubServerSlice(value []any) []any {
+	out := make([]any, len(value))
+	for i, nested := range value {
+		switch typed := nested.(type) {
+		case map[string]any:
+			out[i] = scrubServerMeta(typed)
+		case []any:
+			out[i] = scrubServerSlice(typed)
+		default:
+			out[i] = typed
+		}
+	}
+	return out
 }
