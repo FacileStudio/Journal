@@ -12,11 +12,12 @@ import (
 
 // Handler serves the auth endpoints.
 type Handler struct {
-	service *Service
+	service     *Service
+	clearCookie func(http.ResponseWriter, *http.Request)
 }
 
-func newHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func newHandler(service *Service, clearCookie func(http.ResponseWriter, *http.Request)) *Handler {
+	return &Handler{service: service, clearCookie: clearCookie}
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +63,21 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpjson.WriteJSON(w, http.StatusOK, MeResponse{User: toUserResponse(*user)})
+}
+
+func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
+	identity, ok := authcontext.From(r.Context())
+	if !ok {
+		httpjson.WriteError(w, errors.Unauthorized("not authenticated"))
+		return
+	}
+
+	if err := h.service.DeleteAccount(r.Context(), identity.UserID, identity.IsAdmin); err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	h.clearCookie(w, r)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func toUserResponse(user schemas.User) UserResponse {

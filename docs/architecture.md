@@ -125,6 +125,10 @@ silently trusted.
 many days, immediately at boot and then hourly, logging the row count when it removes
 anything.
 
+**Session sweep.** Independently of the retention window — expired credentials are worthless
+rows, not data worth keeping — a second hourly goroutine deletes expired `porte_sessions` via
+porte's `Manager.Sweep`. Named API tokens have no expiry and are spared by design.
+
 **Alert evaluator.** Every minute, `alerts.RunEvaluator` loads enabled rules whose
 `last_fired_at` is null or older than their window, re-runs the linked saved query over the
 window, and posts a webhook when the count reaches the threshold. The payload carries the

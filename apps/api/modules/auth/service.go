@@ -88,6 +88,40 @@ func (s *Service) IdentityForUser(ctx context.Context, userID int64) (authcontex
 	return authcontext.Identity{UserID: out.ID, Email: out.Email, IsAdmin: out.IsAdmin}, nil
 }
 
+// DeleteAccount erases the caller's account: one row, whose foreign keys
+// cascade into every credential porte holds for it — identities and sessions
+// alike, so the token that made the request dies with the delete. The log
+// entries stay: they are keyed by app, never by user, so there is nothing of
+// this person in them to erase.
+//
+// Refusing the last administrator is operational hygiene rather than a
+// retention exception — an account whose deletion strands API-key management
+// behind a locked door gets another admin promoted first. Every other account
+// goes unconditionally.
+func (s *Service) DeleteAccount(ctx context.Context, userID int64, isAdmin bool) error {
+	if isAdmin {
+		var others int64
+		err := s.orm.WithContext(ctx).Model(&schemas.User{}).
+			Where("is_admin AND id <> ?", userID).
+			Count(&others).Error
+		if err != nil {
+			return errors.Internal("failed to count administrators", err)
+		}
+		if others == 0 {
+			return errors.Failed("the last administrator cannot delete their account; promote another admin first")
+		}
+	}
+
+	result := s.orm.WithContext(ctx).Delete(&schemas.User{}, userID)
+	if result.Error != nil {
+		return errors.Internal("failed to delete the account", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("user not found")
+	}
+	return nil
+}
+
 func (s *Service) UserByID(ctx context.Context, id int64) (*schemas.User, error) {
 	var user schemas.User
 	if err := s.orm.WithContext(ctx).First(&user, id).Error; err != nil {

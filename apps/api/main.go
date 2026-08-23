@@ -23,6 +23,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/avatarfs"
 	"github.com/FacileStudio/porte/local"
 	"github.com/FacileStudio/porte/oidc"
@@ -144,6 +145,7 @@ func run() int {
 	if appEnv.RetentionDays > 0 {
 		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
 	}
+	go sweepSessions(shutdownSignal, sessions, appLogger)
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
 	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, appLogger, health.DB(sqlDB))
@@ -238,7 +240,8 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	router.Route("/api", func(api chi.Router) {
 		sessions.Mount(api.With(sessionLimiter))
 		kit.Mount(api.With(sessionLimiter))
-		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth)
+		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth,
+			func(w http.ResponseWriter, r *http.Request) { sessions.ClearCookie(w, r, porte.SessionCookieName) })
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
 		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
@@ -274,6 +277,26 @@ func referenceConfig() apiref.Config {
 		Description: "Centralized logging for the Facile Suite: apps ship structured entries to /ingest, the dashboard searches them.",
 		Servers:     []string{"/api"},
 		Registry:    docs.Registry,
+	}
+}
+
+func sweepSessions(ctx context.Context, sessions *session.Manager, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		deleted, err := sessions.Sweep(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Error("session sweep failed", slog.Any("error", err))
+			}
+		} else if deleted > 0 {
+			logger.Info("session sweep deleted expired sessions", slog.Int64("deleted", deleted))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

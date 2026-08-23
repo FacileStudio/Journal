@@ -46,6 +46,7 @@ Postgres with a 2-second timeout and returns `200 {"status":"ready"}` or
 | POST | `/api/auth/login` | public |
 | POST | `/api/auth/logout` | session |
 | GET | `/api/auth/me` | session |
+| DELETE | `/api/auth/me` | session |
 | GET | `/api/auth/oidc` | public, SSO only |
 | GET | `/api/auth/oidc/callback` | public, SSO only |
 | POST | `/api/auth/oidc/exchange` | public, SSO only |

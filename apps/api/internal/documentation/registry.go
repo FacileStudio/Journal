@@ -141,6 +141,19 @@ var authModule = Module{
 				errSessionRate,
 			},
 		},
+		{
+			Method:       "DELETE",
+			Path:         "/auth/me",
+			Summary:      "Delete the authenticated account",
+			Description:  "Erasure, not logout: the user row goes and every credential with it — identities through the foreign keys, every session including the one that made the request. Log entries are keyed by app rather than by user and are not touched. The session cookie is expired on the way out; a bearer caller simply stops holding a live token. A cookie-authenticated call must carry the X-Facile-CSRF header like any other mutating request.",
+			Auth:         "bearer",
+			ResponseBody: ``,
+			Errors: []Error{
+				errUnauth,
+				{Status: 412, Code: "failed_precondition", Description: "the caller is the last administrator; promote another admin first"},
+				errSessionRate,
+			},
+		},
 	},
 }
 

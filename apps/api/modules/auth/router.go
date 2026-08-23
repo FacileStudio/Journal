@@ -13,12 +13,15 @@ import (
 // porte knows nothing about.
 //
 // Under SSO_ONLY the credential routes are not registered rather than
-// rejected, so there is no endpoint left to probe for an account.
-func RegisterRoutes(router chi.Router, service *Service, ssoOnly bool, credentialLimiter, sessionLimiter, requireAuth func(http.Handler) http.Handler) {
-	handler := newHandler(service)
+// rejected, so there is no endpoint left to probe for an account. The delete
+// route runs in both modes: erasure is a right of the account, not of the
+// credential that created it.
+func RegisterRoutes(router chi.Router, service *Service, ssoOnly bool, credentialLimiter, sessionLimiter, requireAuth func(http.Handler) http.Handler, clearCookie func(http.ResponseWriter, *http.Request)) {
+	handler := newHandler(service, clearCookie)
 	if !ssoOnly {
 		router.With(credentialLimiter).Post("/auth/register", handler.register)
 		router.With(credentialLimiter).Post("/auth/login", handler.login)
 	}
 	router.With(sessionLimiter, requireAuth).Get("/auth/me", handler.me)
+	router.With(sessionLimiter, requireAuth).Delete("/auth/me", handler.deleteMe)
 }
