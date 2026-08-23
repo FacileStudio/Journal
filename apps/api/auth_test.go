@@ -15,6 +15,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 	"github.com/go-chi/chi/v5"
+	"gorm.io/gorm"
 )
 
 // liveRouter is the real router over a real database, which is what it takes
@@ -23,7 +24,14 @@ import (
 // against a table porte does not know about. All three are database behaviour.
 func liveRouter(t *testing.T) chi.Router {
 	t.Helper()
-	db := testdb.Migrated(t)
+	return routerOver(t, testdb.Migrated(t))
+}
+
+// routerOver builds that router over a database the caller migrated itself,
+// which is what it takes to sign in as an account that predates the migration:
+// the rows have to be there before the schema moves under them.
+func routerOver(t *testing.T, db *gorm.DB) chi.Router {
+	t.Helper()
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
@@ -203,5 +211,41 @@ func claims(subject, email, name string, verified bool) porte.Claims {
 		Email:         email,
 		Name:          name,
 		EmailVerified: verified,
+	}
+}
+
+// An account that registered through this app after the porte v0.2 deploy has
+// its password identity keyed on the email address and an empty
+// users.password_hash — the adoption INSERT skips it, because there is nothing
+// left in the users table to adopt. porte v0.3 resolves the address to a user id
+// and reads the credential by that id, so nothing but the re-key can find that
+// row again, and the bump locks the account out for good.
+//
+// It fails the way migrations fail: a correct password answered "invalid email
+// or password", with the credential still in the table and nothing in the logs.
+// So the migration is exercised from the login form rather than from the table.
+func TestAPasswordKeyedTheOldWayStillSignsIn(t *testing.T) {
+	db := testdb.Migrated(t)
+	router := routerOver(t, db)
+
+	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
+		"email": "someone@facile.studio", "name": "Someone", "password": "a-long-enough-password",
+	})
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("register = %d: %s", registered.Code, registered.Body)
+	}
+	if err := db.Exec(`UPDATE porte_identities SET subject = 'someone@facile.studio' WHERE provider = 'local'`).Error; err != nil {
+		t.Fatalf("key the identity the way porte v0.2 did: %v", err)
+	}
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("the migration this deploy carries: %v", err)
+	}
+
+	signedIn := call(t, router, http.MethodPost, "/api/auth/login", "", map[string]string{
+		"email": "someone@facile.studio", "password": "a-long-enough-password",
+	})
+	if signedIn.Code != http.StatusOK {
+		t.Fatalf("an account that could sign in yesterday cannot today: %d %s", signedIn.Code, signedIn.Body)
 	}
 }

@@ -71,11 +71,12 @@ job, which is idle by design. Both transports are the same row, so one logout en
 Passwords are `porte/local`'s: Argon2id (64 MiB, 3 iterations, parallelism 2, 16-byte salt,
 32-byte key) in the standard `$argon2id$…` encoding, unchanged from what this app hashed
 before, so every stored hash keeps verifying. A password is an identity row under the provider
-`local`, keyed on the normalised address — so one human can hold a password and an SSO subject
-at once, and either signs them into the same account. A login for an unknown email runs
-`authcrypto.EqualizeTiming` against a throwaway hash so response timing does not leak
-account existence. Registration takes a `pg_advisory_xact_lock` and counts users inside the
-transaction: the first account created becomes admin, and `ALLOW_REGISTRATION=false` only
+`local`, keyed on the account id since porte v0.3 — so one human can hold a password and an SSO
+subject at once, and either signs them into the same account. The address is looked up rather
+than keyed on, which is why changing one touches the user row and nothing else. A login for an
+unknown email runs `authcrypto.EqualizeTiming` against a throwaway hash so response timing does
+not leak account existence. Registration takes a `pg_advisory_xact_lock` and counts users inside
+the transaction: the first account created becomes admin, and `ALLOW_REGISTRATION=false` only
 blocks sign-ups once at least one account exists. The single sign-on callback goes through the
 same lock and the same rule, in `modules/auth`'s `UserStore` — porte resolves the identity and
 hands over the claims, and Journal decides what an account is.

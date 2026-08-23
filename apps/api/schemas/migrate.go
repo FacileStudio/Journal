@@ -56,9 +56,13 @@ func Migrate(db *gorm.DB) error {
 // method porte needs to resolve a callback to a row in it. The other three
 // stores come from porte/pg unchanged — they only ever touch the tables below.
 //
-// Kept verbatim from porte otherwise, column for column: pg's queries are
+// Kept verbatim from porte otherwise, statement for statement: pg's queries are
 // written against these names and a divergence here would surface as a runtime
-// error on the login path rather than at boot.
+// error on the login path rather than at boot. That includes porte v0.3.0's
+// re-key of a password identity onto the account id — this app never calls
+// portepg.EnsureSchema, so a migration living only in porte's own Schema would
+// never run here and every existing password login would answer "invalid email
+// or password" to the right password.
 const porteSchema = `
 CREATE TABLE IF NOT EXISTS porte_identities (
 	user_id         bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -77,6 +81,9 @@ CREATE TABLE IF NOT EXISTS porte_identities (
 CREATE INDEX IF NOT EXISTS porte_identities_user_idx ON porte_identities (user_id);
 ALTER TABLE porte_identities ADD COLUMN IF NOT EXISTS created_at timestamptz;
 ALTER TABLE porte_identities ALTER COLUMN created_at SET DEFAULT now();
+
+UPDATE porte_identities SET subject = user_id::text
+ WHERE provider = 'local' AND subject <> user_id::text;
 
 CREATE TABLE IF NOT EXISTS porte_sessions (
 	id           bigserial PRIMARY KEY,
@@ -140,12 +147,18 @@ $$;
 // password. The hashes are byte-identical — porte/local uses the parameters
 // this app already used — so the move is a copy and nobody resets anything.
 //
+// The subject is the account id, which is what porte.LocalSubject returns since
+// v0.3.0. It used to be the address, and this statement runs after the re-key
+// above on every boot: writing the address here would insert a fresh
+// address-keyed row immediately after the migration had finished removing them,
+// with the stale hash from the users table.
+//
 // The source column is deliberately left in place. Blanking it in the same
 // deploy would make the change unrollbackable for the sake of tidiness, and a
 // column nothing reads can be dropped on any later day.
 const adoptExistingPasswords = `
 INSERT INTO porte_identities (user_id, provider, subject, password_hash)
-SELECT id, 'local', email, password_hash
+SELECT id, 'local', id::text, password_hash
   FROM users
  WHERE password_hash <> ''
 ON CONFLICT (provider, subject) DO NOTHING;

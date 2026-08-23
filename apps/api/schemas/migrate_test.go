@@ -7,6 +7,8 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte/local"
+
+	"gorm.io/gorm"
 )
 
 // Adopting porte moves sessions from Journal's own table to porte's. Both
@@ -126,21 +128,13 @@ func TestDeletingAUserRevokesItsSessions(t *testing.T) {
 // identity row. If this fails, the deploy answers "invalid email or password"
 // to every correct password an existing user types — the hash is still in the
 // users table and nothing reads it there any more.
+//
+// The row is keyed on the account id, which is what porte.LocalSubject returns
+// and what porte/local looks a credential up by. Keying it on the address, as
+// v0.2 did, puts the credential somewhere nothing reads.
 func TestExistingPasswordsKeepWorking(t *testing.T) {
 	db := testdb.Open(t)
-	if err := db.AutoMigrate(&schemas.User{}); err != nil {
-		t.Fatalf("seed the pre-porte users table: %v", err)
-	}
-	hash, err := local.HashPassword("a-long-enough-password")
-	if err != nil {
-		t.Fatalf("hash: %v", err)
-	}
-	if err := db.Exec(
-		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at)
-		 VALUES (1, 'someone@facile.studio', 'Someone', ?, true, now())`, hash,
-	).Error; err != nil {
-		t.Fatalf("seed the account: %v", err)
-	}
+	seedPrePorteAccount(t, db)
 
 	if err := schemas.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -150,8 +144,8 @@ func TestExistingPasswordsKeepWorking(t *testing.T) {
 		UserID       int64
 		PasswordHash string
 	}
-	err = db.Raw(
-		`SELECT user_id, password_hash FROM porte_identities WHERE provider = 'local' AND subject = 'someone@facile.studio'`,
+	err := db.Raw(
+		`SELECT user_id, password_hash FROM porte_identities WHERE provider = 'local' AND subject = '1'`,
 	).Scan(&adopted).Error
 	if err != nil {
 		t.Fatalf("read the adopted identity: %v", err)
@@ -196,5 +190,107 @@ func TestTheAvatarColumnIsNeverNull(t *testing.T) {
 	}
 	if user.AvatarURL != "" {
 		t.Fatalf("avatar_url = %q, want empty", user.AvatarURL)
+	}
+}
+
+// porte v0.3.0 keys a password identity on the account id instead of the email
+// address, and that re-key is a migration Journal has to carry itself: this app
+// runs its own copy of porte's schema against its own users table and never
+// calls portepg.EnsureSchema, so a statement living only in porte's pg.Schema
+// never reaches this database. Without it porte/local resolves the address to a
+// user id, looks the credential up by that id, finds nothing, and every
+// existing password login answers "invalid email or password" to the right
+// password.
+//
+// The identity is put back the way v0.2 left it and the migration run again,
+// which is both the upgrade a live database performs and the proof that the
+// statement is idempotent. The federated subject is the identity provider's and
+// must not move with it.
+func TestPasswordIdentitiesAreRekeyedOntoTheAccountID(t *testing.T) {
+	db := testdb.Open(t)
+	seedPrePorteAccount(t, db)
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	keyItTheOldWay(t, db)
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("the upgrade migration failed: %v", err)
+	}
+	assertKeyedOnTheAccountID(t, db)
+
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("the re-key is not idempotent: %v", err)
+	}
+	assertKeyedOnTheAccountID(t, db)
+}
+
+// seedPrePorteAccount writes the users row a v0.1 install had: a real argon2id
+// hash in users.password_hash, which is what the adoption moves.
+func seedPrePorteAccount(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	if err := db.AutoMigrate(&schemas.User{}); err != nil {
+		t.Fatalf("seed the pre-porte users table: %v", err)
+	}
+	hash, err := local.HashPassword("a-long-enough-password")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at)
+		 VALUES (1, 'someone@facile.studio', 'Someone', ?, true, now())`, hash,
+	).Error; err != nil {
+		t.Fatalf("seed the account: %v", err)
+	}
+}
+
+// keyItTheOldWay returns the database to the state porte v0.2 left it in: the
+// password identity keyed on the address, beside a federated one keyed on the
+// subject its provider issued.
+func keyItTheOldWay(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	statements := []string{
+		`UPDATE porte_identities SET subject = 'someone@facile.studio' WHERE provider = 'local' AND user_id = 1`,
+		`INSERT INTO porte_identities (user_id, provider, subject) VALUES (1, 'https://sso.test/', 'sub-1')`,
+	}
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatalf("restore the v0.2 keying: %v", err)
+		}
+	}
+}
+
+// assertKeyedOnTheAccountID is the whole contract: one local identity per
+// account, keyed on the id, with the hash it was adopted with, and a federated
+// subject the re-key never touched.
+func assertKeyedOnTheAccountID(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	var subject, hash string
+	err := db.Raw(`SELECT subject, password_hash FROM porte_identities WHERE provider = 'local' AND user_id = 1`).
+		Row().Scan(&subject, &hash)
+	if err != nil {
+		t.Fatalf("read the local identity: %v", err)
+	}
+	if subject != "1" {
+		t.Fatalf("subject = %q, want the account id: porte v0.3 looks a password up by id, so this credential is unreachable", subject)
+	}
+	if !local.VerifyPassword("a-long-enough-password", hash) {
+		t.Fatal("the re-key lost the password hash it was supposed to carry")
+	}
+
+	var locals int64
+	if err := db.Raw(`SELECT count(*) FROM porte_identities WHERE provider = 'local'`).Scan(&locals).Error; err != nil {
+		t.Fatalf("count the local identities: %v", err)
+	}
+	if locals != 1 {
+		t.Fatalf("%d local identities on one account, so one of them is a password nobody can see", locals)
+	}
+
+	var federated string
+	if err := db.Raw(`SELECT subject FROM porte_identities WHERE provider = 'https://sso.test/'`).Scan(&federated).Error; err != nil {
+		t.Fatalf("read the federated identity: %v", err)
+	}
+	if federated != "sub-1" {
+		t.Fatalf("the re-key moved a federated subject to %q; it belongs to the identity provider", federated)
 	}
 }
