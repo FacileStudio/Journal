@@ -1,16 +1,4 @@
 services:
-  db-password-fix:
-    container_name: journal-db-password-fix
-    image: docker:27-cli
-    restart: "no"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: >
-      sh -c "docker exec journal-db psql -U journal -d journal -c \"ALTER USER journal WITH PASSWORD 'journal-internal-db';\" && echo PASSWORD-RESET-OK"
-    depends_on:
-      journal-db:
-        condition: service_healthy
-
   journal-db:
     container_name: journal-db
     image: postgres:16-alpine
