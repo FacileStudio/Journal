@@ -21,6 +21,13 @@ type Config struct {
 	// it and makes the other four required. porte.Config.Validate does the
 	// checking, at boot, in oidc.New — a missing client secret must not
 	// become a 500 on the first login attempt three days later.
+	//
+	// OIDC_CLI_AUDIENCE is the client id the suite's CLI holds its
+	// device-grant token under, and setting it is what mounts porte's device
+	// exchange so one `facile login` serves Journal too. It is deliberately
+	// not OIDC_CLIENT_ID: the token being traded was minted for the CLI, not
+	// for Journal. It is deliberately not the machine audience either, which
+	// names this app and arms a different path.
 	Porte porte.Config
 }
 
@@ -60,6 +67,7 @@ func Load() (Config, error) {
 		ClientSecret: troncenv.String("OIDC_CLIENT_SECRET", ""),
 		RedirectURL:  troncenv.String("OIDC_REDIRECT_URL", ""),
 		SuccessURL:   troncenv.String("OIDC_SUCCESS_URL", ""),
+		CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
 	}
 	if cfg.Porte.SSOOnly, err = troncenv.Bool("SSO_ONLY", false); err != nil {
 		return Config{}, err

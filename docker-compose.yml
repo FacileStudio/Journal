@@ -55,6 +55,11 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
       OIDC_SUCCESS_URL: ${OIDC_SUCCESS_URL:-}
+      # The client id the suite CLI's device-grant token carries. Setting it
+      # mounts porte's device exchange, which is what lets one `facile login`
+      # sign in here too. Unset, the route is absent and the CLI falls back to
+      # its browser flow, so this is additive and safe to leave empty.
+      OIDC_CLI_AUDIENCE: ${OIDC_CLI_AUDIENCE:-}
       SSO_ONLY: ${SSO_ONLY:-false}
       OIDC_CLAIMS_SCOPE: ${OIDC_CLAIMS_SCOPE:-}
       AVATAR_DIR: /data/avatars
