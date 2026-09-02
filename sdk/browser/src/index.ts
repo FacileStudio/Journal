@@ -66,7 +66,7 @@ export type BreadcrumbCategory = 'console' | 'navigation' | 'ui';
 
 export type Breadcrumb = {
 	category: BreadcrumbCategory;
-	message: string;
+	message?: string;
 	level: JournalLevel;
 	timestamp: string;
 	data?: Record<string, unknown>;
@@ -135,6 +135,7 @@ export function createJournal(options: JournalOptions): Journal {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let mutedUntil = 0;
 	let breadcrumbs: Breadcrumb[] = [];
+	let previousUrl = currentURL();
 
 	/** Ring buffer for breadcrumbs — max 50 entries. */
 	function pushBreadcrumb(bc: Breadcrumb) {
@@ -371,7 +372,7 @@ export function createJournal(options: JournalOptions): Journal {
 			.slice(0, 3)
 			.map((arg) => {
 				const text = typeof arg === 'string' ? arg : safeStringify(arg);
-				return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+				return text.length > 1024 ? `${text.slice(0, 1024)}…` : text;
 			})
 			.join(' ');
 	}
@@ -412,17 +413,23 @@ export function createJournal(options: JournalOptions): Journal {
 		const origPush = history.pushState.bind(history);
 		const origReplace = history.replaceState.bind(history);
 		history.pushState = (data, title, url) => {
+			const from = previousUrl;
 			const result = origPush(data, title, url);
-			pushBreadcrumb({ category: 'navigation', message: `pushState: ${title || ''}`, level: 'info', timestamp: new Date().toISOString(), data: { url: String(url ?? '') } });
+			previousUrl = currentURL();
+			pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: String(url ?? '') } });
 			return result;
 		};
 		history.replaceState = (data, title, url) => {
+			const from = previousUrl;
 			const result = origReplace(data, title, url);
-			pushBreadcrumb({ category: 'navigation', message: `replaceState: ${title || ''}`, level: 'info', timestamp: new Date().toISOString(), data: { url: String(url ?? '') } });
+			previousUrl = currentURL();
+			pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: String(url ?? '') } });
 			return result;
 		};
 		const onPop = () => {
-			pushBreadcrumb({ category: 'navigation', message: 'popstate', level: 'info', timestamp: new Date().toISOString() });
+			const from = previousUrl;
+			previousUrl = currentURL();
+			pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: previousUrl } });
 		};
 		window.addEventListener('popstate', onPop);
 		return () => {

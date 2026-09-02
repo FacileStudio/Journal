@@ -535,7 +535,9 @@ test('navigation wrapping captures pushState and popstate', async () => {
 
 	expect(sent[0].breadcrumbs).toHaveLength(1);
 	expect(sent[0].breadcrumbs[0].category).toBe('navigation');
-	expect(sent[0].breadcrumbs[0].message).toMatch(/pushState.*cart/);
+	expect(sent[0].breadcrumbs[0].message).toBeUndefined();
+	expect(sent[0].breadcrumbs[0].data?.from).toBeDefined();
+	expect(sent[0].breadcrumbs[0].data?.to).toBe('/cart');
 	undo();
 	delete (globalThis as unknown as { history?: unknown }).history;
 });
