@@ -1,135 +1,135 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
-	import { Alert, Button, Drawer, Spinner, icons } from '@facile/muse';
-	import { backend, type LogEntry } from '$lib/backend';
-	import { formatTime } from '$lib/format';
-	import LevelBadge from './LevelBadge.svelte';
+	import { Alert, Button, Drawer, Icon, Spinner, icons, toast } from '@facile/muse';
 
-	const MAX = 200;
-	const STEP = 50;
+	type LogEntry = {
+		id: number;
+		app: string;
+		level: string;
+		message: string;
+		meta?: Record<string, unknown>;
+		created_at: string;
+		received_at: string;
+	};
 
 	let { anchorId = $bindable<number | null>(null) }: { anchorId?: number | null } = $props();
 
-	let entries = $state<LogEntry[]>([]);
-	let resolvedAnchor = $state<number | null>(null);
-	let before = $state(STEP);
-	let after = $state(STEP);
-	let loading = $state(false);
-	let error = $state('');
-
 	const open = $derived(anchorId !== null);
 
-	/*
-	 * `inFlight` is the anchor the current request belongs to. Widening the window refetches the
-	 * whole range rather than appending, so an answer for a previous anchor must never land.
-	 */
-	let inFlight = 0;
+	let entry = $state<LogEntry | null>(null);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-	async function fetchContext(id: number) {
-		inFlight = id;
-		loading = true;
-		error = '';
-		try {
-			const res = await backend.logContext(id, before, after);
-			if (inFlight !== id) return;
-			entries = res.entries;
-			resolvedAnchor = res.anchor_id;
-		} catch (err) {
-			if (inFlight !== id) return;
-			error = err instanceof Error ? err.message : 'Failed to load context';
-		} finally {
-			if (inFlight === id) loading = false;
-		}
-	}
-
-	/*
-	 * `untrack` is load-bearing. `fetchContext` reads `before`/`after`, so without it the effect
-	 * depends on the two values it also resets — widening the window would fire the effect, snap
-	 * the window back to 50 and refetch, silently undoing every "Load older". Only a new anchor
-	 * may re-arm this.
-	 */
 	$effect(() => {
-		const id = anchorId;
-		if (id === null) return;
-		untrack(() => {
-			before = STEP;
-			after = STEP;
-			entries = [];
-			resolvedAnchor = null;
-			void fetchContext(id);
-		});
+		if (open && anchorId !== null) {
+			loading = true;
+			error = null;
+			fetch(`/api/logs/${anchorId}`)
+				.then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+				.then((data: LogEntry) => {
+					entry = data;
+				})
+				.catch((e: unknown) => {
+					error = e instanceof Error ? e.message : 'Could not load this entry.';
+				})
+				.finally(() => {
+					loading = false;
+				});
+		} else if (!open) {
+			entry = null;
+		}
 	});
 
-	function extend(side: 'before' | 'after') {
-		const id = anchorId;
-		if (id === null) return;
-		if (side === 'before') before = Math.min(before + STEP, MAX);
-		else after = Math.min(after + STEP, MAX);
-		void fetchContext(id);
+	function onClose() {
+		anchorId = null;
+	}
+
+	/** Renders the whole entry as a plain-text block, ready to paste into another tool. */
+	function contextText(e: LogEntry): string {
+		const lines = [
+			`ID:           ${e.id}`,
+			`App:          ${e.app}`,
+			`Level:        ${e.level}`,
+			`Created:      ${e.created_at}`,
+			`Received:     ${e.received_at}`,
+			`Message:      ${e.message}`
+		];
+		if (e.meta && Object.keys(e.meta).length > 0) {
+			lines.push('', 'Meta:');
+			for (const [key, value] of Object.entries(e.meta)) {
+				let rendered: string;
+				try {
+					rendered = JSON.stringify(value);
+				} catch {
+					rendered = String(value);
+				}
+				lines.push(`  ${key}: ${rendered}`);
+			}
+		}
+		return lines.join('\n');
+	}
+
+	function copyEntry() {
+		if (!entry) return;
+		const text = contextText(entry);
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard
+				.writeText(text)
+				.then(() => toast.success('Entry context copied to clipboard.'))
+				.catch(() => toast.danger('Could not copy to clipboard.'));
+		} else {
+			toast.danger('Clipboard is not available in this browser.');
+		}
 	}
 </script>
 
 <Drawer
 	{open}
-	title="Log context"
-	description="The unfiltered stream around this entry."
-	showClose
-	onClose={() => (anchorId = null)}
-	class="max-w-fc-md"
+	title="Log entry"
+	description={entry ? `${entry.app} · ${entry.level}` : undefined}
+	onClose={onClose}
 >
-	<div class="flex flex-col gap-3">
-		{#if error}
-			<Alert tone="danger" title="Could not load context">{error}</Alert>
+	{#snippet footer()}
+		{#if entry}
+			<Button class="w-full" variant="outline" onclick={copyEntry}>
+				<Icon icon={icons.copy} size={16} />
+				Copy entry context
+			</Button>
 		{/if}
+	{/snippet}
 
-		<Button
-			size="sm"
-			variant="ghost"
-			icon={icons.chevronUp}
-			disabled={loading || after >= MAX}
-			onclick={() => extend('after')}
-		>
-			{after >= MAX ? 'Newer limit reached' : 'Load newer'}
-		</Button>
+	<div class="space-y-4 p-4">
+		{#if loading}
+			<div class="flex justify-center py-8">
+				<Spinner />
+			</div>
+		{:else if error}
+			<Alert tone="danger" title="Could not load this entry">{error}</Alert>
+		{:else if entry}
+			<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+				<dt class="text-fc-muted-foreground font-medium">ID</dt>
+				<dd class="font-mono">{entry.id}</dd>
+				<dt class="text-fc-muted-foreground font-medium">App</dt>
+				<dd>{entry.app}</dd>
+				<dt class="text-fc-muted-foreground font-medium">Level</dt>
+				<dd>{entry.level}</dd>
+				<dt class="text-fc-muted-foreground font-medium">Created</dt>
+				<dd>{entry.created_at}</dd>
+				<dt class="text-fc-muted-foreground font-medium">Received</dt>
+				<dd>{entry.received_at}</dd>
+				<dt class="text-fc-muted-foreground font-medium pt-2">Message</dt>
+				<dd class="pt-2">{entry.message}</dd>
+			</dl>
 
-		{#if loading && entries.length === 0}
-			<div class="flex justify-center py-10"><Spinner /></div>
-		{:else if entries.length === 0}
-			<p class="py-10 text-center text-fc-sm text-fc-fg-muted">No surrounding entries.</p>
-		{:else}
-			<ul class="flex flex-col">
-				{#each entries as entry (entry.id)}
-					<li
-						class="flex flex-col gap-1 border-t border-fc-border py-2 first:border-t-0 {entry.id ===
-						resolvedAnchor
-							? 'bg-fc-surface'
-							: ''}"
-					>
-						<div class="flex flex-wrap items-center gap-2">
-							<span class="font-fc-mono text-fc-xs text-fc-fg-muted">
-								{formatTime(entry.created_at)}
-							</span>
-							<span class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs">
-								{entry.app}
-							</span>
-							<LevelBadge level={entry.level} />
-						</div>
-						<p class="font-fc-mono text-fc-xs break-words whitespace-pre-wrap text-fc-fg">
-							{entry.message}
-						</p>
-					</li>
-				{/each}
-			</ul>
+			{#if entry.meta && Object.keys(entry.meta).length > 0}
+				<div>
+					<h3 class="text-fc-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
+						Meta
+					</h3>
+					<pre class="bg-fc-muted/40 text-fc-foreground overflow-auto rounded-lg p-3 text-xs"><code
+							>{JSON.stringify(entry.meta, null, 2)}</code
+						></pre>
+				</div>
+			{/if}
 		{/if}
-
-		<Button
-			size="sm"
-			variant="ghost"
-			icon={icons.chevronDown}
-			disabled={loading || before >= MAX}
-			onclick={() => extend('before')}
-		>
-			{before >= MAX ? 'Older limit reached' : 'Load older'}
-		</Button>
 	</div>
 </Drawer>
