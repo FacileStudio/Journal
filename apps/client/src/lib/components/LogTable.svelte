@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Icon, Button, EmptyState, Spinner, Table, icons } from '@facile/muse';
+	import { Icon, Button, EmptyState, Spinner, Table, icons, toast } from '@facile/muse';
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
@@ -113,6 +113,43 @@
 		delete rest['stack'];
 		if (Object.keys(rest).length === 0) return null;
 		return JSON.stringify(rest, null, 2);
+	}
+
+	/** Renders the whole entry as a plain-text block, ready to paste into another tool. */
+	function contextText(e: LogEntry): string {
+		const lines = [
+			`ID:           ${e.id}`,
+			`App:          ${e.app}`,
+			`Level:        ${e.level}`,
+			`Created:      ${e.created_at}`,
+			`Received:     ${e.received_at}`,
+			`Message:      ${e.message}`
+		];
+		if (e.meta && Object.keys(e.meta).length > 0) {
+			lines.push('', 'Meta:');
+			for (const [key, value] of Object.entries(e.meta)) {
+				let rendered: string;
+				try {
+					rendered = JSON.stringify(value);
+				} catch {
+					rendered = String(value);
+				}
+				lines.push(`  ${key}: ${rendered}`);
+			}
+		}
+		return lines.join('\n');
+	}
+
+	function copyEntry(entry: LogEntry) {
+		const text = contextText(entry);
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard
+				.writeText(text)
+				.then(() => toast.success('Entry context copied to clipboard.'))
+				.catch(() => toast.danger('Could not copy to clipboard.'));
+		} else {
+			toast.danger('Clipboard is not available in this browser.');
+		}
 	}
 </script>
 
@@ -254,6 +291,14 @@
 											Context
 										</Button>
 									{/if}
+									<Button
+										size="sm"
+										variant="outline"
+										icon={icons.copy}
+										onclick={() => copyEntry(entry)}
+									>
+										Copy
+									</Button>
 									{#if sourceOf(entry) && onPivotSource}
 										<Button
 											size="sm"
