@@ -3,7 +3,8 @@ WORKDIR /client
 COPY apps/client/package.json apps/client/bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY apps/client/ .
-RUN bun run build
+ARG BUILD_TIMESTAMP
+RUN echo "Building at ${BUILD_TIMESTAMP:-unknown}" && bun run build
 
 FROM golang:1.26-alpine AS api-build
 
