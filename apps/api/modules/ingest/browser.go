@@ -15,16 +15,16 @@ import (
 )
 
 const (
-	maxBrowserEvents        = 20
-	maxBrowserBodyBytes     = 192 << 10
-	maxBrowserMetaBytes     = 8 << 10
-	maxBrowserStringBytes   = 2000
-	maxBrowserStackBytes    = 8000
-	maxBrowserArrayLen      = 50
-	maxBrowserMetaDepth     = 6
-	maxBrowserCount         = 10_000
-	maxBrowserBreadcrumbs   = 50
-	maxBreadcrumbDataBytes  = 1024
+	maxBrowserEvents       = 20
+	maxBrowserBodyBytes    = 192 << 10
+	maxBrowserMetaBytes    = 8 << 10
+	maxBrowserStringBytes  = 2000
+	maxBrowserStackBytes   = 8000
+	maxBrowserArrayLen     = 50
+	maxBrowserMetaDepth    = 6
+	maxBrowserCount        = 10_000
+	maxBrowserBreadcrumbs  = 50
+	maxBreadcrumbDataBytes = 1024
 )
 
 // scrubbedKeys never reach the database, whatever an app puts in meta.
