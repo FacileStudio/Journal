@@ -163,7 +163,7 @@
 {:else if entries.length === 0}
 	<EmptyState icon={icons.filter} title={emptyTitle} description={emptyDescription} />
 {:else}
-	<Table>
+	<Table class="table-fixed">
 		<thead>
 			<tr>
 				<th scope="col" class="whitespace-nowrap">Time</th>
@@ -242,8 +242,8 @@
 				{#if expandedId === entry.id}
 					<tr class="bg-fc-surface">
 						<td colspan="5">
-							<div class="flex min-w-0 flex-col gap-4 py-2">
-								<p class="font-fc-mono text-fc-xs break-words whitespace-pre-wrap text-fc-fg">
+							<div class="flex min-w-0 flex-col gap-4 py-2 overflow-hidden">
+								<p class="font-fc-mono text-fc-xs break-words whitespace-pre-wrap text-fc-fg min-w-0">
 									{entry.message}
 								</p>
 								{#if stackOf(entry)}
@@ -252,25 +252,25 @@
 										<!-- Resolved frames read as source locations; the ones no map
 										     explained keep their bundle position so the trace stays whole. -->
 										<div
-											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed"
+											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed min-w-0"
 										>
 											{#each stack.frames as frame (frame.raw)}
-												<div class={frame.resolved ? 'text-fc-fg' : 'text-fc-fg-muted'}>
+												<div class={frame.resolved ? 'text-fc-fg break-all' : 'text-fc-fg-muted break-all'}>
 													{frameLabel(frame)}
 												</div>
 											{/each}
 										</div>
-										<p class="text-fc-xs text-fc-fg-muted">
+										<p class="text-fc-xs text-fc-fg-muted break-all">
 											{stack.resolved} of {stack.frames.length} frames mapped from release
 											<span class="font-fc-mono">{stack.release}</span>.
 										</p>
 									{:else}
 										<pre
-											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed text-fc-fg-muted">{stackOf(
+											class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs leading-relaxed text-fc-fg-muted min-w-0 break-all whitespace-pre-wrap">{stackOf(
 												entry
 											)}</pre>
 										{#if stack && stack !== 'loading' && stack.release && stack.resolved === 0}
-											<p class="text-fc-xs text-fc-fg-muted">
+											<p class="text-fc-xs text-fc-fg-muted break-all">
 												No source map uploaded for release
 												<span class="font-fc-mono">{stack.release}</span>.
 											</p>
@@ -279,7 +279,7 @@
 								{/if}
 								{#if metaOf(entry)}
 									<pre
-										class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs text-fc-fg">{metaOf(
+										class="overflow-x-auto rounded-fc-sm bg-fc-bg p-3 font-fc-mono text-fc-xs text-fc-fg min-w-0 break-all whitespace-pre-wrap">{metaOf(
 											entry
 										)}</pre>
 								{:else}
