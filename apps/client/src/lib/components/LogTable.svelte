@@ -31,6 +31,7 @@
 	} = $props();
 
 	let expandedId = $state<number | null>(null);
+	let copiedId = $state<number | null>(null);
 
 	const gaps = $derived(new Set(gapIds));
 
@@ -145,7 +146,11 @@
 		if (navigator.clipboard && navigator.clipboard.writeText) {
 			navigator.clipboard
 				.writeText(text)
-				.then(() => toast.success('Entry context copied to clipboard.'))
+				.then(() => {
+					copiedId = entry.id;
+					toast.success('Entry context copied to clipboard.');
+					setTimeout(() => (copiedId = null), 2000);
+				})
 				.catch(() => toast.danger('Could not copy to clipboard.'));
 		} else {
 			toast.danger('Clipboard is not available in this browser.');
@@ -294,10 +299,12 @@
 									<Button
 										size="sm"
 										variant="outline"
-										icon={icons.copy}
+										icon={copiedId === entry.id ? icons.check : icons.copy}
 										onclick={() => copyEntry(entry)}
+										disabled={copiedId === entry.id}
+										class="transition-colors duration-200"
 									>
-										Copy
+										{copiedId === entry.id ? 'Copied' : 'Copy'}
 									</Button>
 									{#if sourceOf(entry) && onPivotSource}
 										<Button
