@@ -31,7 +31,7 @@ jobs:
       - name: Build and push collector
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: apps/collector/
           file: apps/collector/Dockerfile
           push: true
           tags: ghcr.io/facilestudio/journal/collector:latest
