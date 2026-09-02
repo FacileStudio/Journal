@@ -10,6 +10,7 @@
 const MAX_BATCH = 20;
 const DEDUPE_WINDOW_MS = 60000;
 const MAX_QUEUE = 50;
+const MAX_BREADCRUMBS = 50;
 const SESSION_KEY = 'journal.session';
 /**
  * Noise every page produces and nobody has ever fixed. Reporting it trains
@@ -45,6 +46,19 @@ export function createJournal(options) {
     let sent = 0;
     let timer = null;
     let mutedUntil = 0;
+    let breadcrumbs = [];
+    let previousUrl = currentURL();
+    /** Ring buffer for breadcrumbs — max 50 entries. */
+    function pushBreadcrumb(bc) {
+        breadcrumbs.push(bc);
+        if (breadcrumbs.length > MAX_BREADCRUMBS)
+            breadcrumbs = breadcrumbs.slice(-MAX_BREADCRUMBS);
+    }
+    function takeBreadcrumbs() {
+        const batch = breadcrumbs;
+        breadcrumbs = [];
+        return batch;
+    }
     /**
      * The same broken component renders sixty times a second. Collapsing
      * repeats into one event with a count is the difference between a
@@ -112,11 +126,12 @@ export function createJournal(options) {
             meta: { ...context, ...(extra?.meta ?? {}) }
         };
     }
-    async function send(events, beacon) {
+    async function send(events, beacon, breadcrumbsToSend) {
         const body = JSON.stringify({
             release: options.release,
             environment: options.environment,
             session_id: sessionId,
+            breadcrumbs: breadcrumbsToSend.length > 0 ? breadcrumbsToSend : undefined,
             events
         });
         // text/plain keeps this a CORS simple request, so no preflight is
@@ -162,8 +177,9 @@ export function createJournal(options) {
         const batch = queue.slice(0, MAX_BATCH);
         queue = queue.slice(batch.length);
         sent += batch.length;
+        const breadcrumbBatch = takeBreadcrumbs();
         try {
-            const delivered = await send(batch, beacon);
+            const delivered = await send(batch, beacon, breadcrumbBatch);
             if (!delivered)
                 queue = [...batch, ...queue].slice(0, MAX_QUEUE);
         }
@@ -258,6 +274,76 @@ export function createJournal(options) {
             }
         });
     }
+    function formatConsoleArgs(args) {
+        return args
+            .slice(0, 3)
+            .map((arg) => {
+            const text = typeof arg === 'string' ? arg : safeStringify(arg);
+            return text.length > 1024 ? `${text.slice(0, 1024)}…` : text;
+        })
+            .join(' ');
+    }
+    function safeStringify(value) {
+        try {
+            return JSON.stringify(value);
+        }
+        catch {
+            return String(value);
+        }
+    }
+    function wrapConsole() {
+        const orig = {
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console)
+        };
+        console.log = (...args) => {
+            orig.log(...args);
+            pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'info', timestamp: new Date().toISOString() });
+        };
+        console.warn = (...args) => {
+            orig.warn(...args);
+            pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'warn', timestamp: new Date().toISOString() });
+        };
+        console.error = (...args) => {
+            orig.error(...args);
+            pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'error', timestamp: new Date().toISOString() });
+        };
+        return () => {
+            console.log = orig.log;
+            console.warn = orig.warn;
+            console.error = orig.error;
+        };
+    }
+    function wrapNavigation() {
+        const origPush = history.pushState.bind(history);
+        const origReplace = history.replaceState.bind(history);
+        history.pushState = (data, title, url) => {
+            const from = previousUrl;
+            const result = origPush(data, title, url);
+            previousUrl = currentURL();
+            pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: String(url ?? '') } });
+            return result;
+        };
+        history.replaceState = (data, title, url) => {
+            const from = previousUrl;
+            const result = origReplace(data, title, url);
+            previousUrl = currentURL();
+            pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: String(url ?? '') } });
+            return result;
+        };
+        const onPop = () => {
+            const from = previousUrl;
+            previousUrl = currentURL();
+            pushBreadcrumb({ category: 'navigation', level: 'info', timestamp: new Date().toISOString(), data: { from, to: previousUrl } });
+        };
+        window.addEventListener('popstate', onPop);
+        return () => {
+            history.pushState = origPush;
+            history.replaceState = origReplace;
+            window.removeEventListener('popstate', onPop);
+        };
+    }
     function install() {
         if (!enabled)
             return () => { };
@@ -281,12 +367,21 @@ export function createJournal(options) {
         window.addEventListener('pagehide', onPageHide);
         document.addEventListener('visibilitychange', onVisibilityChange);
         const uninstrument = instrument();
+        const unrestoreBreadcrumbs = [];
+        if (options.breadcrumbs?.console && typeof console !== 'undefined') {
+            unrestoreBreadcrumbs.push(wrapConsole());
+        }
+        if (options.breadcrumbs?.navigation && typeof history !== 'undefined') {
+            unrestoreBreadcrumbs.push(wrapNavigation());
+        }
         return () => {
             window.removeEventListener('error', onError);
             window.removeEventListener('unhandledrejection', onRejection);
             window.removeEventListener('pagehide', onPageHide);
             document.removeEventListener('visibilitychange', onVisibilityChange);
             uninstrument();
+            for (const restore of unrestoreBreadcrumbs)
+                restore();
         };
     }
     return {
@@ -303,7 +398,10 @@ export function createJournal(options) {
             context = { ...context, ...next };
         },
         flush: () => flush(),
-        install
+        install,
+        addBreadcrumb(bc) {
+            pushBreadcrumb({ ...bc, timestamp: new Date().toISOString() });
+        }
     };
 }
 /**
@@ -387,6 +485,9 @@ export function createDeferredJournal(load) {
                 uninstall?.();
                 uninstall = null;
             };
+        },
+        addBreadcrumb(bc) {
+            real?.addBreadcrumb(bc);
         }
     };
 }

@@ -39,6 +39,10 @@ export type JournalOptions = {
      */
     trace?: boolean | string[];
     debug?: boolean;
+    breadcrumbs?: {
+        console?: boolean;
+        navigation?: boolean;
+    };
 };
 export type JournalLevel = 'debug' | 'info' | 'warn' | 'error';
 export type JournalEvent = {
@@ -53,6 +57,14 @@ export type JournalEvent = {
     user?: JournalUser;
     meta?: Record<string, unknown>;
 };
+export type BreadcrumbCategory = 'console' | 'navigation' | 'ui';
+export type Breadcrumb = {
+    category: BreadcrumbCategory;
+    message?: string;
+    level: JournalLevel;
+    timestamp: string;
+    data?: Record<string, unknown>;
+};
 export type CaptureExtra = {
     level?: JournalLevel;
     kind?: string;
@@ -66,6 +78,7 @@ export type Journal = {
     setUser(user: JournalUser | null): void;
     setContext(context: Record<string, unknown>): void;
     flush(): Promise<void>;
+    addBreadcrumb(bc: Omit<Breadcrumb, 'timestamp'>): void;
     /** Wires window.onerror and unhandledrejection. Returns the undo. */
     install(): () => void;
 };
