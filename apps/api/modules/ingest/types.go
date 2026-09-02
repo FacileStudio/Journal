@@ -35,6 +35,7 @@ type BrowserRequest struct {
 	Release     string         `json:"release"`
 	Environment string         `json:"environment"`
 	SessionID   string         `json:"session_id"`
+	Breadcrumbs []Breadcrumb   `json:"breadcrumbs"`
 	Events      []BrowserEvent `json:"events"`
 }
 
@@ -57,4 +58,13 @@ type BrowserEvent struct {
 type BrowserUser struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
+}
+
+// Breadcrumb is one event in the ring buffer that led to a browser error.
+type Breadcrumb struct {
+	Level     string         `json:"level"`
+	Message   string         `json:"message"`
+	Category  string         `json:"category"`
+	Timestamp string         `json:"timestamp"`
+	Data      map[string]any `json:"data,omitempty"`
 }

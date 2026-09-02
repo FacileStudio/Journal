@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 
 import { createDeferredJournal, createJournal, type JournalEvent } from './index.js';
 
-type Sent = { events: JournalEvent[]; release?: string; session_id?: string };
+type Sent = { events: JournalEvent[]; release?: string; session_id?: string; breadcrumbs?: Breadcrumb[] };
 
 function withSessionStorage(storage: unknown, run: () => Promise<void>) {
 	const previous = (globalThis as { sessionStorage?: unknown }).sessionStorage;
@@ -440,4 +440,120 @@ test('a blocked sessionStorage still yields a session id', async () => {
 		expect(sent).toHaveLength(1);
 		expect(sent[0].session_id).toBeTruthy();
 	});
+});
+
+// Breadcrumbs — a 50-entry ring buffer that ships with every batch.
+
+test('explicit addBreadcrumb appears in the next batch', async () => {
+	const client = journal();
+	client.addBreadcrumb({ category: 'ui', message: 'user clicked checkout', level: 'info' });
+	client.captureError(new Error('payment failed'));
+	await client.flush();
+
+	expect(sent).toHaveLength(1);
+	expect(sent[0].breadcrumbs).toHaveLength(1);
+	expect(sent[0].breadcrumbs[0].message).toBe('user clicked checkout');
+	expect(sent[0].breadcrumbs[0].category).toBe('ui');
+});
+
+test('the ring buffer caps at 50 breadcrumbs', async () => {
+	const client = journal();
+	for (let i = 0; i < 60; i++) client.addBreadcrumb({ category: 'ui', message: String(i), level: 'info' });
+	client.captureError(new Error('boom'));
+	await client.flush();
+
+	expect(sent[0].breadcrumbs).toHaveLength(50);
+	expect(sent[0].breadcrumbs[0].message).toBe('10'); // the first 10 were shifted out
+});
+
+test('breadcrumbs are cleared after a flush', async () => {
+	const client = journal();
+	client.addBreadcrumb({ category: 'ui', message: 'before flush', level: 'info' });
+	client.captureError(new Error('first'));
+	await client.flush();
+
+	client.captureError(new Error('second'));
+	await client.flush();
+
+	expect(sent).toHaveLength(2);
+	expect(sent[0].breadcrumbs).toHaveLength(1);
+	expect(sent[1].breadcrumbs).toBeUndefined();
+});
+
+test('console wrapping captures log/warn/error as breadcrumbs', async () => {
+	const client = journal({ breadcrumbs: { console: true } });
+	const undo = client.install();
+
+	console.log('button clicked');
+	console.warn('deprecated api');
+	console.error('crash');
+
+	client.captureError(new Error('user error'));
+	await client.flush();
+
+	expect(sent[0].breadcrumbs).toHaveLength(3);
+	expect(sent[0].breadcrumbs[0].category).toBe('console');
+	expect(sent[0].breadcrumbs[0].level).toBe('info');
+	expect(sent[0].breadcrumbs[0].message).toBe('button clicked');
+	expect(sent[0].breadcrumbs[1].level).toBe('warn');
+	expect(sent[0].breadcrumbs[1].message).toBe('deprecated api');
+	expect(sent[0].breadcrumbs[2].level).toBe('error');
+	expect(sent[0].breadcrumbs[2].message).toBe('crash');
+	undo();
+});
+
+test('console wrapping restores originals on uninstall', async () => {
+	const client = journal({ breadcrumbs: { console: true } });
+	const undo = client.install();
+	undo();
+
+	// After uninstall, calling console.log should not create a breadcrumb
+	console.log('after uninstall');
+	client.captureError(new Error('still here'));
+	await client.flush();
+
+	expect(sent[0].breadcrumbs).toBeUndefined();
+});
+
+test('navigation wrapping captures pushState and popstate', async () => {
+	(globalThis as unknown as { history: unknown }).history = {
+		pushState: () => {},
+		replaceState: () => {},
+		length: 1,
+		state: null,
+		scrollRestoration: 'auto' as ScrollRestoration,
+		go: () => {},
+		back: () => {},
+		forward: () => {}
+	};
+	const client = journal({ breadcrumbs: { navigation: true } });
+	const undo = client.install();
+
+	history.pushState({}, 'cart', '/cart');
+	client.captureError(new Error('checkout error'));
+	await client.flush();
+
+	expect(sent[0].breadcrumbs).toHaveLength(1);
+	expect(sent[0].breadcrumbs[0].category).toBe('navigation');
+	expect(sent[0].breadcrumbs[0].message).toMatch(/pushState.*cart/);
+	undo();
+	delete (globalThis as unknown as { history?: unknown }).history;
+});
+
+test('addBreadcrumb on a deferred journal reaches the real client', async () => {
+	let resolve!: (o: Parameters<typeof createJournal>[0]) => void;
+	const client = createDeferredJournal(
+		() => new Promise((r) => (resolve = r as unknown as typeof resolve))
+	);
+
+	client.addBreadcrumb({ category: 'ui', message: 'held', level: 'info' });
+	client.captureError(new Error('held error'));
+
+	resolve({ url: 'https://journal.facile.studio/api', key: 'journal_pub_shop_test', flushIntervalMs: 10_000 });
+	await client.flush();
+
+	expect(sent).toHaveLength(1);
+	// Breadcrumbs added before config arrived are dropped (no pending buffer for them)
+	// but errors held before config arrive as usual.
+	expect(sent[0].events[0].message).toContain('held error');
 });

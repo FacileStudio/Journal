@@ -106,6 +106,10 @@ Found in review; none require design work.
       `EventSource`), never WebSocket.
 - [x] **Docker log collector sidecar** — tail container json-file logs on la ruche and ship to
       `/ingest`, so apps that only `console.log` are captured with zero code change.
+      Ships every container via docker.sock and uses the unscoped `INGEST_TOKEN`. Always-on:
+      the container starts unconditionally (no profile gate). Consumes stdout/stderr from the
+      container's own journald/json-file log. On restart it picks up from "now"; small loss
+      accepted.
 
 ## 2b. v1.3 — browser errors (the Sentry question)
 
@@ -136,7 +140,14 @@ one only pays at a volume this instance does not have yet:
 |---|---|
 | **Issue grouping** — `issues` table, fingerprint = type + normalized message + top in-app frame, `first_seen`/`last_seen`/status, a list-of-issues UI | the error stream is too noisy to read as a stream. Watch for a single fingerprint dominating a day |
 | ~~**Source maps**~~ | **Shipped 2026-08-11.** Uploaded by the app at boot from inside its own image, keyed on the release in `_app/version.json`; resolved on read via `GET /logs/{id}/stack`. Sablier is the first consumer |
-| **Breadcrumbs** — clicks, navigations, failed fetches, console, in a 50-entry ring | triage keeps ending in "I cannot reproduce it" |
+| ~~**Breadcrumbs** — a 50-entry ring buffer on the SDK, serialised into a
+      first-class `breadcrumbs` wire field (not `meta`), with explicit opt-in:
+      `breadcrumbs: { console: true, navigation: true, ui: true }`.
+      Console breadcrumbs wrap `console.log`/`warn`/`error`; navigation breadcrumbs track
+      `popstate`/`pushState`; UI breadcrumbs are pushed via `journal.addBreadcrumb()` (the
+      page calls it, not auto-instrumentation). Also a standalone
+      `journal.captureConsole(): () => void` for pages that want one-shot console capture
+      without full breadcrumbs. All scrubbed through the same credential filter. | **Shipped 2026-09-02.** |
 | **Wildcard origins** (`https://*.facile.studio`) | preview deployments per branch make an 8-entry exact list impractical |
 | **Preflight support** on `/ingest/browser` | a consumer that cannot send `text/plain`. Needs the app-wide CORS middleware to defer to the key's allowlist, which today it does not |
 
@@ -212,7 +223,7 @@ The remaining work is a `go get github.com/FacileStudio/tronc@v0.14.0` per app, 
 | Feature | Trigger |
 |---|---|
 | **Device envelope** — viewport, DPR, language, referrer, connection type in `meta` | the next time "it only breaks on narrow screens" costs a round trip to ask. Small enough to ride in `meta` as-is |
-| **Breadcrumbs** (see §2b) | unchanged — but re-read that table's GlitchTip rule first. Breadcrumbs need a first-class wire field, their own budget, a raised body cap and a drawer timeline; they are not a `meta` key |
+| ~~**Breadcrumbs** (see §2b) — same concrete shape: 50-entry ring buffer, first-class `breadcrumbs` wire field, three channels (console, navigation, UI), `journal.addBreadcrumb()` and `journal.captureConsole()`. The design constraint is unchanged: breadcrumbs need their own budget and body-cap bump; they cannot squeeze into the current 8 KB `meta` budget.~~ | **Shipped 2026-09-02.** |
 
 ## 3. Later drawer (open only on trigger)
 
@@ -223,6 +234,7 @@ The remaining work is a `go get github.com/FacileStudio/tronc@v0.14.0` per app, 
 | BRIN on `created_at` | pure time-range scans get slow on a huge table |
 | VictoriaLogs / ClickHouse migration (keep HTTP contract) | ~100M rows or aggregations time out |
 | Cookie-based dashboard sessions (`HttpOnly; Secure; SameSite`) | suite-wide auth decision — OWASP recommends it over localStorage, but changing it means diverging from the shared Nuage pattern; decide once for the suite, not per app |
+| **Sentry Replay / performance tracing** — DOM screenshots, LCP/CLS/spans. Too expensive for Journal's model: would blow the batch cap, the meta budget, and the daily quota. Journal is a log store, not an APM | someone explicitly asks for it |
 
 ## Explicit non-goals
 

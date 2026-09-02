@@ -15,14 +15,16 @@ import (
 )
 
 const (
-	maxBrowserEvents      = 20
-	maxBrowserBodyBytes   = 128 << 10
-	maxBrowserMetaBytes   = 8 << 10
-	maxBrowserStringBytes = 2000
-	maxBrowserStackBytes  = 8000
-	maxBrowserArrayLen    = 50
-	maxBrowserMetaDepth   = 6
-	maxBrowserCount       = 10_000
+	maxBrowserEvents        = 20
+	maxBrowserBodyBytes     = 192 << 10
+	maxBrowserMetaBytes     = 8 << 10
+	maxBrowserStringBytes   = 2000
+	maxBrowserStackBytes    = 8000
+	maxBrowserArrayLen      = 50
+	maxBrowserMetaDepth     = 6
+	maxBrowserCount         = 10_000
+	maxBrowserBreadcrumbs   = 50
+	maxBreadcrumbDataBytes  = 1024
 )
 
 // scrubbedKeys never reach the database, whatever an app puts in meta.
@@ -174,6 +176,32 @@ func browserMeta(event BrowserEvent, req BrowserRequest, scope authcontext.Inges
 	meta["source"] = "browser"
 	meta["origin"] = scope.Origin
 	put("user_agent", r.Header.Get("User-Agent"), 512)
+
+	if len(req.Breadcrumbs) > 0 {
+		capped := make([]any, 0, min(len(req.Breadcrumbs), maxBrowserBreadcrumbs))
+		for _, bc := range req.Breadcrumbs {
+			if len(capped) >= maxBrowserBreadcrumbs {
+				break
+			}
+			entry := map[string]any{
+				"level":     bc.Level,
+				"message":   capString(bc.Message, 1024),
+				"category":  bc.Category,
+				"timestamp": bc.Timestamp,
+			}
+			if bc.Data != nil {
+				scrubbed := scrubValue(bc.Data, 0).(map[string]any)
+				delete(scrubbed, "session_id")
+				encoded, err := json.Marshal(scrubbed)
+				if err == nil && len(encoded) > maxBreadcrumbDataBytes {
+					scrubbed = map[string]any{"[truncated]": true}
+				}
+				entry["data"] = scrubbed
+			}
+			capped = append(capped, entry)
+		}
+		meta["breadcrumbs"] = capped
+	}
 
 	if encoded, err := json.Marshal(meta); err == nil && len(encoded) > maxBrowserMetaBytes {
 		reduced := map[string]any{

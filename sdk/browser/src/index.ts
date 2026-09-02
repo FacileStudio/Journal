@@ -41,6 +41,10 @@ export type JournalOptions = {
 	 */
 	trace?: boolean | string[];
 	debug?: boolean;
+	breadcrumbs?: {
+		console?: boolean;
+		navigation?: boolean;
+	};
 };
 
 export type JournalLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -58,6 +62,16 @@ export type JournalEvent = {
 	meta?: Record<string, unknown>;
 };
 
+export type BreadcrumbCategory = 'console' | 'navigation' | 'ui';
+
+export type Breadcrumb = {
+	category: BreadcrumbCategory;
+	message: string;
+	level: JournalLevel;
+	timestamp: string;
+	data?: Record<string, unknown>;
+};
+
 export type CaptureExtra = {
 	level?: JournalLevel;
 	kind?: string;
@@ -70,6 +84,7 @@ export type CaptureExtra = {
 const MAX_BATCH = 20;
 const DEDUPE_WINDOW_MS = 60_000;
 const MAX_QUEUE = 50;
+const MAX_BREADCRUMBS = 50;
 const SESSION_KEY = 'journal.session';
 
 /**
@@ -92,6 +107,7 @@ export type Journal = {
 	setUser(user: JournalUser | null): void;
 	setContext(context: Record<string, unknown>): void;
 	flush(): Promise<void>;
+	addBreadcrumb(bc: Omit<Breadcrumb, 'timestamp'>): void;
 	/** Wires window.onerror and unhandledrejection. Returns the undo. */
 	install(): () => void;
 };
@@ -118,6 +134,18 @@ export function createJournal(options: JournalOptions): Journal {
 	let sent = 0;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let mutedUntil = 0;
+	let breadcrumbs: Breadcrumb[] = [];
+
+	/** Ring buffer for breadcrumbs — max 50 entries. */
+	function pushBreadcrumb(bc: Breadcrumb) {
+		breadcrumbs.push(bc);
+		if (breadcrumbs.length > MAX_BREADCRUMBS) breadcrumbs = breadcrumbs.slice(-MAX_BREADCRUMBS);
+	}
+	function takeBreadcrumbs(): Breadcrumb[] {
+		const batch = breadcrumbs;
+		breadcrumbs = [];
+		return batch;
+	}
 
 	/**
 	 * The same broken component renders sixty times a second. Collapsing
@@ -184,11 +212,12 @@ export function createJournal(options: JournalOptions): Journal {
 		};
 	}
 
-	async function send(events: JournalEvent[], beacon: boolean): Promise<boolean> {
+	async function send(events: JournalEvent[], beacon: boolean, breadcrumbsToSend: Breadcrumb[]): Promise<boolean> {
 		const body = JSON.stringify({
 			release: options.release,
 			environment: options.environment,
 			session_id: sessionId,
+			breadcrumbs: breadcrumbsToSend.length > 0 ? breadcrumbsToSend : undefined,
 			events
 		});
 
@@ -240,8 +269,10 @@ export function createJournal(options: JournalOptions): Journal {
 		queue = queue.slice(batch.length);
 		sent += batch.length;
 
+		const breadcrumbBatch = takeBreadcrumbs();
+
 		try {
-			const delivered = await send(batch, beacon);
+			const delivered = await send(batch, beacon, breadcrumbBatch);
 			if (!delivered) queue = [...batch, ...queue].slice(0, MAX_QUEUE);
 		} catch (error) {
 			// The network is down or the origin is refused. Keep the events
@@ -335,6 +366,72 @@ export function createJournal(options: JournalOptions): Journal {
 		});
 	}
 
+	function formatConsoleArgs(args: unknown[]): string {
+		return args
+			.slice(0, 3)
+			.map((arg) => {
+				const text = typeof arg === 'string' ? arg : safeStringify(arg);
+				return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+			})
+			.join(' ');
+	}
+	function safeStringify(value: unknown): string {
+		try {
+			return JSON.stringify(value);
+		} catch {
+			return String(value);
+		}
+	}
+
+	function wrapConsole(): () => void {
+		const orig: { log: typeof console.log; warn: typeof console.warn; error: typeof console.error } = {
+			log: console.log.bind(console),
+			warn: console.warn.bind(console),
+			error: console.error.bind(console)
+		};
+		console.log = (...args: unknown[]) => {
+			orig.log(...args);
+			pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'info', timestamp: new Date().toISOString() });
+		};
+		console.warn = (...args: unknown[]) => {
+			orig.warn(...args);
+			pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'warn', timestamp: new Date().toISOString() });
+		};
+		console.error = (...args: unknown[]) => {
+			orig.error(...args);
+			pushBreadcrumb({ category: 'console', message: formatConsoleArgs(args), level: 'error', timestamp: new Date().toISOString() });
+		};
+		return () => {
+			console.log = orig.log;
+			console.warn = orig.warn;
+			console.error = orig.error;
+		};
+	}
+
+	function wrapNavigation(): () => void {
+		const origPush = history.pushState.bind(history);
+		const origReplace = history.replaceState.bind(history);
+		history.pushState = (data, title, url) => {
+			const result = origPush(data, title, url);
+			pushBreadcrumb({ category: 'navigation', message: `pushState: ${title || ''}`, level: 'info', timestamp: new Date().toISOString(), data: { url: String(url ?? '') } });
+			return result;
+		};
+		history.replaceState = (data, title, url) => {
+			const result = origReplace(data, title, url);
+			pushBreadcrumb({ category: 'navigation', message: `replaceState: ${title || ''}`, level: 'info', timestamp: new Date().toISOString(), data: { url: String(url ?? '') } });
+			return result;
+		};
+		const onPop = () => {
+			pushBreadcrumb({ category: 'navigation', message: 'popstate', level: 'info', timestamp: new Date().toISOString() });
+		};
+		window.addEventListener('popstate', onPop);
+		return () => {
+			history.pushState = origPush;
+			history.replaceState = origReplace;
+			window.removeEventListener('popstate', onPop);
+		};
+	}
+
 	function install(): () => void {
 		if (!enabled) return () => {};
 
@@ -359,12 +456,21 @@ export function createJournal(options: JournalOptions): Journal {
 		document.addEventListener('visibilitychange', onVisibilityChange);
 		const uninstrument = instrument();
 
+		const unrestoreBreadcrumbs: (() => void)[] = [];
+		if (options.breadcrumbs?.console && typeof console !== 'undefined') {
+			unrestoreBreadcrumbs.push(wrapConsole());
+		}
+		if (options.breadcrumbs?.navigation && typeof history !== 'undefined') {
+			unrestoreBreadcrumbs.push(wrapNavigation());
+		}
+
 		return () => {
 			window.removeEventListener('error', onError);
 			window.removeEventListener('unhandledrejection', onRejection);
 			window.removeEventListener('pagehide', onPageHide);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
 			uninstrument();
+			for (const restore of unrestoreBreadcrumbs) restore();
 		};
 	}
 
@@ -382,7 +488,10 @@ export function createJournal(options: JournalOptions): Journal {
 			context = { ...context, ...next };
 		},
 		flush: () => flush(),
-		install
+		install,
+		addBreadcrumb(bc: Omit<Breadcrumb, 'timestamp'>) {
+			pushBreadcrumb({ ...bc, timestamp: new Date().toISOString() });
+		}
 	};
 }
 
@@ -466,6 +575,9 @@ export function createDeferredJournal(load: () => Promise<JournalOptions | null>
 				uninstall?.();
 				uninstall = null;
 			};
+		},
+		addBreadcrumb(bc: Omit<Breadcrumb, 'timestamp'>) {
+			real?.addBreadcrumb(bc);
 		}
 	};
 }

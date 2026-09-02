@@ -46,6 +46,14 @@
 		return typeof value === 'string' && value ? value : null;
 	}
 
+	function sourceLabel(source: string | null): string {
+		switch (source) {
+			case 'browser': return 'browser';
+			case 'collector': return 'collector';
+			default: return 'server';
+		}
+	}
+
 	function requestIdOf(entry: LogEntry): string | null {
 		const value = entry.meta?.['request_id'];
 		if (typeof value === 'string' && value) return value;
@@ -121,6 +129,7 @@
 				     that can be recovered by expanding a row give up their width to it. -->
 				<th scope="col" class="hidden sm:table-cell">App</th>
 				<th scope="col">Level</th>
+				<th scope="col" class="hidden sm:table-cell">Source</th>
 				<th scope="col" class="w-full">Message</th>
 			</tr>
 		</thead>
@@ -157,6 +166,19 @@
 							<LevelBadge level={entry.level} />
 						</button>
 					</td>
+					<td class="hidden sm:table-cell">
+						<button
+							type="button"
+							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
+							title="Filter by source: {sourceOf(entry) ?? 'server'}"
+							onclick={(event) => {
+								event.stopPropagation();
+								onPivotSource?.(sourceOf(entry) ?? 'server');
+							}}
+						>
+							{sourceLabel(sourceOf(entry))}
+						</button>
+					</td>
 					<!-- The message is the reason anyone opened this page. This column claims
 					     the remaining table width and the preview clamps at two lines with an
 					     ellipsis, so a row shows the start of the body without expanding it. -->
@@ -177,7 +199,7 @@
 
 				{#if expandedId === entry.id}
 					<tr class="bg-fc-surface">
-						<td colspan="4">
+						<td colspan="5">
 							<div class="flex flex-col gap-4 py-2">
 								<p class="font-fc-mono text-fc-xs break-words whitespace-pre-wrap text-fc-fg">
 									{entry.message}
@@ -274,7 +296,7 @@
 
 				{#if gaps.has(entry.id)}
 					<tr class="bg-fc-warning/10">
-						<td colspan="4">
+						<td colspan="5">
 							<span class="flex items-center gap-2 text-fc-xs text-fc-warning">
 								<Icon icon={icons.warning} size={14} class="block" />
 								possible gap — some entries between these rows were never fetched

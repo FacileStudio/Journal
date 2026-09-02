@@ -185,3 +185,94 @@ func TestSecondsUntilUTCMidnight(t *testing.T) {
 		}
 	}
 }
+
+// Breadcrumbs sent by the SDK land in meta["breadcrumbs"] after scrubbing.
+func TestBrowserBreadcrumbs(t *testing.T) {
+	scope := authcontext.IngestScope{App: "shop", Origin: "https://shop.example"}
+	batch := BrowserRequest{
+		Breadcrumbs: []Breadcrumb{
+			{Level: "info", Message: "user clicked checkout", Category: "ui", Timestamp: "2026-09-01T12:00:00Z"},
+			{Level: "warn", Message: "deprecated api", Category: "console", Timestamp: "2026-09-01T12:00:01Z"},
+		},
+	}
+	event := BrowserEvent{Message: "boom", Meta: map[string]any{}}
+	meta := browserMeta(event, batch, scope, browserRequest(t, batch, scope))
+
+	bc, ok := meta["breadcrumbs"].([]any)
+	if !ok {
+		t.Fatalf("breadcrumbs = %T %v, want []any", meta["breadcrumbs"], meta["breadcrumbs"])
+	}
+	if len(bc) != 2 {
+		t.Fatalf("breadcrumbs length = %d, want 2", len(bc))
+	}
+	first := bc[0].(map[string]any)
+	if first["message"] != "user clicked checkout" || first["category"] != "ui" {
+		t.Fatalf("first breadcrumb = %v, want message=user clicked checkout category=ui", first)
+	}
+}
+
+// The scrubbed keys list applies to breadcrumb data too.
+func TestBrowserBreadcrumbDataScrubbed(t *testing.T) {
+	scope := authcontext.IngestScope{App: "shop", Origin: "https://shop.example"}
+	batch := BrowserRequest{
+		Breadcrumbs: []Breadcrumb{
+			{
+				Level: "info", Message: "api call", Category: "console",
+				Timestamp: "2026-09-01T12:00:00Z",
+				Data:      map[string]any{"token": "abc123", "url": "/api/orders", "keep": "yes"},
+			},
+		},
+	}
+	event := BrowserEvent{Message: "boom", Meta: map[string]any{}}
+	meta := browserMeta(event, batch, scope, browserRequest(t, batch, scope))
+
+	bc := meta["breadcrumbs"].([]any)
+	entry := bc[0].(map[string]any)
+	data := entry["data"].(map[string]any)
+	if data["token"] != scrubbedValue {
+		t.Fatalf("token = %v, want scrubbed", data["token"])
+	}
+	if data["url"] != "/api/orders" {
+		t.Fatalf("url = %v, want /api/orders", data["url"])
+	}
+	if data["keep"] != "yes" {
+		t.Fatalf("keep = %v, want yes", data["keep"])
+	}
+}
+
+// session_id in breadcrumb data is stripped to avoid cross-tab confusion.
+func TestBrowserBreadcrumbSessionIDStripped(t *testing.T) {
+	scope := authcontext.IngestScope{App: "shop", Origin: "https://shop.example"}
+	batch := BrowserRequest{SessionID: "tab-session"}
+	crumb := Breadcrumb{
+		Level: "info", Message: "click", Category: "ui",
+		Timestamp: "2026-09-01T12:00:00Z",
+		Data:      map[string]any{"session_id": "other-tab"},
+	}
+	event := BrowserEvent{Message: "boom", Meta: map[string]any{}}
+	meta := browserMeta(event, BrowserRequest{SessionID: "tab-session", Breadcrumbs: []Breadcrumb{crumb}}, scope, browserRequest(t, batch, scope))
+
+	bc := meta["breadcrumbs"].([]any)
+	entry := bc[0].(map[string]any)
+	data := entry["data"].(map[string]any)
+	if _, present := data["session_id"]; present {
+		t.Fatalf("session_id = %v, want it stripped from breadcrumb data", data["session_id"])
+	}
+}
+
+// More than 50 breadcrumbs are capped to 50.
+func TestBrowserBreadcrumbsCapped(t *testing.T) {
+	scope := authcontext.IngestScope{App: "shop", Origin: "https://shop.example"}
+	raw := make([]Breadcrumb, 60)
+	for i := range raw {
+		raw[i] = Breadcrumb{Level: "info", Message: "crumb", Category: "console", Timestamp: "2026-09-01T12:00:00Z"}
+	}
+	batch := BrowserRequest{Breadcrumbs: raw}
+	event := BrowserEvent{Message: "boom"}
+	meta := browserMeta(event, batch, scope, browserRequest(t, batch, scope))
+
+	bc := meta["breadcrumbs"].([]any)
+	if len(bc) > maxBrowserBreadcrumbs {
+		t.Fatalf("breadcrumbs = %d, want at most %d", len(bc), maxBrowserBreadcrumbs)
+	}
+}
