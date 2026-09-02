@@ -77,6 +77,7 @@ func mapLine(app, containerID string, stream byte, ts time.Time, message string)
 		Level:   detectLevel(message, stream),
 		Message: message,
 		Meta: map[string]string{
+			"source":       "collector",
 			"container_id": shortID(containerID),
 			"stream":       streamName(stream),
 		},

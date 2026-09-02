@@ -443,6 +443,7 @@
 				>
 					<option value="">All sources</option>
 					<option value="browser">Client (browser)</option>
+					<option value="collector">Collector (Docker)</option>
 					<option value="server">Server (no source)</option>
 				</Select>
 			</div>
