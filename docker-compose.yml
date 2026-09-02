@@ -78,7 +78,6 @@ services:
 
   journal-collector:
     container_name: journal-collector
-    profiles: ["collector"]
     restart: unless-stopped
     build:
       context: apps/collector
