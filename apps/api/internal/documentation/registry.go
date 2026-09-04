@@ -16,6 +16,7 @@ var Registry = Response{Modules: []Module{
 	queriesModule,
 	alertsModule,
 	sourceMapsModule,
+	antenneModule,
 }}
 
 var idParam = []Field{{Name: "id", Type: "int64", Description: "Numeric identifier."}}
@@ -496,6 +497,37 @@ var alertsModule = Module{
 			Auth:        "bearer",
 			PathParams:  idParam,
 			Errors:      []Error{errBadID, errUnauth, errNotAdmin, errSessionRate},
+		},
+	},
+}
+
+var antenneModule = Module{
+	Name:        "antenne",
+	Description: "Global Antenne instance configuration for alert delivery. Admin only.",
+	Routes: []Route{
+		{
+			Method:       "GET",
+			Path:         "/settings/antenne",
+			Summary:      "Read Antenne settings",
+			Description:  "Returns the current Antenne connection settings, whether they come from env vars or the database, and the connection status.",
+			Auth:         "bearer",
+			ResponseBody: `{"settings":{"url":string,"secret":string,"enabled":bool},"connected":bool,"from_env":bool}`,
+			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
+		},
+		{
+			Method:       "PUT",
+			Path:         "/settings/antenne",
+			Summary:      "Update Antenne settings",
+			Description:  "Set the Antenne instance URL, secret, and enabled flag. Returns connect error if connection fails.",
+			Auth:         "bearer",
+			RequestBody:  `{"antenne_url":string,"antenne_secret":string,"antenne_enabled":bool}`,
+			ResponseBody: `{"settings":{"url":string,"secret":string,"enabled":bool},"connected":bool,"connect_error":string|null}`,
+			Errors: []Error{
+				errInvalidBody,
+				errUnauth,
+				errNotAdmin,
+				errSessionRate,
+			},
 		},
 	},
 }

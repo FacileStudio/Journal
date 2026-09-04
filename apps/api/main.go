@@ -265,7 +265,7 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 				apikeys.RegisterRoutes(admin, apiKeysService)
 				alerts.RegisterRoutes(admin, alertsService)
 				sourcemaps.RegisterAdminRoutes(admin, sourceMapsService)
-				antenne.RegisterRoutes(api, antenneService, appLogger)
+				antenne.RegisterRoutes(admin, antenneService, appLogger)
 			})
 		})
 	})
