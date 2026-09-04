@@ -182,7 +182,7 @@
 						<span class="sm:hidden">{formatClock(entry.created_at)}</span>
 						<span class="hidden sm:inline">{formatTime(entry.created_at)}</span>
 					</td>
-					<td class="hidden sm:table-cell">
+					<td class="hidden sm:table-cell whitespace-nowrap">
 						<button
 							type="button"
 							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
@@ -208,7 +208,7 @@
 							<LevelBadge level={entry.level} />
 						</button>
 					</td>
-					<td class="hidden sm:table-cell">
+					<td class="hidden sm:table-cell whitespace-nowrap">
 						<button
 							type="button"
 							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"

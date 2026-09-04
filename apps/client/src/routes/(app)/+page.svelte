@@ -120,7 +120,7 @@
 				<tbody>
 					{#each topApps as app (app.name)}
 						<tr>
-							<td class="font-fc-mono text-fc-xs">
+							<td class="whitespace-nowrap font-fc-mono text-fc-xs">
 								<a class="hover:underline" href="/logs?app={encodeURIComponent(app.name)}">{app.name}</a>
 							</td>
 							<td class="tabular-nums">{formatCount(app.count)}</td>
