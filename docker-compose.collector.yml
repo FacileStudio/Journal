@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  journal-collector:
+    image: ghcr.io/facilestudio/journal/collector:latest
+    profiles: [collector]
+    restart: unless-stopped
+    depends_on:
+      journal-api:
+        condition: service_healthy
+    environment:
+      JOURNAL_URL: http://journal-api:4010/api
+      JOURNAL_TOKEN: ${INGEST_TOKEN:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The collector itself does not expose ports; it pushes logs to the API.

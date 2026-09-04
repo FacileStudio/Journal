@@ -78,10 +78,9 @@ services:
 
   journal-collector:
     container_name: journal-collector
+    image: ghcr.io/facilestudio/journal/collector:latest
     restart: unless-stopped
-    build:
-      context: apps/collector
-      dockerfile: Dockerfile
+    profiles: [collector]
     networks:
       - default
     volumes:
