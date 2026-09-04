@@ -70,8 +70,8 @@ services:
       test: ["CMD", "/api", "healthcheck"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
     depends_on:
       journal-db:
         condition: service_healthy
@@ -91,7 +91,7 @@ services:
       journal.ignore: "true"
     depends_on:
       journal-api:
-        condition: service_healthy
+        condition: service_started
 
 networks:
   dokploy-network:
