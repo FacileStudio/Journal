@@ -80,7 +80,6 @@ services:
     container_name: journal-collector
     image: ghcr.io/facilestudio/journal/collector:latest
     restart: unless-stopped
-    profiles: [collector]
     networks:
       - default
     volumes:
