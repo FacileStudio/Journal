@@ -64,7 +64,7 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	t.Helper()
 	kit, sessions, passwords, avatars := testKitFor(t, appEnv, nil, nil)
-	return buildRouter(nil, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler))
+	return buildRouter(nil, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

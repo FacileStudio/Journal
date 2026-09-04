@@ -24,10 +24,10 @@ import (
 
 // Service manages the Antenne pool connection and its settings.
 type Service struct {
-	orm     *gorm.DB
-	client  *antenneclient.Client
-	logger  *slog.Logger
-	mu      sync.RWMutex
+	orm    *gorm.DB
+	client *antenneclient.Client
+	logger *slog.Logger
+	mu     sync.RWMutex
 }
 
 // NewService constructs a Service bound to orm and logger.

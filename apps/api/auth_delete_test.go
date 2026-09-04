@@ -34,7 +34,7 @@ func TestDeleteMeErasesTheAccountAndItsCredentials(t *testing.T) {
 	}
 	appEnv := env.Config{AllowRegistration: true}
 	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler))
+	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
 
 	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
 		"email": "doomed@facile.studio", "name": "Doomed", "password": "a-long-enough-password",
@@ -81,7 +81,7 @@ func TestDeleteMeSparesTheLastAdministrator(t *testing.T) {
 	}
 	appEnv := env.Config{AllowRegistration: true}
 	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler))
+	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
 
 	register := func(email string) string {
 		response := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{

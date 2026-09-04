@@ -9,9 +9,9 @@ type PoolSettings struct {
 
 // PoolSettingsResponse is what the HTTP handler returns.
 type PoolSettingsResponse struct {
-	Settings  PoolSettings
-	Connected bool
-	FromEnv   bool
+	Settings     PoolSettings
+	Connected    bool
+	FromEnv      bool
 	ConnectError string `json:",omitempty"`
 }
 

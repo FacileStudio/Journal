@@ -5,7 +5,6 @@
 		Alert,
 		Badge,
 		Button,
-		Circle,
 		ConfirmModal,
 		Drawer,
 		EmptyState,
@@ -16,6 +15,8 @@
 		SettingsRow,
 		SettingsSection,
 		Spinner,
+		StatusDot,
+		Switch,
 		Table,
 		Textarea,
 		icons,
@@ -316,7 +317,13 @@ export const handleError = handleErrorWith(journal);`
 				description="When enabled, alerts will be sent to the configured Antenne instance."
 				stacked
 			>
-				<Switch bind:value={antenneEnabled} onchange={updateAntenneSettings} />
+				<Switch
+					checked={antenneEnabled}
+					onchange={() => {
+						antenneEnabled = !antenneEnabled;
+						void updateAntenneSettings();
+					}}
+				/>
 			</SettingsRow>
 			<SettingsRow
 				label="Instance URL"
@@ -349,17 +356,17 @@ export const handleError = handleErrorWith(journal);`
 			>
 				{#if antenneConnected}
 					<span class="flex items-center gap-2">
-						<Circle size="sm" tone="success" />
+						<StatusDot tone="success" />
 						<span class="font-fc-mono text-fc-xs">Connected</span>
 					</span>
 				{:else if antenneConnectError}
 					<span class="flex items-center gap-2">
-						<Circle size="sm" tone="danger" />
+						<StatusDot tone="danger" />
 						<span class="font-fc-mono text-fc-xs">Error: {antenneConnectError}</span>
 					</span>
 				{:else}
 					<span class="flex items-center gap-2">
-						<Circle size="sm" tone="warning" />
+						<StatusDot tone="warning" />
 						<span class="font-fc-mono text-fc-xs">Disconnected</span>
 					</span>
 				{/if}

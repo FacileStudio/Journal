@@ -28,7 +28,7 @@ func TestValidateRule(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateRule(tc.ruleName, tc.threshold, tc.windowMinutes, tc.webhookURL)
+			err := validateRule(tc.ruleName, tc.threshold, tc.windowMinutes, tc.webhookURL, "webhook")
 			if tc.valid && err != nil {
 				t.Fatalf("validateRule = %v, want nil", err)
 			}
