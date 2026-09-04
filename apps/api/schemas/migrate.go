@@ -14,7 +14,7 @@ import "gorm.io/gorm"
 // alike, and a key that authenticates nothing is a silent outage on the next
 // deploy.
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}, &SourceMap{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}, &SourceMap{}, &AppSetting{}, &AntenneOutbox{}); err != nil {
 		return err
 	}
 
@@ -38,6 +38,12 @@ func Migrate(db *gorm.DB) error {
 		`ALTER TABLE api_key_usage ADD CONSTRAINT fk_api_key_usage_key FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE`,
 		`ALTER TABLE alert_rules DROP CONSTRAINT IF EXISTS fk_alert_rules_saved_query`,
 		`ALTER TABLE alert_rules ADD CONSTRAINT fk_alert_rules_saved_query FOREIGN KEY (saved_query_id) REFERENCES saved_queries(id) ON DELETE RESTRICT`,
+		`ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'webhook'`,
+		`UPDATE alert_rules SET provider = 'webhook' WHERE provider IS NULL OR provider = ''`,
+		`CREATE INDEX IF NOT EXISTS idx_alert_rules_provider ON alert_rules (provider) WHERE enabled`,
+		`CREATE TABLE IF NOT EXISTS app_settings (id int PRIMARY KEY, antenne_url text NOT NULL DEFAULT '', antenne_secret text NOT NULL DEFAULT '', antenne_enabled bool NOT NULL DEFAULT false)`,
+		`CREATE TABLE IF NOT EXISTS antenne_outbox (id bigserial PRIMARY KEY, channel text NOT NULL, payload text NOT NULL, attempts int NOT NULL DEFAULT 0, last_error text, created_at timestamptz NOT NULL DEFAULT now())`,
+		`CREATE INDEX IF NOT EXISTS idx_antenne_outbox_created_at ON antenne_outbox (created_at)`,
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {

@@ -31,6 +31,7 @@ type ruleRecord struct {
 	Name          string
 	SavedQueryID  int64
 	QueryName     string
+	Provider      schemas.AlertProviderType
 	Threshold     int
 	WindowMinutes int
 	WebhookURL    string
@@ -54,7 +55,11 @@ func (s *Service) List(ctx context.Context) ([]ruleRecord, error) {
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*ruleRecord, error) {
-	if err := validateRule(req.Name, req.Threshold, req.WindowMinutes, req.WebhookURL); err != nil {
+	provider := req.Provider
+	if provider == "" {
+		provider = string(schemas.AlertProviderWebhook)
+	}
+	if err := validateRule(req.Name, req.Threshold, req.WindowMinutes, req.WebhookURL, schemas.AlertProviderType(provider)); err != nil {
 		return nil, err
 	}
 
@@ -69,6 +74,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*ruleRecord, e
 	rule := schemas.AlertRule{
 		Name:          strings.TrimSpace(req.Name),
 		SavedQueryID:  savedQuery.ID,
+		Provider:      schemas.AlertProviderType(provider),
 		Threshold:     req.Threshold,
 		WindowMinutes: req.WindowMinutes,
 		WebhookURL:    req.WebhookURL,
@@ -110,7 +116,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func validateRule(name string, threshold, windowMinutes int, webhookURL string) error {
+func validateRule(name string, threshold, windowMinutes int, webhookURL string, provider schemas.AlertProviderType) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.Invalid("name is required")
 	}
@@ -119,6 +125,9 @@ func validateRule(name string, threshold, windowMinutes int, webhookURL string) 
 	}
 	if windowMinutes < 1 || windowMinutes > maxWindowMinutes {
 		return errors.Invalid("window_minutes must be between 1 and 1440")
+	}
+	if provider == schemas.AlertProviderAntenne {
+		return nil
 	}
 	parsed, err := url.Parse(webhookURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -144,6 +153,7 @@ func recordFromRule(rule schemas.AlertRule, queryName string) *ruleRecord {
 		Name:          rule.Name,
 		SavedQueryID:  rule.SavedQueryID,
 		QueryName:     queryName,
+		Provider:      rule.Provider,
 		Threshold:     rule.Threshold,
 		WindowMinutes: rule.WindowMinutes,
 		WebhookURL:    rule.WebhookURL,

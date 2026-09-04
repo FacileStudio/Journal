@@ -99,6 +99,7 @@ func mapAlert(record ruleRecord) AlertResponse {
 		Name:          record.Name,
 		SavedQueryID:  record.SavedQueryID,
 		QueryName:     record.QueryName,
+		Provider:      string(record.Provider),
 		Threshold:     record.Threshold,
 		WindowMinutes: record.WindowMinutes,
 		WebhookURL:    record.WebhookURL,

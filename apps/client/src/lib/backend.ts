@@ -187,15 +187,18 @@ export type SavedQueryResponse = {
 	query: SavedQuery;
 };
 
+export type AlertProvider = 'webhook' | 'antenne';
+
 export type AlertRule = {
 	id: number;
 	name: string;
 	saved_query_id: number;
 	query_name: string;
+	provider: AlertProvider;
 	threshold: number;
 	window_minutes: number;
 	webhook_url: string;
-	webhook_header: string;
+	webhook_header: string | null;
 	enabled: boolean;
 	last_fired_at: string | null;
 	created_at: string;
@@ -212,12 +215,28 @@ export type AlertResponse = {
 export type CreateAlertParams = {
 	name: string;
 	saved_query_id: number;
+	provider: AlertProvider;
 	threshold: number;
 	window_minutes: number;
 	webhook_url: string;
 	webhook_header?: string;
 	webhook_secret?: string;
 };
+
+export interface AntenneSettings {
+	url: string;
+	secret: string;
+	enabled: boolean;
+	connected: boolean;
+	from_env: boolean;
+	connect_error?: string;
+}
+
+export interface UpdateAntenneSettings {
+	url: string;
+	secret: string;
+	enabled: boolean;
+}
 
 type ApiErrorPayload = {
 	error?: { message?: string };
@@ -392,5 +411,16 @@ export const backend = {
 
 	deleteAlert(id: number) {
 		return apiFetch<Record<string, never>>(`/alerts/${id}`, { method: 'DELETE' });
+	},
+
+	getAntenneSettings() {
+		return apiFetch<{ settings: AntenneSettings }>('/settings/antenne');
+	},
+
+	updateAntenneSettings(settings: UpdateAntenneSettings) {
+		return apiFetch<{ settings: AntenneSettings }>('/settings/antenne', {
+			method: 'PUT',
+			body: JSON.stringify(settings)
+		});
 	}
 };

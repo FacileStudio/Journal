@@ -5,6 +5,7 @@
 		Alert,
 		Badge,
 		Button,
+		Circle,
 		ConfirmModal,
 		Drawer,
 		EmptyState,
@@ -32,6 +33,12 @@
 	let keys = $state<ApiKey[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+	let antenneLoading = $state(false);
+	let antenneUrl = $state('');
+	let antenneSecret = $state('');
+	let antenneEnabled = $state(false);
+	let antenneConnected = $state(false);
+	let antenneConnectError = $state('');
 
 	let open = $state(false);
 	let appName = $state('');
@@ -89,12 +96,44 @@ export const handleError = handleErrorWith(journal);`
 
 	async function load() {
 		try {
-			keys = (await backend.listApiKeys()).keys;
+			const [keysRes, antenneRes] = await Promise.all([
+				backend.listApiKeys(),
+				backend.getAntenneSettings()
+			]);
+			keys = keysRes.keys;
+			const { settings } = antenneRes;
+			antenneUrl = settings.url;
+			antenneSecret = settings.secret;
+			antenneEnabled = settings.enabled;
+			antenneConnected = settings.connected;
+			antenneConnectError = settings.connect_error ?? '';
 			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load API keys';
+			error = err instanceof Error ? err.message : 'Failed to load settings';
 		} finally {
 			loading = false;
+			antenneLoading = false;
+		}
+	}
+
+	async function updateAntenneSettings() {
+		antenneLoading = true;
+		try {
+			const { settings } = await backend.updateAntenneSettings({
+				url: antenneUrl,
+				secret: antenneSecret,
+				enabled: antenneEnabled
+			});
+			antenneUrl = settings.url;
+			antenneSecret = settings.secret;
+			antenneEnabled = settings.enabled;
+			antenneConnected = settings.connected;
+			antenneConnectError = settings.connect_error ?? '';
+			toast.success('Antenne settings updated.');
+		} catch (err) {
+			toast.danger(err instanceof Error ? err.message : 'Failed to update Antenne settings');
+		} finally {
+			antenneLoading = false;
 		}
 	}
 
@@ -260,6 +299,71 @@ export const handleError = handleErrorWith(journal);`
 					{/each}
 				</tbody>
 			</Table>
+		{/if}
+	</SettingsSection>
+
+	<SettingsSection
+		title="Antenne"
+		description="Configure the global Antenne instance for alert delivery."
+	>
+		{#if error}
+			<Alert tone="danger" title="Could not load Antenne settings">{error}</Alert>
+		{:else if loading}
+			<div class="flex justify-center py-16"><Spinner /></div>
+		{:else}
+			<SettingsRow
+				label="Enabled"
+				description="When enabled, alerts will be sent to the configured Antenne instance."
+				stacked
+			>
+				<Switch bind:value={antenneEnabled} onchange={updateAntenneSettings} />
+			</SettingsRow>
+			<SettingsRow
+				label="Instance URL"
+				description="The URL of your Antenne instance (e.g., https://antenne.facile.studio)"
+				stacked
+			>
+				<Input
+					bind:value={antenneUrl}
+					class="font-fc-mono"
+					placeholder="https://antenne.facile.studio"
+					onchange={updateAntenneSettings}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label="Secret"
+				description="The secret key for authenticating with Antenne"
+				stacked
+			>
+				<SecretField
+					bind:value={antenneSecret}
+					label="Antenne Secret"
+					onchange={updateAntenneSettings}
+					editable
+					mask="full"
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label="Status"
+				stacked
+			>
+				{#if antenneConnected}
+					<span class="flex items-center gap-2">
+						<Circle size="sm" tone="success" />
+						<span class="font-fc-mono text-fc-xs">Connected</span>
+					</span>
+				{:else if antenneConnectError}
+					<span class="flex items-center gap-2">
+						<Circle size="sm" tone="danger" />
+						<span class="font-fc-mono text-fc-xs">Error: {antenneConnectError}</span>
+					</span>
+				{:else}
+					<span class="flex items-center gap-2">
+						<Circle size="sm" tone="warning" />
+						<span class="font-fc-mono text-fc-xs">Disconnected</span>
+					</span>
+				{/if}
+			</SettingsRow>
 		{/if}
 	</SettingsSection>
 </div>

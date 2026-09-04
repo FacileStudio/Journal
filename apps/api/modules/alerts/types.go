@@ -4,6 +4,7 @@ package alerts
 type CreateRequest struct {
 	Name          string `json:"name"`
 	SavedQueryID  int64  `json:"saved_query_id"`
+	Provider      string `json:"provider,omitempty"` // webhook or antenne
 	Threshold     int    `json:"threshold"`
 	WindowMinutes int    `json:"window_minutes"`
 	WebhookURL    string `json:"webhook_url"`
@@ -21,6 +22,7 @@ type AlertResponse struct {
 	ID            int64   `json:"id"`
 	Name          string  `json:"name"`
 	SavedQueryID  int64   `json:"saved_query_id"`
+	Provider      string  `json:"provider"` // webhook or antenne
 	QueryName     string  `json:"query_name"`
 	Threshold     int     `json:"threshold"`
 	WindowMinutes int     `json:"window_minutes"`

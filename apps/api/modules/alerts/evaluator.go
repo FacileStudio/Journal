@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
+	"github.com/FacileStudio/Journal/apps/api/modules/antenne"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 
 	"gorm.io/gorm"
@@ -33,31 +34,33 @@ type webhookPayload struct {
 	Entries       []schemas.LogEntry `json:"entries"`
 }
 
-type webhookDelivery struct {
+type delivery struct {
 	guarded      *http.Client
 	trusted      *http.Client
 	allowedHosts []string
+	antenne      *antenne.Service
 }
 
-func (d webhookDelivery) clientFor(host string) *http.Client {
+func (d delivery) clientFor(host string) *http.Client {
 	if hostAllowed(host, d.allowedHosts) {
 		return d.trusted
 	}
 	return d.guarded
 }
 
-// RunEvaluator scans enabled alert rules on a loop and posts a webhook when
-// one fires, until ctx is cancelled.
-func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger, allowedHosts []string) {
-	delivery := webhookDelivery{
+// RunEvaluator scans enabled alert rules on a loop and delivers when one fires,
+// until ctx is cancelled.
+func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger, allowedHosts []string, antenneService *antenne.Service) {
+	d := delivery{
 		guarded:      guardedClient(webhookTimeout),
 		trusted:      trustedClient(webhookTimeout),
 		allowedHosts: allowedHosts,
+		antenne:      antenneService,
 	}
 	ticker := time.NewTicker(evaluateInterval)
 	defer ticker.Stop()
 	for {
-		evaluateDueRules(ctx, orm, delivery, logger)
+		evaluateDueRules(ctx, orm, d, logger)
 		select {
 		case <-ctx.Done():
 			return
@@ -66,7 +69,7 @@ func RunEvaluator(ctx context.Context, orm *gorm.DB, logger *slog.Logger, allowe
 	}
 }
 
-func evaluateDueRules(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, logger *slog.Logger) {
+func evaluateDueRules(ctx context.Context, orm *gorm.DB, d delivery, logger *slog.Logger) {
 	now := time.Now().UTC()
 
 	var rules []schemas.AlertRule
@@ -104,11 +107,11 @@ func evaluateDueRules(ctx context.Context, orm *gorm.DB, delivery webhookDeliver
 		if !ok {
 			continue
 		}
-		evaluateRule(ctx, orm, delivery, logger, rule, savedQuery, now)
+		evaluateRule(ctx, orm, d, logger, rule, savedQuery, now)
 	}
 }
 
-func evaluateRule(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, logger *slog.Logger, rule schemas.AlertRule, savedQuery schemas.SavedQuery, now time.Time) {
+func evaluateRule(ctx context.Context, orm *gorm.DB, d delivery, logger *slog.Logger, rule schemas.AlertRule, savedQuery schemas.SavedQuery, now time.Time) {
 	until := now
 	since := now.Add(-time.Duration(rule.WindowMinutes) * time.Minute)
 	params := logfilter.Params{
@@ -143,18 +146,22 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, l
 		return
 	}
 
-	payload := webhookPayload{
-		Alert:         rule.Name,
-		Query:         savedQuery.Name,
-		Count:         count,
-		Threshold:     rule.Threshold,
-		WindowMinutes: rule.WindowMinutes,
-		Since:         since.Format(time.RFC3339),
-		Until:         until.Format(time.RFC3339),
-		Entries:       entries,
-	}
-	if !deliverWebhook(ctx, delivery, logger, rule, payload) {
-		return
+	if rule.Provider == schemas.AlertProviderAntenne {
+		deliverAntenne(ctx, d, logger, rule, count)
+	} else {
+		payload := webhookPayload{
+			Alert:         rule.Name,
+			Query:         savedQuery.Name,
+			Count:         count,
+			Threshold:     rule.Threshold,
+			WindowMinutes: rule.WindowMinutes,
+			Since:         since.Format(time.RFC3339),
+			Until:         until.Format(time.RFC3339),
+			Entries:       entries,
+		}
+		if !deliverWebhook(ctx, d, logger, rule, payload) {
+			return
+		}
 	}
 
 	if err := orm.WithContext(ctx).Model(&schemas.AlertRule{}).Where("id = ?", rule.ID).Update("last_fired_at", now).Error; err != nil {
@@ -164,7 +171,16 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, delivery webhookDelivery, l
 	}
 }
 
-func deliverWebhook(ctx context.Context, delivery webhookDelivery, logger *slog.Logger, rule schemas.AlertRule, payload webhookPayload) bool {
+func deliverAntenne(ctx context.Context, d delivery, logger *slog.Logger, rule schemas.AlertRule, count int64) {
+	if d.antenne == nil {
+		logger.Warn("antenne service not available", slog.String("alert", rule.Name))
+		return
+	}
+	d.antenne.EmitAlert(rule, count)
+	logger.Info("alert fired via antenne", slog.String("alert", rule.Name), slog.Int64("count", count))
+}
+
+func deliverWebhook(ctx context.Context, d delivery, logger *slog.Logger, rule schemas.AlertRule, payload webhookPayload) bool {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		logger.Warn("alert payload encode failed", slog.String("alert", rule.Name), slog.Any("error", err))
@@ -176,7 +192,7 @@ func deliverWebhook(ctx context.Context, delivery webhookDelivery, logger *slog.
 		logger.Warn("alert webhook url invalid", slog.String("alert", rule.Name), slog.Any("error", err))
 		return false
 	}
-	client := delivery.clientFor(parsedURL.Hostname())
+	client := d.clientFor(parsedURL.Hostname())
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, rule.WebhookURL, bytes.NewReader(body))
 	if err != nil {
@@ -202,7 +218,7 @@ func deliverWebhook(ctx context.Context, delivery webhookDelivery, logger *slog.
 		logger.Warn("alert webhook rejected", slog.String("alert", rule.Name), slog.Int("status", response.StatusCode))
 		return false
 	}
-	logger.Info("alert fired", slog.String("alert", rule.Name), slog.Int64("count", payload.Count))
+	logger.Info("alert fired via webhook", slog.String("alert", rule.Name), slog.Int64("count", payload.Count))
 	return true
 }
 

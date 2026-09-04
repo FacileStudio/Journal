@@ -9,15 +9,15 @@
 		EmptyState,
 		Field,
 		Input,
-		SecretField,
 		Select,
+		SecretField,
 		Spinner,
 		Switch,
 		Table,
 		icons,
 		toast
 	} from '@facile/muse';
-	import { backend, type AlertRule, type AuthUser, type SavedQuery } from '$lib/backend';
+	import { backend, type AlertRule, type AuthUser, type SavedQuery, type AntenneSettings } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 
@@ -40,6 +40,7 @@
 	let webhookUrl = $state('');
 	let webhookHeader = $state('');
 	let webhookSecret = $state('');
+	let provider = $state<'webhook' | 'antenne'>('webhook');
 
 	function isHttpUrl(value: string): boolean {
 		try {
@@ -71,8 +72,7 @@
 			savedQueryId !== '' &&
 			thresholdValid &&
 			windowValid &&
-			webhookValid &&
-			headerPairValid
+			(provider === 'antenne' || (webhookValid && headerPairValid))
 	);
 
 	async function load() {
@@ -99,6 +99,7 @@
 		webhookUrl = '';
 		webhookHeader = '';
 		webhookSecret = '';
+		provider = 'webhook';
 		createError = '';
 	}
 
@@ -110,10 +111,11 @@
 			await backend.createAlert({
 				name: name.trim(),
 				saved_query_id: Number(savedQueryId),
+				provider: provider,
 				threshold: thresholdNum,
 				window_minutes: windowNum,
 				webhook_url: webhookUrl.trim(),
-				...(webhookHeader.trim()
+				...(provider === 'webhook' && webhookHeader.trim()
 					? { webhook_header: webhookHeader.trim(), webhook_secret: webhookSecret }
 					: {})
 			});
@@ -210,7 +212,7 @@
 			<tr>
 				<th scope="col">Rule</th>
 				<th scope="col">Condition</th>
-				<th scope="col">Webhook</th>
+				<th scope="col">Target</th>
 				<th scope="col">Last fired</th>
 				<th scope="col">Enabled</th>
 				<th scope="col" aria-label="Actions"></th>
@@ -224,8 +226,12 @@
 						<span class="font-fc-mono text-fc-xs">{rule.query_name}</span>
 						· ≥ {rule.threshold} in {rule.window_minutes}m
 					</td>
-					<td class="font-fc-mono text-fc-xs text-fc-fg-muted" title={rule.webhook_url}>
-						{host(rule.webhook_url)}
+					<td class="font-fc-mono text-fc-xs text-fc-fg-muted">
+						{#if rule.provider === 'antenne'}
+							Antenne (global)
+						{:else}
+							{host(rule.webhook_url)}
+						{/if}
 					</td>
 					<td class="whitespace-nowrap text-fc-fg-muted">
 						{rule.last_fired_at ? formatDate(rule.last_fired_at) : 'never'}
@@ -278,41 +284,50 @@
 			</Select>
 		</Field>
 
-		<div class="grid gap-4 sm:grid-cols-2">
-			<Field
-				label="Threshold"
-				error={thresholdValid ? undefined : 'A whole number, 1 or more.'}
-			>
-				<Input type="number" min="1" bind:value={threshold} />
-			</Field>
-			<Field
-				label="Window (minutes)"
-				error={windowValid ? undefined : 'Between 1 and 1440.'}
-			>
-				<Input type="number" min="1" max="1440" bind:value={windowMinutes} />
-			</Field>
-		</div>
-
-		<Field
-			label="Webhook URL"
-			error={webhookUrl && !webhookValid ? 'Must be an http or https URL.' : undefined}
-		>
-			<Input
-				bind:value={webhookUrl}
-				class="font-fc-mono"
-				placeholder="https://antenne.facile.studio/hooks/…"
-			/>
+		<Field label="Target">
+			<Select bind:value={provider}>
+				<option value="webhook">Webhook</option>
+				<option value="antenne">Antenne (global)</option>
+			</Select>
 		</Field>
 
-		<Field
-			label="Auth header"
-			helper="Optional. Name and secret are set together or not at all."
-			error={headerPairValid ? undefined : 'Set both the header name and its secret.'}
-		>
-			<Input bind:value={webhookHeader} class="font-fc-mono" placeholder="X-Antenne-Token" />
-		</Field>
+		{#if provider === 'webhook'}
+			<div class="grid gap-4 sm:grid-cols-2">
+				<Field
+					label="Threshold"
+					error={thresholdValid ? undefined : 'A whole number, 1 or more.'}
+				>
+					<Input type="number" min="1" bind:value={threshold} />
+				</Field>
+				<Field
+					label="Window (minutes)"
+					error={windowValid ? undefined : 'Between 1 and 1440.'}
+				>
+					<Input type="number" min="1" max="1440" bind:value={windowMinutes} />
+				</Field>
+			</div>
 
-		<SecretField bind:value={webhookSecret} label="Auth secret" editable mask="full" />
+			<Field
+				label="Webhook URL"
+				error={webhookUrl && !webhookValid ? 'Must be an http or https URL.' : undefined}
+			>
+				<Input
+					bind:value={webhookUrl}
+					class="font-fc-mono"
+					placeholder="https://antenne.facile.studio/hooks/…"
+				/>
+			</Field>
+
+			<Field
+				label="Auth header"
+				helper="Optional. Name and secret are set together or not at all."
+				error={headerPairValid ? undefined : 'Set both the header name and its secret.'}
+			>
+				<Input bind:value={webhookHeader} class="font-fc-mono" placeholder="X-Antenne-Token" />
+			</Field>
+
+			<SecretField bind:value={webhookSecret} label="Auth secret" editable mask="full" />
+		{/if}
 	</div>
 
 	{#snippet footer()}

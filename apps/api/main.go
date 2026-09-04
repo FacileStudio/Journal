@@ -22,6 +22,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
+	"github.com/FacileStudio/Journal/apps/api/modules/antenne"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
@@ -149,9 +150,14 @@ func run() int {
 		appLogger.Warn("RETENTION_DAYS is 0: log entries are kept forever, which needs a written justification under GDPR storage-limitation rules; set it to a positive number of days unless you have one")
 	}
 	go sweepSessions(shutdownSignal, sessions, appLogger)
-	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts)
 
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, appLogger, health.DB(sqlDB))
+	antenneService := antenne.NewService(db, appLogger)
+	antenneService.AutoConnect(shutdownSignal)
+	defer antenneService.Shutdown()
+
+	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
+
+	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, appLogger, antenneService, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -204,7 +210,7 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
 	authService := auth.NewService(db, passwords, removeAvatarFor(avatars))
@@ -259,6 +265,7 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 				apikeys.RegisterRoutes(admin, apiKeysService)
 				alerts.RegisterRoutes(admin, alertsService)
 				sourcemaps.RegisterAdminRoutes(admin, sourceMapsService)
+				antenne.RegisterRoutes(api, antenneService, appLogger)
 			})
 		})
 	})
