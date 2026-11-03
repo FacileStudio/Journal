@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Badge, Button, ConfirmModal, SettingsRow, SettingsSection, icons } from '@facile/muse';
+	import { Avatar, Badge, Button, ConfirmModal, SettingsRow, SettingsSection, icons } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
 	import { clearToken } from '$lib/auth';
 	import { formatDate } from '$lib/format';
@@ -31,7 +31,10 @@
 <div class="flex flex-col gap-10">
 	<SettingsSection title="Account" description="Your dashboard identity on this instance.">
 		<SettingsRow label="Name">
-			<span class="text-fc-sm text-fc-fg">{user?.name || '—'}</span>
+			<span class="flex items-center gap-2.5">
+				<Avatar src={user?.avatar_url || undefined} name={user?.name || user?.email || ''} size="sm" />
+				<span class="text-fc-sm text-fc-fg">{user?.name || '—'}</span>
+			</span>
 		</SettingsRow>
 		<SettingsRow label="Email" description="Sign-in address. Changing it is not supported yet.">
 			<span class="font-fc-mono text-fc-sm text-fc-fg">{user?.email ?? '—'}</span>

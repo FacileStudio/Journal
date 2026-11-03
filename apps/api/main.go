@@ -95,6 +95,9 @@ func run() int {
 
 	identityStore := portepg.New(sqlDB)
 	users := auth.NewUserStore(db)
+	if _, err := users.BackfillAvatars(shutdownSignal, appEnv.Porte.Issuer); err != nil {
+		appLogger.Warn("avatar backfill failed", slog.Any("error", err))
+	}
 
 	sessions, err := session.New(appEnv.Porte, session.Deps{
 		Sessions: identityStore.Sessions(),

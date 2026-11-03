@@ -53,3 +53,54 @@ func TestUpsertFromOIDCStoresThePictureURL(t *testing.T) {
 		}
 	}
 }
+
+// TestBackfillAvatarsFillsOnlyEmptyRowsFromThisIssuer seeds three accounts:
+// one linked to the issuer with no avatar, one linked with an avatar already,
+// and one linked to another provider. Only the first is filled, and a second
+// run changes nothing.
+func TestBackfillAvatarsFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
+	db := testdb.Migrated(t)
+	store := auth.NewUserStore(db)
+	ctx := context.Background()
+	issuer := "https://sso.facile.studio"
+	if err := db.Exec(
+		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at, avatar_url) VALUES
+		 (1, 'empty@facile.studio', 'Empty', '', true, now(), ''),
+		 (2, 'set@facile.studio', 'Set', '', false, now(), 'https://elsewhere.example/a.png'),
+		 (3, 'other@facile.studio', 'Other', '', false, now(), '')`,
+	).Error; err != nil {
+		t.Fatalf("seed users: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO porte_identities (user_id, provider, subject) VALUES
+		 (1, ?, 'sub-1'), (2, ?, 'sub-2'), (3, 'https://old.example', 'sub-3')`,
+		issuer, issuer,
+	).Error; err != nil {
+		t.Fatalf("seed identities: %v", err)
+	}
+
+	for run, wantRows := range []int64{1, 0} {
+		rows, err := store.BackfillAvatars(ctx, issuer)
+		if err != nil {
+			t.Fatalf("run %d: %v", run, err)
+		}
+		if rows != wantRows {
+			t.Fatalf("run %d touched %d rows, want %d", run, rows, wantRows)
+		}
+	}
+
+	want := map[int64]string{
+		1: "https://sso.facile.studio/avatars/sub-1",
+		2: "https://elsewhere.example/a.png",
+		3: "",
+	}
+	for id, url := range want {
+		var user schemas.User
+		if err := db.First(&user, id).Error; err != nil {
+			t.Fatalf("read user %d: %v", id, err)
+		}
+		if user.AvatarURL != url {
+			t.Fatalf("user %d avatar_url = %q, want %q", id, user.AvatarURL, url)
+		}
+	}
+}

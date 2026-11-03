@@ -139,6 +139,35 @@ func photoURL(pictureClaim string) string {
 	return ""
 }
 
+// BackfillAvatars gives every account that has no avatar yet the picture URL
+// of its identity at issuer, <issuer>/avatars/<subject>, without waiting for a
+// sign-in.
+//
+// Accounts that signed in before Journal stored the picture claim hold an
+// empty avatar_url until their next sign-in, which for a long session can be a
+// month. Registre's picture URL is derived from the subject alone and answers
+// for every user, so it can be written now. Only rows whose identity was issued
+// by this issuer are touched, a non-empty avatar_url is never overwritten, and
+// a non-https issuer writes nothing, which is the rule photoURL applies to the
+// claim itself. Running it again changes nothing.
+func (s *UserStore) BackfillAvatars(ctx context.Context, issuer string) (int64, error) {
+	base := photoURL(strings.TrimSuffix(issuer, "/"))
+	if base == "" {
+		return 0, nil
+	}
+	result := s.orm.WithContext(ctx).Exec(
+		`UPDATE users SET avatar_url = ? || '/avatars/' || porte_identities.subject
+		   FROM porte_identities
+		  WHERE porte_identities.user_id = users.id
+		    AND porte_identities.provider = ?
+		    AND users.avatar_url = ''`,
+		base, issuer)
+	if result.Error != nil {
+		return 0, errors.Internal("failed to backfill avatars", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // CreateFromPassword creates a user row for a local registration. porte has
 // already validated the address and hashed the password; what is left is the
 // part porte has no opinion about, which is the whole of what a Journal user
