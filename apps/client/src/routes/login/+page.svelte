@@ -76,7 +76,7 @@
 <div class="flex min-h-screen">
 	<div class="hidden lg:flex lg:w-1/2 flex-col bg-black px-12 py-10">
 		<a href="/" class="flex items-center gap-3 mb-auto">
-			<Icon icon={icons.notebook} size={28} class="text-white" />
+			<Icon icon={icons.text} size={28} class="text-white" />
 			<span class="text-xl font-bold font-heading tracking-tight text-white">Journal</span>
 		</a>
 
@@ -110,7 +110,7 @@
 			</div>
 
 			{#if error}
-				<p class="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+				<p class="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
 					{error}
 				</p>
 			{/if}
@@ -130,7 +130,7 @@
 			{/if}
 
 			{#if allowRegistration && !ssoOnly}
-				<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1" role="tablist">
+				<div class="mb-6 flex rounded-lg bg-muted p-1 gap-1" role="tablist">
 					<button
 						type="button"
 						role="tab"

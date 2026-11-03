@@ -488,7 +488,7 @@
 		</div>
 
 		{#if activeCount > 0}
-			<div class="flex flex-wrap items-center gap-2 border-t border-fc-border pt-4">
+			<div class="flex flex-wrap items-center gap-2 pt-4">
 				{#if requestId}
 					<button
 						type="button"

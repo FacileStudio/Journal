@@ -89,7 +89,7 @@
 	<div class="flex h-dvh w-full overflow-hidden bg-fc-page">
 		<div class="hidden h-full shrink-0 p-3 md:block">
 			<SideBar
-				icon={icons.notebook}
+				icon={icons.text}
 				title="Journal"
 				bind:collapsed
 				pages={navPages}
