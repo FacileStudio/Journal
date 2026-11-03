@@ -13,7 +13,6 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/avatarfs"
 	"github.com/FacileStudio/porte/local"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
@@ -26,7 +25,7 @@ import (
 // testRouter builds the real router with a nil database. Nothing here serves a
 // request that would touch it: the tests walk the route tree and read the
 // reference, both of which are assembled before any handler runs.
-func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*oidc.Kit, *session.Manager, *local.Kit, *avatarfs.Store) {
+func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*oidc.Kit, *session.Manager, *local.Kit) {
 	t.Helper()
 	store := portepg.New(sqlDB)
 	users := auth.NewUserStore(db)
@@ -34,16 +33,11 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 	if err != nil {
 		t.Fatalf("session.New: %v", err)
 	}
-	avatars, err := avatarfs.New(t.TempDir(), "/avatars")
-	if err != nil {
-		t.Fatalf("avatarfs.New: %v", err)
-	}
 	kit, err := oidc.New(context.Background(), appEnv.Porte, oidc.Deps{
 		Users:       users,
 		Identities:  store.Identities(),
 		Sessions:    sessions,
 		Codes:       store.LoginCodes(),
-		Avatars:     avatars,
 		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
 	})
 	if err != nil {
@@ -58,13 +52,13 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 	if err != nil {
 		t.Fatalf("build the password kit: %v", err)
 	}
-	return kit, sessions, passwords, avatars
+	return kit, sessions, passwords
 }
 
 func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	t.Helper()
-	kit, sessions, passwords, avatars := testKitFor(t, appEnv, nil, nil)
-	return buildRouter(nil, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
+	kit, sessions, passwords := testKitFor(t, appEnv, nil, nil)
+	return buildRouter(nil, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

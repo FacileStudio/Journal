@@ -95,7 +95,7 @@ constant time and is unscoped, so every entry must carry its own `app`.
 | `porte_sessions` | `token_hash`, `user_id` → `users(id)`, `label`, `last_used_at`, `expires_at` |
 | `porte_identities` | `(provider, subject)` primary key, `user_id`, the IdP tokens and the cached roles claim |
 | `porte_login_codes` | one-time codes bridging a browser login to a CLI |
-| `users.avatar_url` | the avatar fetched from the identity provider, written under `AVATAR_DIR` and served from `/avatars` |
+| `users.avatar_url` | the identity provider's https `picture` URL, rendered as is; empty when the provider sends none |
 | `log_entries` | `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
 | `users` | `email` unique, `name`, `password_hash`, `is_admin` |
 | `api_keys` | `app`, `kind` (`secret`\|`public`), `prefix`, `key_hash` unique, `allowed_origins` jsonb, `daily_quota`, `revoked_at` |

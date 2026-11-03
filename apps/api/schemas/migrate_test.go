@@ -162,37 +162,6 @@ func TestExistingPasswordsKeepWorking(t *testing.T) {
 	}
 }
 
-// avatar_url arrives on an existing table, so AutoMigrate adds it nullable and
-// every row is NULL. Scanning that into a Go string fails, which would take
-// out GET /auth/me — every authenticated page — rather than just the avatar.
-func TestTheAvatarColumnIsNeverNull(t *testing.T) {
-	db := testdb.Open(t)
-	if err := db.AutoMigrate(&schemas.User{}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	if err := db.Exec(`ALTER TABLE users ALTER COLUMN avatar_url DROP NOT NULL`).Error; err != nil {
-		t.Fatalf("make the column nullable, as AutoMigrate would have: %v", err)
-	}
-	if err := db.Exec(
-		`INSERT INTO users (id, email, name, password_hash, is_admin, created_at, avatar_url)
-		 VALUES (1, 'someone@facile.studio', 'Someone', '', true, now(), NULL)`,
-	).Error; err != nil {
-		t.Fatalf("seed a null avatar: %v", err)
-	}
-
-	if err := schemas.Migrate(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-
-	var user schemas.User
-	if err := db.First(&user, 1).Error; err != nil {
-		t.Fatalf("the user row no longer scans: %v", err)
-	}
-	if user.AvatarURL != "" {
-		t.Fatalf("avatar_url = %q, want empty", user.AvatarURL)
-	}
-}
-
 // porte v0.3.0 keys a password identity on the account id instead of the email
 // address, and that re-key is a migration Journal has to carry itself: this app
 // runs its own copy of porte's schema against its own users table and never

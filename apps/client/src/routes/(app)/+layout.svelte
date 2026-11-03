@@ -79,9 +79,22 @@
 	/* Every settings section collapses to one key: the sections have their own PageTransition
 	   inside the settings layout, and keying this one on the full path replays both. */
 	const routeKey = $derived(onSettings ? '/settings' : page.url.pathname);
+	/* The avatar is the identity provider's URL, which answers 404 once the user has no picture.
+	   SideBar renders a bare <img>, so it only gets the URL after it has loaded, and the initial
+	   shows otherwise rather than a broken image. */
+	let loadedAvatar = $state<string | undefined>(undefined);
+	$effect(() => {
+		const src = user?.avatar_url;
+		loadedAvatar = undefined;
+		if (!src) return;
+		const probe = new Image();
+		probe.onload = () => (loadedAvatar = src);
+		probe.src = src;
+	});
+
 	const navUser = $derived.by(() => ({
 		name: user?.name || user?.email || 'Account',
-		avatar: user?.avatar_url || undefined
+		avatar: loadedAvatar
 	}));
 </script>
 

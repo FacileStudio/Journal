@@ -15,7 +15,6 @@ type Config struct {
 	AllowRegistration   bool
 	RetentionDays       int
 	WebhookAllowedHosts []string
-	AvatarDir           string
 
 	// Porte is the suite's OIDC contract, unchanged: OIDC_ISSUER enables
 	// it and makes the other four required. porte.Config.Validate does the
@@ -46,7 +45,6 @@ func Load() (Config, error) {
 		Core:                core,
 		IngestToken:         troncenv.String("INGEST_TOKEN", ""),
 		WebhookAllowedHosts: troncenv.List("WEBHOOK_ALLOWED_HOSTS"),
-		AvatarDir:           troncenv.String("AVATAR_DIR", "/data/avatars"),
 	}
 
 	if cfg.AllowRegistration, err = troncenv.Bool("ALLOW_REGISTRATION", true); err != nil {

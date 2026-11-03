@@ -71,7 +71,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		}
 		if linked != 0 {
 			userID = linked
-			return refreshProfile(tx, linked, email, name, claims.AvatarURL)
+			return refreshProfile(tx, linked, email, name, photoURL(claims.Picture))
 		}
 
 		var existing schemas.User
@@ -82,7 +82,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 				return errors.Conflict("an account with this email already exists and the identity provider did not verify the address")
 			}
 			userID = existing.ID
-			return refreshProfile(tx, existing.ID, email, name, claims.AvatarURL)
+			return refreshProfile(tx, existing.ID, email, name, photoURL(claims.Picture))
 		case !stderrors.Is(err, gorm.ErrRecordNotFound):
 			return errors.Internal("failed to look up the account", err)
 		}
@@ -92,7 +92,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 			return errors.Internal("failed to count users", err)
 		}
 
-		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0, AvatarURL: claims.AvatarURL}
+		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0, AvatarURL: photoURL(claims.Picture)}
 		if err := tx.Create(&user).Error; err != nil {
 			return errors.Internal("failed to create the account", err)
 		}
@@ -107,21 +107,36 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 
 // refreshProfile keeps the name, the address and the avatar the provider
 // asserts, which is what makes the identity provider the source of truth for
-// all three. An empty value is not written over one the user already has: a
-// provider that stops sending a claim, or an avatar fetch that failed, should
-// not blank the dashboard.
+// all three. An empty name is not written over one the user already has, so a
+// provider that stops sending the claim does not blank the dashboard. The
+// avatar is always written: an empty one means the provider has no picture to
+// offer, and keeping the old URL would keep showing a picture the user removed.
 func refreshProfile(tx *gorm.DB, userID int64, email, name, avatarURL string) error {
-	updates := map[string]any{"email": email}
+	updates := map[string]any{"email": email, "avatar_url": avatarURL}
 	if name != "" {
 		updates["name"] = name
-	}
-	if avatarURL != "" {
-		updates["avatar_url"] = avatarURL
 	}
 	if err := tx.Model(&schemas.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return errors.Internal("failed to update the account", err)
 	}
 	return nil
+}
+
+// photoURL returns the picture claim when it is an https URL, and "" otherwise.
+//
+// Journal stores the URL the provider hands over and renders it, instead of
+// downloading a copy at sign-in. Registre's picture claim is one stable URL per
+// user that always serves the current picture, revalidated on every load, so a
+// new picture shows on the next page load with no new sign-in. A local copy was
+// refreshed only at sign-in, went stale the moment the user changed it, and
+// fetching an attacker-influenced URL from inside the network was an SSRF
+// surface. Anything that is not https (a data: placeholder, a plain-http host)
+// is reported as no picture, and the dashboard draws the initial instead.
+func photoURL(pictureClaim string) string {
+	if strings.HasPrefix(strings.ToLower(pictureClaim), "https://") {
+		return pictureClaim
+	}
+	return ""
 }
 
 // CreateFromPassword creates a user row for a local registration. porte has

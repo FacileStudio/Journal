@@ -25,6 +25,7 @@ func Migrate(db *gorm.DB) error {
 		`UPDATE users SET avatar_url = '' WHERE avatar_url IS NULL`,
 		`ALTER TABLE users ALTER COLUMN avatar_url SET DEFAULT ''`,
 		`ALTER TABLE users ALTER COLUMN avatar_url SET NOT NULL`,
+		dropLocalAvatarCopies,
 		`ALTER TABLE log_entries ADD COLUMN IF NOT EXISTS search tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(message, ''))) STORED`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_search ON log_entries USING GIN(search)`,
 		`CREATE INDEX IF NOT EXISTS idx_log_entries_app_created_at ON log_entries (app, created_at DESC)`,
@@ -52,6 +53,17 @@ func Migrate(db *gorm.DB) error {
 	}
 	return nil
 }
+
+// dropLocalAvatarCopies clears every avatar_url that is not an https URL.
+//
+// Journal used to download the provider's picture at sign-in and store the
+// path of its own copy, /avatars/<key>. It now stores the provider's URL and no
+// longer serves /avatars at all, so a row still pointing there is a broken
+// image on every page. Clearing it shows the initial until the next sign-in
+// writes the provider's stable URL. It matches what the sign-in itself stores,
+// which is never anything but https or empty, so it is a no-op on every boot
+// after the first.
+const dropLocalAvatarCopies = `UPDATE users SET avatar_url = '' WHERE avatar_url <> '' AND avatar_url NOT ILIKE 'https://%'`
 
 // porteSchema is porte/pg's Schema with its porte_users table left out and
 // every foreign key repointed at Journal's own users.

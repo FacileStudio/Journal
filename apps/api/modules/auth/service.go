@@ -23,11 +23,6 @@ const registrationLockKey = 0x6A6F75726E616C
 type Service struct {
 	orm   *gorm.DB
 	local *local.Kit
-	// removeAvatar deletes the locally cached avatar file an account points
-	// at, and must already have decided that the URL belongs to this app's
-	// store — erasure must not refuse because somebody's profile picture
-	// lives on another host.
-	removeAvatar func(ctx context.Context, avatarURL string) error
 }
 
 // NewService takes porte's local kit, which owns the passwords now: argon2id
@@ -35,8 +30,8 @@ type Service struct {
 // equalised timing on an unknown address, and the session the credential lands
 // in. What is left here is what porte has no opinion about — what a Journal
 // user is, and who is an administrator.
-func NewService(orm *gorm.DB, passwords *local.Kit, removeAvatar func(ctx context.Context, avatarURL string) error) *Service {
-	return &Service{orm: orm, local: passwords, removeAvatar: removeAvatar}
+func NewService(orm *gorm.DB, passwords *local.Kit) *Service {
+	return &Service{orm: orm, local: passwords}
 }
 
 // Register creates an account and signs it in. The token comes back for the
@@ -95,9 +90,7 @@ func (s *Service) IdentityForUser(ctx context.Context, userID int64) (authcontex
 
 // DeleteAccount erases the caller's account: one row, whose foreign keys
 // cascade into every credential porte holds for it — identities and sessions
-// alike, so the token that made the request dies with the delete. A locally
-// cached avatar file goes with it, removed before the row so a failed removal
-// refuses the whole operation instead of leaving one behind. The log entries
+// alike, so the token that made the request dies with the delete. The log entries
 // stay: they are keyed by app, never by user, so there is nothing of this
 // person in them to erase.
 //
@@ -107,18 +100,6 @@ func (s *Service) IdentityForUser(ctx context.Context, userID int64) (authcontex
 // result then means either a missing account or the last admin, and the
 // follow-up read tells those apart.
 func (s *Service) DeleteAccount(ctx context.Context, userID int64) error {
-	if s.removeAvatar != nil {
-		var user schemas.User
-		err := s.orm.WithContext(ctx).Select("avatar_url").First(&user, userID).Error
-		if err == nil && user.AvatarURL != "" {
-			if err := s.removeAvatar(ctx, user.AvatarURL); err != nil {
-				return errors.Internal("failed to remove the avatar", err)
-			}
-		} else if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.Internal("failed to load the account", err)
-		}
-	}
-
 	result := s.orm.WithContext(ctx).Exec(
 		`DELETE FROM users
 		 WHERE id = ? AND (NOT is_admin OR EXISTS (

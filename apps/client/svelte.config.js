@@ -12,7 +12,7 @@ const config = {
 				'script-src': ['self'],
 				'style-src': ['self', 'unsafe-inline'],
 				'connect-src': ['self'],
-				'img-src': ['self', 'data:'],
+				'img-src': ['self', 'data:', 'https:'],
 				'object-src': ['none'],
 				'base-uri': ['self']
 			}

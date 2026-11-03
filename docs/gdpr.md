@@ -7,10 +7,9 @@ record of processing for the dashboard itself; it is not legal advice.
 
 | Data | Where | Source |
 |---|---|---|
-| Email, name, admin flag | `users` | Registration or SSO claims |
+| Email, name, admin flag, avatar URL | `users` | Registration or SSO claims |
 | Password (argon2id) | `porte_identities` | Registration / password change |
 | Session tokens (SHA-256) | `porte_sessions` | Login; 30-day expiry, named API tokens have none by design |
-| Cached avatar files | `AVATAR_DIR` on disk | Downloaded from the identity provider at SSO login |
 | Log entries: app, level, message (free text), `meta` (jsonb), origin + user agent for browser events | `log_entries` | The apps shipping logs |
 
 IP addresses are **not stored anywhere** — rate limiting uses them transiently and the quota
@@ -29,7 +28,7 @@ table records only key-plus-day counters.
 
 `DELETE /api/auth/me` (dashboard: Settings → Danger zone) deletes the account in one
 statement whose WHERE clause also enforces the last-administrator rule, cascading through
-every session and identity, removing any locally cached avatar file, expiring the session
+every session and identity, expiring the session
 cookie, and leaving the caller's token dead.
 
 **Log entries are not touched**: they are keyed by app, never by user, and carry no user

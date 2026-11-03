@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/avatarfs"
 	"github.com/FacileStudio/porte/local"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
@@ -107,18 +105,11 @@ func run() int {
 		return 1
 	}
 
-	avatars, err := avatarfs.New(appEnv.AvatarDir, "/avatars")
-	if err != nil {
-		appLogger.Error("failed to open the avatar directory", slog.Any("error", err))
-		return 1
-	}
-
 	kit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
 		Users:       users,
 		Identities:  identityStore.Identities(),
 		Sessions:    sessions,
 		Codes:       identityStore.LoginCodes(),
-		Avatars:     avatars,
 		Logger:      appLogger,
 		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
 	})
@@ -157,7 +148,7 @@ func run() int {
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, appLogger, antenneService, health.DB(sqlDB))
+	router := buildRouter(db, kit, sessions, passwords, appEnv, appLogger, antenneService, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -210,10 +201,10 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, avatars *avatarfs.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
-	authService := auth.NewService(db, passwords, removeAvatarFor(avatars))
+	authService := auth.NewService(db, passwords)
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
 	sourceMapsService := sourcemaps.NewService(db)
@@ -270,8 +261,6 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		})
 	})
 
-	router.Handle("/avatars/*", avatars.Handler())
-
 	clientDir := spa.DirFromEnv()
 	if spa.Available(clientDir) {
 		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
@@ -287,20 +276,6 @@ func referenceConfig() apiref.Config {
 		Description: "Centralized logging for the Facile Suite: apps ship structured entries to /ingest, the dashboard searches them.",
 		Servers:     []string{"/api"},
 		Registry:    docs.Registry,
-	}
-}
-
-// removeAvatarFor adapts porte's avatar store into the erasure hook the auth
-// service calls. URLs outside this app's prefix belong to another host — an
-// identity provider's avatar, a CDN — and there is nothing local to delete,
-// so they answer nil rather than an error that would refuse the erasure.
-func removeAvatarFor(avatars *avatarfs.Store) func(ctx context.Context, avatarURL string) error {
-	prefix := avatars.URLPrefix() + "/"
-	return func(ctx context.Context, avatarURL string) error {
-		if !strings.HasPrefix(avatarURL, prefix) {
-			return nil
-		}
-		return avatars.Remove(ctx, avatarURL)
 	}
 }
 

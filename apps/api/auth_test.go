@@ -38,8 +38,8 @@ func routerOver(t *testing.T, db *gorm.DB) chi.Router {
 	}
 
 	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
-	return buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
+	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
+	return buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
 }
 
 func call(t *testing.T, router chi.Router, method, path, token string, body any) *httptest.ResponseRecorder {

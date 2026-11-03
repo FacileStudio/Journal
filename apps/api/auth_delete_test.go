@@ -1,19 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
-	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
-	"github.com/FacileStudio/porte/avatarfs"
 )
 
 // Erasure is the one auth operation with a law behind it: the account row
@@ -33,8 +28,8 @@ func TestDeleteMeErasesTheAccountAndItsCredentials(t *testing.T) {
 		t.Fatalf("sql handle: %v", err)
 	}
 	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
+	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
+	router := buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
 
 	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
 		"email": "doomed@facile.studio", "name": "Doomed", "password": "a-long-enough-password",
@@ -80,8 +75,8 @@ func TestDeleteMeSparesTheLastAdministrator(t *testing.T) {
 		t.Fatalf("sql handle: %v", err)
 	}
 	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords, avatars := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, avatars, appEnv, slog.New(slog.DiscardHandler), nil)
+	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
+	router := buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
 
 	register := func(email string) string {
 		response := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
@@ -112,48 +107,5 @@ func TestDeleteMeSparesTheLastAdministrator(t *testing.T) {
 
 	if code := call(t, router, http.MethodDelete, "/api/auth/me", sole, nil).Code; code != http.StatusNoContent {
 		t.Fatalf("delete with another admin present = %d", code)
-	}
-}
-
-// The erasure reaches past the database: an SSO avatar cached under
-// AVATAR_DIR is personal data too, and it goes when the account does. A
-// remote avatar — somebody else's host — must not block the deletion.
-func TestDeleteAccountRemovesTheCachedAvatarButNotARemoteOne(t *testing.T) {
-	db := testdb.Migrated(t)
-	dir := t.TempDir()
-	avatars, err := avatarfs.New(dir, "/avatars")
-	if err != nil {
-		t.Fatalf("avatarfs.New: %v", err)
-	}
-	avatarURL, err := avatars.Put(context.Background(), "deadbeef", []byte("pretend-png"), "image/png")
-	if err != nil {
-		t.Fatalf("avatar Put: %v", err)
-	}
-
-	local := &schemas.User{Email: "local@facile.studio", Name: "Local", PasswordHash: "x", AvatarURL: avatarURL}
-	remote := &schemas.User{Email: "remote@facile.studio", Name: "Remote", PasswordHash: "x", AvatarURL: "https://sso.example/avatar/xyz.png"}
-	if err := db.Create(local).Error; err != nil {
-		t.Fatalf("seed local: %v", err)
-	}
-	if err := db.Create(remote).Error; err != nil {
-		t.Fatalf("seed remote: %v", err)
-	}
-
-	service := auth.NewService(db, nil, removeAvatarFor(avatars))
-	ctx := context.Background()
-	if err := service.DeleteAccount(ctx, local.ID); err != nil {
-		t.Fatalf("delete local: %v", err)
-	}
-	if err := service.DeleteAccount(ctx, remote.ID); err != nil {
-		t.Fatalf("delete remote: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, "deadbeef.png")); !os.IsNotExist(err) {
-		t.Fatalf("the cached avatar survived the erasure (stat err = %v)", err)
-	}
-	var count int64
-	db.Model(&schemas.User{}).Count(&count)
-	if count != 0 {
-		t.Fatalf("accounts survived: %d", count)
 	}
 }

@@ -45,8 +45,6 @@ services:
       traefik.http.routers.journal-secure.tls.certresolver: letsencrypt
       traefik.http.routers.journal-secure.service: journal-svc
       traefik.http.services.journal-svc.loadbalancer.server.port: '4010'
-    volumes:
-    - avatar_data:/data/avatars
     environment:
       APP_ENV: ${APP_ENV:-production}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
@@ -63,7 +61,6 @@ services:
       OIDC_CLI_AUDIENCE: ${OIDC_CLI_AUDIENCE:-}
       SSO_ONLY: ${SSO_ONLY:-false}
       OIDC_CLAIMS_SCOPE: ${OIDC_CLAIMS_SCOPE:-}
-      AVATAR_DIR: /data/avatars
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
       WEBHOOK_ALLOWED_HOSTS: ${WEBHOOK_ALLOWED_HOSTS:-}
@@ -110,5 +107,3 @@ networks:
 volumes:
   db_data:
     name: journal_db_data
-  avatar_data:
-    name: journal_avatar_data

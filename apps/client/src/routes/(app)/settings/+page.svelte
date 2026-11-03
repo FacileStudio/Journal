@@ -56,7 +56,7 @@
 
 	<SettingsSection
 		title="Danger zone"
-		description="Erasure under GDPR Article 17. The account, every session and the cached avatar are destroyed; log entries stay, because they name apps and never people."
+		description="Erasure under GDPR Article 17. The account and every session are destroyed; log entries stay, because they name apps and never people."
 	>
 		<SettingsRow
 			label="Delete this account"
