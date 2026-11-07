@@ -222,6 +222,10 @@ export interface AntenneSettings {
 	url: string;
 	secret: string;
 	enabled: boolean;
+}
+
+export interface AntenneSettingsResponse {
+	settings: AntenneSettings;
 	connected: boolean;
 	from_env: boolean;
 	connect_error?: string;
@@ -395,13 +399,16 @@ export const backend = {
 	},
 
 	getAntenneSettings() {
-		return apiFetch<{ settings: AntenneSettings }>('/settings/antenne');
+		return apiFetch<AntenneSettingsResponse>('/settings/antenne');
 	},
 
 	updateAntenneSettings(settings: UpdateAntenneSettings) {
-		return apiFetch<{ settings: AntenneSettings }>('/settings/antenne', {
+		return apiFetch<AntenneSettingsResponse>('/settings/antenne', {
 			method: 'PUT',
-			body: JSON.stringify(settings)
-		});
-	}
+			body: JSON.stringify({
+				antenne_url: settings.url,
+				antenne_secret: settings.secret,
+				antenne_enabled: settings.enabled
+			})
+		});	}
 };

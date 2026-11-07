@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `GET` and `PUT /api/settings/antenne` use snake_case JSON (`settings.url`, `connected`, `from_env`, `connect_error`) as the dashboard reads it. The Antenne panel and the ingest key list no longer fail with "Cannot read properties of undefined", and saving the Antenne settings sends the `antenne_*` fields the API reads.
+
+### Changed
+
+- The user menu has a Subscription row that links to the Facile spaces page.
+- `@facile/muse` v0.14.1 to v0.14.2 (the user menu no longer overflows the viewport edge).
+
 ## [0.2.0] - 2026-11-07
 
 ### Changed
