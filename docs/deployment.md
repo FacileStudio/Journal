@@ -72,8 +72,8 @@ the suite apps and the collector keep pointing at
 Deployments are managed through Dokploy at `gare.facile.studio`, which owns the environment
 file and triggers the Compose build. Prefer the `dokploy` CLI over SSH plus `docker`.
 
-Set at minimum `POSTGRES_USER` and `POSTGRES_PASSWORD`. Set `APP_ENV=production`,
-`APP_VERSION` at release time (it feeds `GET /version`), and `RETENTION_DAYS` to whatever the
+Set at minimum `POSTGRES_USER` and `POSTGRES_PASSWORD`. Set `APP_ENV=production`
+and `RETENTION_DAYS` to whatever the
 disk can carry. Leave `INGEST_TOKEN` empty unless the collector is enabled.
 
 To run the collector, set both `COMPOSE_PROFILES=collector` and `INGEST_TOKEN` — the sidecar

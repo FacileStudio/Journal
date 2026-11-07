@@ -292,7 +292,7 @@
 									{#if onContext}
 										<Button
 											size="sm"
-											variant="outline"
+											variant="secondary"
 											icon={icons.clock}
 											onclick={() => onContext?.(entry.id)}
 										>
@@ -301,7 +301,7 @@
 									{/if}
 									<Button
 										size="sm"
-										variant="outline"
+										variant="secondary"
 										icon={copiedId === entry.id ? icons.check : icons.copy}
 										onclick={() => copyEntry(entry)}
 										disabled={copiedId === entry.id}

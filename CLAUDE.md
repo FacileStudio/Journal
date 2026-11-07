@@ -175,7 +175,6 @@ developer loop, not the bootstrap tier.
 | `OIDC_ISSUER` | Enables single sign-on through porte; makes the next four required | — |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | Provider credentials | — |
 | `OIDC_REDIRECT_URL` / `OIDC_SUCCESS_URL` | Callback and landing URLs | — |
-| `APP_VERSION` | Reported by `GET /version`; baked in at build time from the build argument of the same name | `dev` |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins, read through `tronc/env`. `ALLOWED_ORIGINS` and `DOMAINS` remain accepted fallbacks | — (unset denies every cross-origin caller) |
 | `WEBHOOK_ALLOWED_HOSTS` | Comma-separated hostnames allowed as internal alert webhook targets | — |
 | `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |

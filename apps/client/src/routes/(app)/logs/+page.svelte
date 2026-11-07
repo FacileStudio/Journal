@@ -372,21 +372,21 @@
 		{#if liveTail}
 			<Button
 				size="sm"
-				variant="outline"
+				variant="secondary"
 				icon={tailPaused ? icons.refresh : icons.clock}
 				onclick={toggleTailPause}
 			>
 				{tailPaused ? t('logs.resume') : t('logs.pause')}
 			</Button>
 		{/if}
-		<Button size="sm" variant={liveTail ? 'primary' : 'outline'} onclick={toggleTail}>
+		<Button size="sm" variant={liveTail ? 'primary' : 'secondary'} onclick={toggleTail}>
 			<StatusDot
 				tone={liveTail && !tailPaused ? 'success' : 'neutral'}
 				pulse={liveTail && !tailPaused}
 			/>
 			{t('logs.liveTail')}
 		</Button>
-		<Button size="sm" variant="outline" icon={icons.plus} onclick={() => (saveOpen = true)}>
+		<Button size="sm" variant="secondary" icon={icons.plus} onclick={() => (saveOpen = true)}>
 			{t('logs.saveFilters')}
 		</Button>
 	{/snippet}
@@ -551,7 +551,7 @@
 
 	{#if nextBefore && entries.length > 0}
 		<div class="flex justify-center">
-			<Button variant="outline" disabled={loadingMore} onclick={loadMore}>
+			<Button variant="secondary" disabled={loadingMore} onclick={loadMore}>
 				{loadingMore ? t('common.loading') : t('logs.loadMore')}
 			</Button>
 		</div>
