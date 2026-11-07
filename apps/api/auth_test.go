@@ -249,3 +249,38 @@ func claims(subject, email, name string, verified bool) porte.Claims {
 		EmailVerified: verified,
 	}
 }
+
+func TestBrowserIngestStaysReadableCrossOrigin(t *testing.T) {
+	app := newLiveApp(t)
+	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{
+		App: "nuage", Kind: schemas.KeyKindPublic, AllowedOrigins: []string{"https://nuage.facile.studio"}, DailyQuota: 1000,
+	})
+	if err != nil {
+		t.Fatalf("create a browser key: %v", err)
+	}
+	body := `{"events":[{"level":"error","message":"boom"}]}`
+	post := func(origin string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/ingest/browser?key="+key, bytes.NewReader([]byte(body)))
+		request.Header.Set("Content-Type", "text/plain;charset=UTF-8")
+		request.Header.Set("Origin", origin)
+		recorder := httptest.NewRecorder()
+		app.router.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	allowed := post("https://nuage.facile.studio")
+	if allowed.Code != http.StatusCreated && allowed.Code != http.StatusAccepted && allowed.Code != http.StatusOK {
+		t.Fatalf("allowed origin = %d: %s", allowed.Code, allowed.Body.String())
+	}
+	if got := allowed.Header().Get("Access-Control-Allow-Origin"); got != "https://nuage.facile.studio" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, the SDK could not read its response", got)
+	}
+	for _, name := range []string{"Cross-Origin-Resource-Policy", "Cross-Origin-Embedder-Policy"} {
+		if got := allowed.Header().Get(name); got != "" {
+			t.Errorf("%s = %q would block a cross-origin report", name, got)
+		}
+	}
+	if refused := post("https://evil.example"); refused.Code != http.StatusForbidden {
+		t.Fatalf("unlisted origin = %d, want 403", refused.Code)
+	}
+}
