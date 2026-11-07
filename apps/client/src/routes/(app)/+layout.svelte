@@ -87,6 +87,7 @@
 		avatar: user?.avatar_url || undefined
 	}));
 	const userMenu = $derived({
+		subscription: { plan: 'Gratuit', href: 'https://sso.facile.studio/spaces' },
 		helpHref: 'https://github.com/FacileStudio/Journal/tree/main/docs',
 		onSignOut: logout,
 		locale: session.locale,

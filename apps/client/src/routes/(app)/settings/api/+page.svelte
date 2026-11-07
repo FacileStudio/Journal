@@ -22,7 +22,7 @@
 		icons,
 		toast
 	} from '@facile/muse';
-	import { backend, type ApiKey, type ApiKeyKind, type AuthUser } from '$lib/backend';
+	import { backend, type AntenneSettingsResponse, type ApiKey, type ApiKeyKind, type AuthUser } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import { useT } from '$lib/i18n';
 
@@ -98,6 +98,14 @@ export const handleError = handleErrorWith(journal);`
 			: ''
 	);
 
+	function applyAntenne(res: AntenneSettingsResponse) {
+		antenneUrl = res.settings.url;
+		antenneSecret = res.settings.secret;
+		antenneEnabled = res.settings.enabled;
+		antenneConnected = res.connected;
+		antenneConnectError = res.connect_error ?? '';
+	}
+
 	async function load() {
 		try {
 			const [keysRes, antenneRes] = await Promise.all([
@@ -105,12 +113,7 @@ export const handleError = handleErrorWith(journal);`
 				backend.getAntenneSettings()
 			]);
 			keys = keysRes.keys;
-			const { settings } = antenneRes;
-			antenneUrl = settings.url;
-			antenneSecret = settings.secret;
-			antenneEnabled = settings.enabled;
-			antenneConnected = settings.connected;
-			antenneConnectError = settings.connect_error ?? '';
+			applyAntenne(antenneRes);
 			error = '';
 		} catch (err) {
 			error = err instanceof Error ? err.message : t('keys.loadSettingsFailed');
@@ -123,16 +126,13 @@ export const handleError = handleErrorWith(journal);`
 	async function updateAntenneSettings() {
 		antenneLoading = true;
 		try {
-			const { settings } = await backend.updateAntenneSettings({
-				url: antenneUrl,
-				secret: antenneSecret,
-				enabled: antenneEnabled
-			});
-			antenneUrl = settings.url;
-			antenneSecret = settings.secret;
-			antenneEnabled = settings.enabled;
-			antenneConnected = settings.connected;
-			antenneConnectError = settings.connect_error ?? '';
+			applyAntenne(
+				await backend.updateAntenneSettings({
+					url: antenneUrl,
+					secret: antenneSecret,
+					enabled: antenneEnabled
+				})
+			);
 			toast.success(t('antenne.updated'));
 		} catch (err) {
 			toast.danger(err instanceof Error ? err.message : t('antenne.updateFailed'));
