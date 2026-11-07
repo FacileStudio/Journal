@@ -4,6 +4,9 @@
 	import { backend, type AppSummary } from '$lib/backend';
 	import { formatCount, formatDate, formatRelative } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	let apps = $state<AppSummary[]>([]);
 	let loading = $state(true);
@@ -15,39 +18,39 @@
 		try {
 			apps = (await backend.listApps()).apps;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load apps';
+			error = err instanceof Error ? err.message : t('apps.loadFailed');
 		} finally {
 			loading = false;
 		}
 	});
 </script>
 
-<svelte:head><title>Apps — Journal</title></svelte:head>
+<svelte:head><title>{t('apps.title')} — Journal</title></svelte:head>
 
-<PageHeader title="Apps" description="Every source that has ever shipped an entry to this instance." />
+<PageHeader title={t('apps.title')} description={t('apps.description')} />
 
 {#if error}
-	<Alert tone="danger" title="Could not load apps">{error}</Alert>
+	<Alert tone="danger" title={t('apps.loadFailed')}>{error}</Alert>
 {:else if loading}
 	<div class="flex justify-center py-16"><Spinner /></div>
 {:else if sorted.length === 0}
 	<EmptyState
 		icon={icons.server}
-		title="No app has shipped a log yet"
-		description="Create an ingest key, point the app's JOURNAL_URL at this instance, and its first entry will name it here."
+		title={t('overview.noApp')}
+		description={t('apps.emptyHint')}
 	>
-		<Button href="/settings/api" icon={icons.key}>Create an ingest key</Button>
+		<Button href="/settings/api" icon={icons.key}>{t('apps.createKey')}</Button>
 	</EmptyState>
 {:else}
 	<Table>
 		<thead>
 			<tr>
-				<th scope="col">App</th>
-				<th scope="col">Entries</th>
-				<th scope="col">Last seen</th>
+				<th scope="col">{t('common.app')}</th>
+				<th scope="col">{t('common.entries')}</th>
+				<th scope="col">{t('common.lastSeen')}</th>
 				<!-- `aria-label` rather than an `sr-only` span: `sr-only` is absolutely positioned
 				     and escapes the Table's horizontal scroller onto the document. -->
-				<th scope="col" aria-label="Actions"></th>
+				<th scope="col" aria-label={t('common.actions')}></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -65,7 +68,7 @@
 							href="/logs?app={encodeURIComponent(app.name)}"
 							iconRight={icons.arrow}
 						>
-							Logs
+							{t('apps.logsLink')}
 						</Button>
 					</td>
 				</tr>

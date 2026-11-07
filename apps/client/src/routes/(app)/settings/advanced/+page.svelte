@@ -2,8 +2,10 @@
 	import { onMount } from 'svelte';
 	import { SecretField, SettingsRow, SettingsSection, StatusDot } from '@facile/muse';
 	import { backend } from '$lib/backend';
+	import { useT } from '$lib/i18n';
 
-	let registration = $state<boolean | null>(null);
+	const t = useT();
+
 	let reachable = $state<boolean | null>(null);
 
 	const apiBase = $derived(
@@ -12,7 +14,7 @@
 
 	onMount(async () => {
 		try {
-			registration = (await backend.authConfig()).allow_registration;
+			await backend.authConfig();
 			reachable = true;
 		} catch {
 			reachable = false;
@@ -21,42 +23,26 @@
 </script>
 
 <div class="flex flex-col gap-10">
-	<SettingsSection title="Instance" description="Facts about the server this dashboard is talking to.">
-		<SettingsRow label="API base" stacked>
+	<SettingsSection title={t('advanced.instance')} description={t('advanced.instanceHint')}>
+		<SettingsRow label={t('advanced.apiBase')} stacked>
 			<SecretField value={apiBase} sensitive={false} />
 		</SettingsRow>
-		<SettingsRow label="Status" description="Whether the dashboard can reach the API right now.">
+		<SettingsRow label={t('common.status')} description={t('advanced.statusHint')}>
 			{#if reachable === null}
-				<StatusDot tone="neutral" label="Checking…" pulse />
+				<StatusDot tone="neutral" label={t('advanced.checking')} pulse />
 			{:else if reachable}
-				<StatusDot tone="success" label="Reachable" />
+				<StatusDot tone="success" label={t('advanced.reachable')} />
 			{:else}
-				<StatusDot tone="danger" label="Unreachable" />
+				<StatusDot tone="danger" label={t('advanced.unreachable')} />
 			{/if}
 		</SettingsRow>
-		<SettingsRow
-			label="Sign-ups"
-			description="Set ALLOW_REGISTRATION=false on the server to lock this instance. The first account is always creatable."
-		>
-			{#if registration === null}
-				<span class="text-fc-sm text-fc-fg-muted">—</span>
-			{:else}
-				<StatusDot
-					tone={registration ? 'warning' : 'success'}
-					label={registration ? 'Open' : 'Locked'}
-				/>
-			{/if}
+		<SettingsRow label={t('advanced.signIn')} description={t('advanced.signInHint')}>
+			<span class="text-fc-sm text-fc-fg">{t('advanced.signInValue')}</span>
 		</SettingsRow>
 	</SettingsSection>
 
-	<SettingsSection
-		title="Retention"
-		description="Entries older than RETENTION_DAYS are deleted by an hourly job on the server; 0 keeps them forever. It is a deploy-time setting, not a dashboard one."
-	>
-		<SettingsRow
-			label="Where to change it"
-			description="Dokploy environment for this stack, alongside DATABASE_URL and CORS_ALLOWED_ORIGINS."
-		>
+	<SettingsSection title={t('advanced.retention')} description={t('advanced.retentionHint')}>
+		<SettingsRow label={t('advanced.where')} description={t('advanced.whereHint')}>
 			<span class="font-fc-mono text-fc-sm text-fc-fg-muted">RETENTION_DAYS</span>
 		</SettingsRow>
 	</SettingsSection>

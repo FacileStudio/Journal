@@ -1,111 +1,50 @@
 package main
 
 import (
-	"encoding/json"
-	"log/slog"
 	"net/http"
 	"testing"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/env"
-	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 )
 
-// Erasure is the one auth operation with a law behind it: the account row
-// goes, every credential cascades with it — the very token that made the
-// request included — and the log entries stay, because they key on app and
-// carry nothing of this person. The last-administrator guard is the one
-// refusal the endpoint makes.
-// TestDeleteMeErasesTheAccountAndItsCredentials runs the delete through the
-// real middleware chain and asserts the cascade, the 401 that follows, and
-// the guard.
-// The first account is an admin and the sole one, so the guard would refuse
-// this delete: a successor takes the keys before the door closes.
+// Self-service erasure: the account row goes, every credential cascades with
+// it, the very token that made the request included. The last-administrator
+// guard is the one refusal the endpoint makes.
 func TestDeleteMeErasesTheAccountAndItsCredentials(t *testing.T) {
-	db := testdb.Migrated(t)
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("sql handle: %v", err)
-	}
-	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
+	app := newLiveApp(t)
+	doomed, token := app.signIn(t, "doomed@facile.studio", false)
+	app.signIn(t, "admin@facile.studio", true)
 
-	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
-		"email": "doomed@facile.studio", "name": "Doomed", "password": "a-long-enough-password",
-	})
-	if registered.Code != http.StatusCreated {
-		t.Fatalf("register = %d: %s", registered.Code, registered.Body)
-	}
-	var created struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(registered.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode register: %v", err)
-	}
-
-	successor := &schemas.User{Email: "successor@facile.studio", Name: "Successor", PasswordHash: "x", IsAdmin: true}
-	if err := db.Create(successor).Error; err != nil {
-		t.Fatalf("seed successor: %v", err)
-	}
-
-	if code := call(t, router, http.MethodDelete, "/api/auth/me", created.Token, nil).Code; code != http.StatusNoContent {
+	if code := call(t, app.router, http.MethodDelete, "/api/auth/me", token, nil).Code; code != http.StatusNoContent {
 		t.Fatalf("delete = %d", code)
 	}
-
-	if after := call(t, router, http.MethodGet, "/api/auth/me", created.Token, nil); after.Code != http.StatusUnauthorized {
+	if after := call(t, app.router, http.MethodGet, "/api/auth/me", token, nil); after.Code != http.StatusUnauthorized {
 		t.Fatalf("the token survived the erasure: %d", after.Code)
 	}
 
-	var users, sessionRows, identities int64
-	db.Model(&schemas.User{}).Where("email <> ?", successor.Email).Count(&users)
-	db.Table("porte_sessions").Count(&sessionRows)
-	db.Table("porte_identities").Count(&identities)
-	if users != 0 || sessionRows != 0 || identities != 0 {
-		t.Fatalf("erasure left rows behind: users=%d sessions=%d identities=%d", users, sessionRows, identities)
+	var users, sessionRows int64
+	app.db.Model(&schemas.User{}).Where("email = ?", "doomed@facile.studio").Count(&users)
+	app.db.Table("porte_sessions").Where("user_id = ?", doomed).Count(&sessionRows)
+	if users != 0 || sessionRows != 0 {
+		t.Fatalf("erasure left rows behind: users=%d sessions=%d", users, sessionRows)
 	}
 }
 
-// The last administrator is refused, and promoting a second admin unlocks
-// the delete.
+// The last administrator is refused, and promoting a second admin unlocks the
+// delete.
 func TestDeleteMeSparesTheLastAdministrator(t *testing.T) {
-	db := testdb.Migrated(t)
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("sql handle: %v", err)
-	}
-	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
+	app := newLiveApp(t)
+	_, sole := app.signIn(t, "sole@facile.studio", true)
+	app.signIn(t, "successor@facile.studio", false)
 
-	register := func(email string) string {
-		response := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
-			"email": email, "name": "Someone", "password": "a-long-enough-password",
-		})
-		if response.Code != http.StatusCreated {
-			t.Fatalf("register %s = %d: %s", email, response.Code, response.Body)
-		}
-		var created struct {
-			Token string `json:"token"`
-		}
-		if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil {
-			t.Fatalf("decode register: %v", err)
-		}
-		return created.Token
-	}
-
-	sole := register("sole@facile.studio")
-	register("successor@facile.studio")
-
-	if code := call(t, router, http.MethodDelete, "/api/auth/me", sole, nil).Code; code != http.StatusPreconditionFailed {
+	if code := call(t, app.router, http.MethodDelete, "/api/auth/me", sole, nil).Code; code != http.StatusPreconditionFailed {
 		t.Fatalf("the last administrator was not refused: %d", code)
 	}
-
-	if err := db.Model(&schemas.User{}).Where("email = ?", "successor@facile.studio").Update("is_admin", true).Error; err != nil {
+	err := app.db.Model(&schemas.User{}).Where("email = ?", "successor@facile.studio").Update("is_admin", true).Error
+	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-
-	if code := call(t, router, http.MethodDelete, "/api/auth/me", sole, nil).Code; code != http.StatusNoContent {
+	if code := call(t, app.router, http.MethodDelete, "/api/auth/me", sole, nil).Code; code != http.StatusNoContent {
 		t.Fatalf("delete with another admin present = %d", code)
 	}
 }

@@ -11,48 +11,64 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
+	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/session"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
 )
 
-// liveRouter is the real router over a real database, which is what it takes
+const testIngestToken = "legacy-ingest-token"
+
+type liveApp struct {
+	router   chi.Router
+	db       *gorm.DB
+	sessions *session.Manager
+}
+
+// newLiveApp is the real router over a real database, which is what it takes
 // to say anything about the auth path: the credential is a row, the middleware
 // is a query against it, and the identity the handlers read is a second query
 // against a table porte does not know about. All three are database behaviour.
-func liveRouter(t *testing.T) chi.Router {
+func newLiveApp(t *testing.T) liveApp {
 	t.Helper()
-	return routerOver(t, testdb.Migrated(t))
-}
-
-// routerOver builds that router over a database the caller migrated itself,
-// which is what it takes to sign in as an account that predates the migration:
-// the rows have to be there before the schema moves under them.
-func routerOver(t *testing.T, db *gorm.DB) chi.Router {
-	t.Helper()
+	db := testdb.Migrated(t)
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
 	}
+	appEnv := env.Config{IngestToken: testIngestToken}
+	kit, sessions := testKitFor(t, appEnv, db, sqlDB)
+	router := buildRouter(db, kit, sessions, appEnv, slog.New(slog.DiscardHandler), nil, nil)
+	return liveApp{router: router, db: db, sessions: sessions}
+}
 
-	appEnv := env.Config{AllowRegistration: true}
-	kit, sessions, passwords := testKitFor(t, appEnv, db, sqlDB)
-	return buildRouter(db, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
+// signIn creates an account the way a first Facile sign-in leaves it and
+// returns a session token for it, since sign-in itself is Registre's.
+func (a liveApp) signIn(t *testing.T, email string, admin bool) (int64, string) {
+	t.Helper()
+	user := schemas.User{Email: email, Name: "Someone", IsAdmin: admin}
+	if err := a.db.Create(&user).Error; err != nil {
+		t.Fatalf("seed %s: %v", email, err)
+	}
+	token, _, err := a.sessions.Issue(context.Background(), user.ID, "test")
+	if err != nil {
+		t.Fatalf("issue a session: %v", err)
+	}
+	return user.ID, token
 }
 
 func call(t *testing.T, router chi.Router, method, path, token string, body any) *httptest.ResponseRecorder {
 	t.Helper()
-	var payload *bytes.Reader
+	payload := bytes.NewReader(nil)
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
 			t.Fatalf("encode: %v", err)
 		}
 		payload = bytes.NewReader(encoded)
-	} else {
-		payload = bytes.NewReader(nil)
 	}
 	request := httptest.NewRequest(method, path, payload)
 	request.Header.Set("Content-Type", "application/json")
@@ -64,91 +80,76 @@ func call(t *testing.T, router chi.Router, method, path, token string, body any)
 	return recorder
 }
 
-// The whole point of the adoption: a password login now mints a porte session,
-// porte's middleware authenticates it, Journal hydrates the profile porte does
-// not carry, and porte's logout revokes it. Any one of those four failing
-// leaves the dashboard unusable, and none of them can be checked without a
-// database.
-// TestPasswordLoginRunsThroughPorteEndToEnd exercises a full password login
-// against the real middleware chain, and asserts that RequireAdmin actually
-// reads is_admin out of the context Journal hydrates.
-func TestPasswordLoginRunsThroughPorteEndToEnd(t *testing.T) {
-	router := liveRouter(t)
+// A session porte issued authenticates, Journal hydrates the profile porte does
+// not carry, RequireAdmin reads is_admin out of it, and porte's logout revokes
+// the session.
+func TestSessionRunsThroughPorteEndToEnd(t *testing.T) {
+	app := newLiveApp(t)
+	_, admin := app.signIn(t, "first@facile.studio", true)
+	_, member := app.signIn(t, "second@facile.studio", false)
 
-	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
-		"email": "someone@facile.studio", "name": "Someone", "password": "a-long-enough-password",
-	})
-	if registered.Code != http.StatusCreated {
-		t.Fatalf("register = %d: %s", registered.Code, registered.Body)
+	if code := call(t, app.router, http.MethodGet, "/api/auth/me", admin, nil).Code; code != http.StatusOK {
+		t.Fatalf("me = %d", code)
 	}
-	var created struct {
-		Token string `json:"token"`
-		User  struct {
-			IsAdmin bool `json:"is_admin"`
-		} `json:"user"`
+	if code := call(t, app.router, http.MethodGet, "/api/apikeys", admin, nil).Code; code != http.StatusOK {
+		t.Fatalf("an admin was refused an admin route: %d", code)
 	}
-	if err := json.Unmarshal(registered.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode register: %v", err)
+	if code := call(t, app.router, http.MethodGet, "/api/apikeys", member, nil).Code; code != http.StatusForbidden {
+		t.Fatalf("a non-admin reached an admin route: %d", code)
 	}
-	if !created.User.IsAdmin {
-		t.Fatal("the first account did not become admin")
+	if code := call(t, app.router, http.MethodPost, "/api/auth/logout", admin, nil).Code; code != http.StatusOK {
+		t.Fatalf("logout = %d", code)
 	}
-
-	me := call(t, router, http.MethodGet, "/api/auth/me", created.Token, nil)
-	if me.Code != http.StatusOK {
-		t.Fatalf("me = %d: %s", me.Code, me.Body)
-	}
-
-	keys := call(t, router, http.MethodGet, "/api/apikeys", created.Token, nil)
-	if keys.Code != http.StatusOK {
-		t.Fatalf("an admin was refused an admin route: %d %s", keys.Code, keys.Body)
-	}
-
-	loggedOut := call(t, router, http.MethodPost, "/api/auth/logout", created.Token, nil)
-	if loggedOut.Code != http.StatusOK {
-		t.Fatalf("logout = %d: %s", loggedOut.Code, loggedOut.Body)
-	}
-	var logout struct {
-		LoggedOut bool `json:"logged_out"`
-	}
-	if err := json.Unmarshal(loggedOut.Body.Bytes(), &logout); err != nil || !logout.LoggedOut {
-		t.Fatalf("unexpected logout body: %s", loggedOut.Body)
-	}
-
-	if after := call(t, router, http.MethodGet, "/api/auth/me", created.Token, nil); after.Code != http.StatusUnauthorized {
-		t.Fatalf("the session survived the logout: %d", after.Code)
+	if code := call(t, app.router, http.MethodGet, "/api/auth/me", admin, nil).Code; code != http.StatusUnauthorized {
+		t.Fatalf("the session survived the logout: %d", code)
 	}
 }
 
-// A second account is not an admin, and the admin routes have to say so
-// through the identity Journal hydrated rather than through anything porte
-// decided — porte transports roles and assigns none.
-func TestASecondAccountIsNotAnAdmin(t *testing.T) {
-	router := liveRouter(t)
-
-	for _, email := range []string{"first@facile.studio", "second@facile.studio"} {
-		if code := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
-			"email": email, "name": "Someone", "password": "a-long-enough-password",
-		}).Code; code != http.StatusCreated {
-			t.Fatalf("register %s = %d", email, code)
+// Sign-up and password sign-in are gone: the routes do not exist, so there is
+// no endpoint left to probe for an account.
+func TestPasswordRoutesAreGone(t *testing.T) {
+	app := newLiveApp(t)
+	for _, path := range []string{"/api/auth/register", "/api/auth/login"} {
+		body := map[string]string{"email": "a@facile.studio", "name": "A", "password": "a-long-enough-password"}
+		if code := call(t, app.router, http.MethodPost, path, "", body).Code; code != http.StatusNotFound {
+			t.Fatalf("POST %s = %d, want 404", path, code)
 		}
 	}
+}
 
-	signedIn := call(t, router, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": "second@facile.studio", "password": "a-long-enough-password",
-	})
-	if signedIn.Code != http.StatusOK {
-		t.Fatalf("login = %d: %s", signedIn.Code, signedIn.Body)
+// Other apps ship logs with an ingest token and no session. That path must not
+// depend on the sign-in rework: the legacy token and a per-app key both work,
+// a missing or wrong token does not, and a dashboard session is not an ingest
+// credential.
+func TestIngestNeedsATokenAndNoSession(t *testing.T) {
+	app := newLiveApp(t)
+	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{App: "nuage"})
+	if err != nil {
+		t.Fatalf("create a key: %v", err)
 	}
-	var session struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(signedIn.Body.Bytes(), &session); err != nil {
-		t.Fatalf("decode login: %v", err)
-	}
+	_, session := app.signIn(t, "admin@facile.studio", true)
+	entry := map[string]any{"app": "nuage", "level": "error", "message": "upload failed", "meta": map[string]any{"file_id": 42}}
 
-	if code := call(t, router, http.MethodGet, "/api/apikeys", session.Token, nil).Code; code != http.StatusForbidden {
-		t.Fatalf("a non-admin reached an admin route: %d", code)
+	cases := []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{"legacy token", testIngestToken, http.StatusCreated},
+		{"per-app key", key, http.StatusCreated},
+		{"no token", "", http.StatusUnauthorized},
+		{"wrong token", "nope", http.StatusUnauthorized},
+		{"dashboard session", session, http.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		if got := call(t, app.router, http.MethodPost, "/api/ingest", tc.token, entry).Code; got != tc.want {
+			t.Errorf("%s: POST /api/ingest = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+	var stored int64
+	app.db.Model(&schemas.LogEntry{}).Count(&stored)
+	if stored != 2 {
+		t.Fatalf("stored %d entries, want 2", stored)
 	}
 }
 
@@ -156,10 +157,6 @@ func TestASecondAccountIsNotAnAdmin(t *testing.T) {
 // becomes the admin, a second sign-in finds the same row by (provider,
 // subject) even though the address changed in the identity provider, and an
 // unverified address may never adopt an account that already exists.
-// TestUpsertFromOIDCOwnsTheAccountRules checks the upsert's edge rules: porte
-// writes the identity row after the upsert returns, so the second sign-in is
-// what reads it; and matching an existing account on an address the provider
-// will not vouch for is an account-takeover primitive, so it is refused.
 func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	db := testdb.Migrated(t)
 	users := auth.NewUserStore(db)
@@ -179,11 +176,7 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	if user.PasswordHash != "" {
 		t.Fatal("an SSO account was given a password hash")
 	}
-
-	if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, ?, ?)`,
-		userID, "https://sso.test/", "abc").Error; err != nil {
-		t.Fatalf("link the identity: %v", err)
-	}
+	link(t, db, userID, "abc")
 
 	again, err := users.UpsertFromOIDC(ctx, claims("abc", "renamed@facile.studio", "Renamed", true))
 	if err != nil {
@@ -204,6 +197,49 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	}
 }
 
+// An account that predates the switch to Registre keeps its data: the first
+// verified Facile sign-in with the same address links to the same row. An
+// address that already belongs to another subject of the same issuer is never
+// handed over, verified or not.
+func TestAnExistingAccountLinksByVerifiedEmailOnly(t *testing.T) {
+	db := testdb.Migrated(t)
+	users := auth.NewUserStore(db)
+	ctx := context.Background()
+	legacy := schemas.User{Email: "legacy@facile.studio", Name: "Legacy", PasswordHash: "x", IsAdmin: true}
+	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	first := claims("owner", "legacy@facile.studio", "Legacy", true)
+	first.Locale = "de"
+	linked, err := users.UpsertFromOIDC(ctx, first)
+	if err != nil || linked != legacy.ID {
+		t.Fatalf("the legacy account was not linked: id %d, err %v", linked, err)
+	}
+	link(t, db, linked, "owner")
+
+	var stored schemas.User
+	if err := db.First(&stored, legacy.ID).Error; err != nil || !stored.IsAdmin || stored.Locale != "de" {
+		t.Fatalf("the linked account lost its data or its locale: %+v, %v", stored, err)
+	}
+	if _, err := users.UpsertFromOIDC(ctx, claims("stranger", "legacy@facile.studio", "Stranger", true)); err == nil {
+		t.Fatal("a second subject of the same issuer took over a linked account")
+	}
+	var count int64
+	db.Model(&schemas.User{}).Count(&count)
+	if count != 1 {
+		t.Fatalf("%d accounts after the refusals, want 1", count)
+	}
+}
+
+func link(t *testing.T, db *gorm.DB, userID int64, subject string) {
+	t.Helper()
+	if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, ?, ?)`,
+		userID, "https://sso.test/", subject).Error; err != nil {
+		t.Fatalf("link the identity: %v", err)
+	}
+}
+
 func claims(subject, email, name string, verified bool) porte.Claims {
 	return porte.Claims{
 		Provider:      "https://sso.test/",
@@ -211,41 +247,5 @@ func claims(subject, email, name string, verified bool) porte.Claims {
 		Email:         email,
 		Name:          name,
 		EmailVerified: verified,
-	}
-}
-
-// An account that registered through this app after the porte v0.2 deploy has
-// its password identity keyed on the email address and an empty
-// users.password_hash — the adoption INSERT skips it, because there is nothing
-// left in the users table to adopt. porte v0.3 resolves the address to a user id
-// and reads the credential by that id, so nothing but the re-key can find that
-// row again, and the bump locks the account out for good.
-//
-// It fails the way migrations fail: a correct password answered "invalid email
-// or password", with the credential still in the table and nothing in the logs.
-// So the migration is exercised from the login form rather than from the table.
-func TestAPasswordKeyedTheOldWayStillSignsIn(t *testing.T) {
-	db := testdb.Migrated(t)
-	router := routerOver(t, db)
-
-	registered := call(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
-		"email": "someone@facile.studio", "name": "Someone", "password": "a-long-enough-password",
-	})
-	if registered.Code != http.StatusCreated {
-		t.Fatalf("register = %d: %s", registered.Code, registered.Body)
-	}
-	if err := db.Exec(`UPDATE porte_identities SET subject = 'someone@facile.studio' WHERE provider = 'local'`).Error; err != nil {
-		t.Fatalf("key the identity the way porte v0.2 did: %v", err)
-	}
-
-	if err := schemas.Migrate(db); err != nil {
-		t.Fatalf("the migration this deploy carries: %v", err)
-	}
-
-	signedIn := call(t, router, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": "someone@facile.studio", "password": "a-long-enough-password",
-	})
-	if signedIn.Code != http.StatusOK {
-		t.Fatalf("an account that could sign in yesterday cannot today: %d %s", signedIn.Code, signedIn.Body)
 	}
 }

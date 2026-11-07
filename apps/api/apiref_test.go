@@ -12,8 +12,9 @@ import (
 
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
+	"github.com/FacileStudio/Journal/apps/api/modules/deletions"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -22,10 +23,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// testRouter builds the real router with a nil database. Nothing here serves a
-// request that would touch it: the tests walk the route tree and read the
-// reference, both of which are assembled before any handler runs.
-func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*oidc.Kit, *session.Manager, *local.Kit) {
+// testKitFor builds the porte kit and session manager over a database.
+func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*oidc.Kit, *session.Manager) {
 	t.Helper()
 	store := portepg.New(sqlDB)
 	users := auth.NewUserStore(db)
@@ -34,31 +33,28 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 		t.Fatalf("session.New: %v", err)
 	}
 	kit, err := oidc.New(context.Background(), appEnv.Porte, oidc.Deps{
-		Users:       users,
-		Identities:  store.Identities(),
-		Sessions:    sessions,
-		Codes:       store.LoginCodes(),
-		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
+		Users:      users,
+		Identities: store.Identities(),
+		Sessions:   sessions,
+		Codes:      store.LoginCodes(),
 	})
 	if err != nil {
 		t.Fatalf("build the kit: %v", err)
 	}
-	passwords, err := local.New(local.Config{AllowRegistration: appEnv.AllowRegistration}, local.Deps{
-		Users:      users,
-		Identities: store.Identities(),
-		Sessions:   sessions,
-		Count:      users.CountUsers,
-	})
-	if err != nil {
-		t.Fatalf("build the password kit: %v", err)
-	}
-	return kit, sessions, passwords
+	return kit, sessions
 }
 
+// testRouter builds the real router with a nil database. Nothing here serves a
+// request that would touch it: the tests walk the route tree and read the
+// reference, both of which are assembled before any handler runs.
 func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	t.Helper()
-	kit, sessions, passwords := testKitFor(t, appEnv, nil, nil)
-	return buildRouter(nil, kit, sessions, passwords, appEnv, slog.New(slog.DiscardHandler), nil)
+	kit, sessions := testKitFor(t, appEnv, nil, nil)
+	var erasures *deletions.Service
+	if kit.Enabled() {
+		erasures = deletions.NewService(nil, directory.Client{Issuer: appEnv.Porte.Issuer}, nil, slog.New(slog.DiscardHandler))
+	}
+	return buildRouter(nil, kit, sessions, appEnv, slog.New(slog.DiscardHandler), nil, erasures)
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the
@@ -98,8 +94,8 @@ func ssoEnv(t *testing.T) env.Config {
 // TestEveryRouteIsDocumented is the reason the registry can be trusted: a route
 // added to any module's RegisterRoutes without a matching entry fails here.
 func TestEveryRouteIsDocumented(t *testing.T) {
-	for name, appEnv := range map[string]env.Config{"passwords": {}, "sso": ssoEnv(t)} {
-		if missing := apiref.Undocumented(testRouter(t, appEnv), referenceConfig()); len(missing) > 0 {
+	for name, appEnv := range map[string]env.Config{"no sso": {}, "sso": ssoEnv(t)} {
+		if missing := apiref.Undocumented(testRouter(t, appEnv), referenceConfig(), "/version"); len(missing) > 0 {
 			t.Errorf("%s: routes missing from the API registry: %v", name, missing)
 		}
 	}

@@ -32,6 +32,9 @@
 	import LogTable from '$lib/components/LogTable.svelte';
 	import LogContextDrawer from '$lib/components/LogContextDrawer.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	const MAX_ENTRIES = 2000;
 	const PAGE_SIZE = 100;
@@ -44,9 +47,9 @@
 		{ id: '24h', label: '24h', ms: 86_400_000 },
 		{ id: '7d', label: '7d', ms: 604_800_000 },
 		{ id: '30d', label: '30d', ms: 2_592_000_000 },
-		{ id: 'all', label: 'All', ms: 0 },
-		{ id: 'custom', label: 'Custom', ms: 0 }
-	];
+		{ id: 'all', label: '', key: 'logs.rangeAll', ms: 0 },
+		{ id: 'custom', label: '', key: 'logs.rangeCustom', ms: 0 }
+	] as const;
 
 	let apps = $state<AppSummary[]>([]);
 	let savedQueries = $state<SavedQuery[]>([]);
@@ -167,7 +170,7 @@
 			gapIds = [];
 		} catch (err) {
 			if (gen !== loadGen) return;
-			error = err instanceof Error ? err.message : 'Failed to load logs';
+			error = err instanceof Error ? err.message : t('logs.loadFailed');
 		} finally {
 			if (gen === loadGen) loading = false;
 		}
@@ -188,7 +191,7 @@
 			nextBefore = res.next_before;
 		} catch (err) {
 			if (gen !== loadGen) return;
-			error = err instanceof Error ? err.message : 'Failed to load more';
+			error = err instanceof Error ? err.message : t('logs.loadMoreFailed');
 		} finally {
 			if (gen === loadGen) loadingMore = false;
 		}
@@ -342,9 +345,9 @@
 			await loadSavedQueries();
 			saveOpen = false;
 			saveName = '';
-			toast.success(`Saved “${name}”.`);
+			toast.success(t('logs.saved', { name }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Could not save the query');
+			toast.danger(err instanceof Error ? err.message : t('logs.saveFailed'));
 		} finally {
 			saving = false;
 		}
@@ -362,9 +365,9 @@
 	}
 </script>
 
-<svelte:head><title>Logs — Journal</title></svelte:head>
+<svelte:head><title>{t('logs.title')} — Journal</title></svelte:head>
 
-<PageHeader title="Logs" description="Every entry shipped to this instance, newest first.">
+<PageHeader title={t('logs.title')} description={t('logs.description')}>
 	{#snippet actions()}
 		{#if liveTail}
 			<Button
@@ -373,7 +376,7 @@
 				icon={tailPaused ? icons.refresh : icons.clock}
 				onclick={toggleTailPause}
 			>
-				{tailPaused ? 'Resume' : 'Pause'}
+				{tailPaused ? t('logs.resume') : t('logs.pause')}
 			</Button>
 		{/if}
 		<Button size="sm" variant={liveTail ? 'primary' : 'outline'} onclick={toggleTail}>
@@ -381,10 +384,10 @@
 				tone={liveTail && !tailPaused ? 'success' : 'neutral'}
 				pulse={liveTail && !tailPaused}
 			/>
-			Live tail
+			{t('logs.liveTail')}
 		</Button>
 		<Button size="sm" variant="outline" icon={icons.plus} onclick={() => (saveOpen = true)}>
-			Save filters
+			{t('logs.saveFilters')}
 		</Button>
 	{/snippet}
 </PageHeader>
@@ -395,20 +398,20 @@
 			type="search"
 			bind:value={query}
 			oninput={onSearchInput}
-			placeholder="Search messages…"
-			aria-label="Search messages"
+			placeholder={t('logs.search')}
+			aria-label={t('logs.searchLabel')}
 		/>
 
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 			<label class="flex flex-col gap-1">
-				<span class="text-fc-xs text-fc-fg-muted">App</span>
+				<span class="text-fc-xs text-fc-fg-muted">{t('common.app')}</span>
 				<Select
 					bind:value={selectedApp}
 					onchange={apply}
 					class="font-fc-mono"
-					aria-label="Filter by app"
+					aria-label={t('logs.filterApp')}
 				>
-					<option value="">All apps</option>
+					<option value="">{t('logs.allApps')}</option>
 					{#each apps as app (app.name)}
 						<option value={app.name}>{app.name} ({app.count})</option>
 					{/each}
@@ -416,7 +419,7 @@
 			</label>
 
 			<div class="flex flex-col gap-1">
-				<span class="text-fc-xs text-fc-fg-muted">Level</span>
+				<span class="text-fc-xs text-fc-fg-muted">{t('common.level')}</span>
 				<div class="flex h-11 flex-wrap items-center gap-1.5">
 					{#each LEVELS as level (level)}
 						{@const on = selectedLevels.includes(level)}
@@ -435,27 +438,27 @@
 			</div>
 
 			<div class="flex flex-col gap-1">
-				<span class="text-fc-xs text-fc-fg-muted">Source</span>
+				<span class="text-fc-xs text-fc-fg-muted">{t('logs.source')}</span>
 				<Select
 					bind:value={source}
 					onchange={apply}
-					aria-label="Filter by source"
+					aria-label={t('logs.filterSource')}
 				>
-					<option value="">All sources</option>
-					<option value="browser">Client (browser)</option>
-					<option value="collector">Collector (Docker)</option>
-					<option value="server">Server (no source)</option>
+					<option value="">{t('logs.allSources')}</option>
+					<option value="browser">{t('logs.sourceBrowser')}</option>
+					<option value="collector">{t('logs.sourceCollector')}</option>
+					<option value="server">{t('logs.sourceServer')}</option>
 				</Select>
 			</div>
 
 			<label class="flex flex-col gap-1">
-				<span class="text-fc-xs text-fc-fg-muted">Saved query</span>
+				<span class="text-fc-xs text-fc-fg-muted">{t('logs.savedQuery')}</span>
 				<Select
 					value=""
 					onchange={(event) => applySaved(event.currentTarget.value)}
-					aria-label="Apply a saved query"
+					aria-label={t('logs.applySaved')}
 				>
-					<option value="">Apply a saved query…</option>
+					<option value="">{t('logs.applySaved')}…</option>
 					{#each savedQueries as saved (saved.id)}
 						<option value={String(saved.id)}>{saved.name}</option>
 					{/each}
@@ -465,9 +468,9 @@
 
 		<div class="flex flex-col gap-4">
 			<Tabs
-				items={RANGES.map((entry) => ({ id: entry.id, label: entry.label }))}
+				items={RANGES.map((entry) => ({ id: entry.id, label: 'key' in entry ? t(entry.key) : entry.label }))}
 				value={range}
-				label="Time range"
+				label={t('logs.timeRange')}
 				onChange={(id) => {
 					range = id;
 					apply();
@@ -476,11 +479,11 @@
 			{#if range === 'custom'}
 				<div class="grid gap-4 sm:grid-cols-2">
 					<label class="flex flex-col gap-1">
-						<span class="text-fc-xs text-fc-fg-muted">From</span>
+						<span class="text-fc-xs text-fc-fg-muted">{t('logs.from')}</span>
 						<Input type="datetime-local" bind:value={customSince} onchange={apply} />
 					</label>
 					<label class="flex flex-col gap-1">
-						<span class="text-fc-xs text-fc-fg-muted">To</span>
+						<span class="text-fc-xs text-fc-fg-muted">{t('logs.to')}</span>
 						<Input type="datetime-local" bind:value={customUntil} onchange={apply} />
 					</label>
 				</div>
@@ -517,7 +520,7 @@
 					</button>
 				{/if}
 				<Button size="sm" variant="ghost" icon={icons.close} onclick={clearFilters}>
-					Clear {activeCount} filter{activeCount === 1 ? '' : 's'}
+					{t('logs.clearFilters', { count: activeCount })}
 				</Button>
 			</div>
 		{/if}
@@ -530,14 +533,14 @@
 
 <section class="flex flex-col gap-4">
 	{#if error}
-		<Alert tone="danger" title="Could not load logs">{error}</Alert>
+		<Alert tone="danger" title={t('logs.loadFailed')}>{error}</Alert>
 	{/if}
 
 	<LogTable
 		{entries}
 		{gapIds}
 		{loading}
-		emptyDescription="Widen the time range, drop a level filter, or check that the app is shipping to this instance."
+		emptyDescription={t('logs.emptyHint')}
 		onPivotApp={pivotApp}
 		onPivotLevel={toggleLevel}
 		onPivotRequest={pivotRequest}
@@ -549,7 +552,7 @@
 	{#if nextBefore && entries.length > 0}
 		<div class="flex justify-center">
 			<Button variant="outline" disabled={loadingMore} onclick={loadMore}>
-				{loadingMore ? 'Loading…' : 'Load more'}
+				{loadingMore ? t('common.loading') : t('logs.loadMore')}
 			</Button>
 		</div>
 	{/if}
@@ -557,16 +560,16 @@
 
 <LogContextDrawer bind:anchorId={contextAnchor} />
 
-<Modal bind:open={saveOpen} title="Save these filters" size="sm">
+<Modal bind:open={saveOpen} title={t('logs.saveTitle')} size="sm">
 	<label class="flex flex-col gap-1">
-		<span class="text-fc-sm text-fc-fg-muted">Name</span>
-		<Input bind:value={saveName} placeholder="Nuage errors" />
+		<span class="text-fc-sm text-fc-fg-muted">{t('common.name')}</span>
+		<Input bind:value={saveName} placeholder={t('logs.saveNamePlaceholder')} />
 	</label>
 	{#snippet footer()}
 		<div class="flex justify-end gap-2">
-			<Button variant="ghost" onclick={() => (saveOpen = false)}>Cancel</Button>
+			<Button variant="ghost" onclick={() => (saveOpen = false)}>{t('common.cancel')}</Button>
 			<Button disabled={saving || !saveName.trim()} onclick={saveQuery}>
-				{saving ? 'Saving…' : 'Save'}
+				{saving ? t('common.saving') : t('common.save')}
 			</Button>
 		</div>
 	{/snippet}

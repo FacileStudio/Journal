@@ -7,8 +7,8 @@ record of processing for the dashboard itself; it is not legal advice.
 
 | Data | Where | Source |
 |---|---|---|
-| Email, name, admin flag, avatar URL | `users` | Registration or SSO claims |
-| Password (argon2id) | `porte_identities` | Registration / password change |
+| Email, name, locale, admin flag, avatar URL | `users` | SSO claims from Registre |
+| Legacy password hash (argon2id), no longer usable | `porte_identities`, `users.password_hash` | Accounts created before the switch to Registre |
 | Session tokens (SHA-256) | `porte_sessions` | Login; 30-day expiry, named API tokens have none by design |
 | Log entries: app, level, message (free text), `meta` (jsonb), origin + user agent for browser events | `log_entries` | The apps shipping logs |
 
@@ -26,16 +26,33 @@ table records only key-plus-day counters.
 
 ## Erasure
 
-`DELETE /api/auth/me` (dashboard: Settings → Danger zone) deletes the account in one
-statement whose WHERE clause also enforces the last-administrator rule, cascading through
-every session and identity, expiring the session
-cookie, and leaving the caller's token dead.
+Two paths end in the same deletion of the account row, which cascades through every identity
+(with its provider tokens), session, named token and login code.
 
-**Log entries are not touched**: they are keyed by app, never by user, and carry no user
-identifier — so there is nothing of the deleted person in them to erase. This is a design
-invariant: producers must not put user identifiers into `meta`. The scrubber redacts
-credential-shaped keys (`password`, `token`, `cookie`, …) at any depth on both ingest paths,
-because the mistake every producer eventually makes is logging a secret by accident.
+- **Self-service.** `DELETE /api/auth/me` (dashboard: Settings → Danger zone) deletes the
+  account in one statement whose WHERE clause also enforces the last-administrator rule,
+  expires the session cookie and leaves the caller's token dead.
+- **Registre erasure.** When Registre erases a person it tells every app. Journal polls
+  `GET /api/directory/deletions` with its own OIDC client credentials (every five minutes by
+  default) and also accepts Registre's signed push on `POST /api/registre/deletions`. For each
+  person it deletes the account behind that Registre subject, then porte erases its own rows.
+  The cursor and the list of handled subjects live in `directory_deletion_state`, so a restart
+  or a replayed notice does nothing twice, and a failure retries on the next poll. Unlike the
+  self-service path, this one never refuses for the last administrator: the person is already
+  gone from Registre. It logs a warning when no administrator is left, and an operator then
+  promotes another account in the database. Run one replica: the poller assumes it is alone.
+
+Journal keeps no other per-person row. Ingest keys, saved queries, alert rules and source maps
+belong to the instance, not to a person, so they stay.
+
+**Log entries are not scrubbed.** Journal does not search log text for a person, and building
+that is out of scope. Entries are keyed by app and carry no user identifier of their own, but
+any app can write personal data into a message or `meta`. Those lines leave on the retention
+clock: `RETENTION_DAYS` (default 90) deletes them, so a person's data in a log line is gone at
+most that many days after it was written. Producers must not put user identifiers into `meta`.
+The scrubber redacts credential-shaped keys (`password`, `token`, `cookie`, …) at any depth on
+both ingest paths, because the mistake every producer eventually makes is logging a secret by
+accident.
 
 ## Backups
 

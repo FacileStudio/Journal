@@ -9,6 +9,9 @@
 	import LogHistogram from '$lib/components/LogHistogram.svelte';
 	import LogTable from '$lib/components/LogTable.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	const WINDOW_MS = 86_400_000;
 
@@ -58,33 +61,33 @@
 	});
 </script>
 
-<svelte:head><title>Overview — Journal</title></svelte:head>
+<svelte:head><title>{t('overview.title')} — Journal</title></svelte:head>
 
-<PageHeader title="Overview" description="What every app in the suite has been saying for the last 24 hours.">
+<PageHeader title={t('overview.title')} description={t('overview.description')}>
 	{#snippet actions()}
-		<Button size="sm" variant="outline" href="/logs" icon={icons.history}>Open logs</Button>
+		<Button size="sm" variant="outline" href="/logs" icon={icons.history}>{t('overview.openLogs')}</Button>
 	{/snippet}
 </PageHeader>
 
 <section class="flex flex-col gap-4">
 	<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-		<StatCard label="Entries" value={formatCount(grandTotal)}>
+		<StatCard label={t('overview.stat.entries')} value={formatCount(grandTotal)}>
 			<Sparkline data={spark} />
 		</StatCard>
-		<StatCard label="Errors" value={formatCount(totals.error)}>
+		<StatCard label={t('overview.stat.errors')} value={formatCount(totals.error)}>
 			<Sparkline data={hist?.bars.map((bar) => bar.counts.error ?? 0) ?? []} color={levelFill('error')} />
 		</StatCard>
-		<StatCard label="Warnings" value={formatCount(totals.warn)}>
+		<StatCard label={t('overview.stat.warnings')} value={formatCount(totals.warn)}>
 			<Sparkline data={hist?.bars.map((bar) => bar.counts.warn ?? 0) ?? []} color={levelFill('warn')} />
 		</StatCard>
-		<StatCard label="Apps reporting" value={formatCount(apps.length)} />
+		<StatCard label={t('overview.stat.apps')} value={formatCount(apps.length)} />
 	</div>
 </section>
 
 <section class="flex flex-col gap-4">
 	<div class="flex flex-col gap-1">
-		<h2 class="text-fc-lg font-semibold text-fc-fg">Volume</h2>
-		<p class="text-fc-sm text-fc-fg-muted">Click a bucket to open it in the log explorer.</p>
+		<h2 class="text-fc-lg font-semibold text-fc-fg">{t('overview.volume')}</h2>
+		<p class="text-fc-sm text-fc-fg-muted">{t('overview.volumeHint')}</p>
 	</div>
 	<Card>
 		<LogHistogram {hist} height={140} onSelect={openBucket} />
@@ -93,28 +96,28 @@
 
 <section class="grid gap-4 lg:grid-cols-2">
 	<Card class="flex flex-col gap-4">
-		<h2 class="text-fc-lg font-semibold text-fc-fg">By level</h2>
+		<h2 class="text-fc-lg font-semibold text-fc-fg">{t('overview.byLevel')}</h2>
 		{#if slices.length > 0}
 			<DonutChart
 				data={slices}
 				class="flex-1"
-				centerLabel="entries"
+				centerLabel={t('overview.centerLabel')}
 				centerValue={formatCount(grandTotal)}
 			/>
 		{:else}
-			<EmptyState bare icon={icons.dashboard} title="Nothing ingested yet" />
+			<EmptyState bare icon={icons.dashboard} title={t('overview.nothing')} />
 		{/if}
 	</Card>
 
 	<Card class="flex flex-col gap-4">
-		<h2 class="text-fc-lg font-semibold text-fc-fg">Busiest apps</h2>
+		<h2 class="text-fc-lg font-semibold text-fc-fg">{t('overview.busiest')}</h2>
 		{#if topApps.length > 0}
 			<Table class="bg-transparent">
 				<thead>
 					<tr>
-						<th scope="col">App</th>
-						<th scope="col">Entries</th>
-						<th scope="col">Last seen</th>
+						<th scope="col">{t('common.app')}</th>
+						<th scope="col">{t('common.entries')}</th>
+						<th scope="col">{t('common.lastSeen')}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -130,7 +133,7 @@
 				</tbody>
 			</Table>
 		{:else}
-			<EmptyState bare icon={icons.server} title="No app has shipped a log yet" />
+			<EmptyState bare icon={icons.server} title={t('overview.noApp')} />
 		{/if}
 	</Card>
 </section>
@@ -138,17 +141,17 @@
 <section class="flex flex-col gap-4">
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div class="flex flex-col gap-1">
-			<h2 class="text-fc-lg font-semibold text-fc-fg">Recent errors</h2>
-			<p class="text-fc-sm text-fc-fg-muted">The last eight, across every app.</p>
+			<h2 class="text-fc-lg font-semibold text-fc-fg">{t('overview.recentErrors')}</h2>
+			<p class="text-fc-sm text-fc-fg-muted">{t('overview.lastEight')}</p>
 		</div>
 		<Button size="sm" variant="ghost" href="/logs?level=error" iconRight={icons.arrow}>
-			See all errors
+			{t('overview.seeAllErrors')}
 		</Button>
 	</div>
 	<LogTable
 		entries={recentErrors}
 		{loading}
-		emptyTitle="No errors in the last 24 hours"
-		emptyDescription="Quiet is good. The explorer has the full stream if you want to look closer."
+		emptyTitle={t('overview.noErrors')}
+		emptyDescription={t('overview.noErrorsHint')}
 	/>
 </section>

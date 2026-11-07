@@ -1,10 +1,13 @@
 <script lang="ts">
 	import '../app.css';
 	import { browser } from '$app/environment';
-	import { Toaster } from '@facile/muse';
+	import { Toaster, provideLocale } from '@facile/muse';
 	import { applyStoredTheme } from '$lib/theme.svelte';
+	import { session } from '$lib/session.svelte';
 
 	let { children } = $props();
+
+	provideLocale(() => session.locale);
 
 	if (browser) {
 		applyStoredTheme();

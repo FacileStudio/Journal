@@ -11,11 +11,6 @@ export function getToken(): string | null {
 	return cached;
 }
 
-export function setToken(token: string) {
-	cached = token;
-	if (browser) localStorage.setItem(TOKEN_KEY, token);
-}
-
 export function clearToken() {
 	cached = null;
 	if (browser) localStorage.removeItem(TOKEN_KEY);

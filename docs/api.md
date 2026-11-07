@@ -42,8 +42,6 @@ Postgres with a 2-second timeout and returns `200 {"status":"ready"}` or
 | Method | Path | Auth |
 |---|---|---|
 | GET | `/api/auth/config` | public |
-| POST | `/api/auth/register` | public |
-| POST | `/api/auth/login` | public |
 | POST | `/api/auth/logout` | session |
 | GET | `/api/auth/me` | session |
 | DELETE | `/api/auth/me` | session |
@@ -52,13 +50,12 @@ Postgres with a 2-second timeout and returns `200 {"status":"ready"}` or
 | POST | `/api/auth/oidc/exchange` | public, SSO only |
 | POST | `/api/auth/sync-profile` | session, SSO only |
 | POST | `/api/auth/backchannel-logout` | the provider, SSO only |
+| POST | `/api/registre/deletions` | Registre's signed notice, SSO only |
 
-`GET /api/auth/config` returns `{"sso_only":bool,"oidc_enabled":bool,"allow_registration":bool}`.
-The first two come from [porte](https://github.com/FacileStudio/porte), the suite's
-authentication kit, and follow `OIDC_ISSUER` and `SSO_ONLY`; `allow_registration` is
-Journal's own addition to the suite-wide shape. The routes marked *SSO only* are not
-registered at all without an `OIDC_ISSUER`, and `SSO_ONLY=true` unregisters `/auth/register`
-and `/auth/login` the same way — there is no endpoint left to probe in either direction.
+`GET /api/auth/config` returns `{"sso_only":bool,"oidc_enabled":bool}`, served by
+[porte](https://github.com/FacileStudio/porte), the suite's authentication kit. The routes
+marked *SSO only* are not registered at all without an `OIDC_ISSUER`. Sign-in goes through
+Registre only: there is no `/auth/register` and no `/auth/login`, so a request to either is a 404.
 
 A session issued by single sign-on lands in an **HttpOnly** cookie rather than in the
 response body, so no token ever reaches a URL, a log line or `localStorage`. A request
@@ -66,17 +63,15 @@ authenticated by that cookie must carry an `X-Facile-CSRF` header, with any non-
 on every method other than `GET`, `HEAD` and `OPTIONS`. Bearer callers are exempt: nothing
 attaches a header on their behalf.
 
-`POST /api/auth/register` takes `{"email","name","password"}` and returns `201 {"token","user"}`.
-The email must parse, the password must be at least 12 characters, a duplicate email is
-`409`, and registration while disabled is `403`. The count of existing users is taken inside
-a transaction holding a `pg_advisory_xact_lock`, so the first account reliably becomes admin
-and `ALLOW_REGISTRATION=false` cannot lock an empty instance out.
+`POST /api/registre/deletions` receives Registre's signed `user.deleted` notice (GDPR erasure).
+It takes no session and no CSRF header: the notice carries a signature that is checked against
+the issuer's keys, together with the issuer, audience and time window. A bad notice is `400`;
+Journal also polls Registre's deletion list, so the push is optional. See [gdpr.md](gdpr.md).
 
-`POST /api/auth/login` takes `{"email","password"}` and returns `200 {"token","user"}`, or
-`401 "invalid email or password"` for both a wrong password and an unknown account. It also
-opportunistically deletes expired session rows.
+`user` is `{"id","email","name","is_admin","avatar_url","locale","created_at"}`. Session tokens
+last 30 days. `locale` is `fr`, `en`, `es` or `de`, taken from the Registre profile at sign-in.
 
-`user` is `{"id","email","name","is_admin","created_at"}`. Session tokens last 30 days.
+`GET /version` (root, not under `/api`) returns `{"version":"<APP_VERSION>"}`.
 
 ## Ingest
 
@@ -297,7 +292,6 @@ forbidden, `404` not found, `409` conflict, `429` rate limited, `500` internal.
 
 | Group | Limit | Key |
 |---|---|---|
-| `/api/auth/register`, `/api/auth/login` | 20/min | client IP and endpoint |
 | Other session routes | 300/min | client IP |
 | `/api/ingest` | 600/min | SHA-256 of the bearer token |
 | `/api/ingest/browser` | 600/min | SHA-256 of the public key |

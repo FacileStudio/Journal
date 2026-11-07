@@ -1,8 +1,10 @@
+import { session } from '$lib/session.svelte';
+
 /** Log timestamps: no year, seconds included — the log stream is read at second resolution. */
 export function formatTime(iso: string): string {
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleString(undefined, {
+	return date.toLocaleString(session.locale, {
 		month: 'short',
 		day: '2-digit',
 		hour: '2-digit',
@@ -16,7 +18,7 @@ export function formatTime(iso: string): string {
 export function formatClock(iso: string): string {
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleTimeString(undefined, {
+	return date.toLocaleTimeString(session.locale, {
 		hour: '2-digit',
 		minute: '2-digit',
 		second: '2-digit',
@@ -28,7 +30,7 @@ export function formatClock(iso: string): string {
 export function formatDate(iso: string): string {
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleString(undefined, {
+	return date.toLocaleString(session.locale, {
 		year: 'numeric',
 		month: 'short',
 		day: '2-digit',
@@ -50,7 +52,7 @@ export function formatRelative(iso: string): string {
 	if (Number.isNaN(ms)) return iso;
 	const delta = ms - Date.now();
 	const magnitude = Math.abs(delta);
-	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+	const rtf = new Intl.RelativeTimeFormat(session.locale, { numeric: 'auto' });
 	let divisor = 1000;
 	for (const [unit, ceiling] of RELATIVE_STEPS) {
 		if (magnitude < ceiling) return rtf.format(Math.round(delta / divisor), unit);
@@ -67,5 +69,5 @@ export function toLocalInput(ms: number): string {
 }
 
 export function formatCount(value: number): string {
-	return value.toLocaleString();
+	return value.toLocaleString(session.locale);
 }

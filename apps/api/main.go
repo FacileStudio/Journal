@@ -19,13 +19,14 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/antenne"
 	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
+	"github.com/FacileStudio/Journal/apps/api/modules/deletions"
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -109,33 +110,19 @@ func run() int {
 	}
 
 	kit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
-		Users:       users,
-		Identities:  identityStore.Identities(),
-		Sessions:    sessions,
-		Codes:       identityStore.LoginCodes(),
-		Logger:      appLogger,
-		ConfigExtra: auth.ConfigExtra(appEnv.AllowRegistration),
+		Users:      users,
+		Identities: identityStore.Identities(),
+		Sessions:   sessions,
+		Codes:      identityStore.LoginCodes(),
+		Logger:     appLogger,
 	})
 	if err != nil {
 		appLogger.Error("failed to configure authentication", slog.Any("error", err))
 		return 1
 	}
 
-	passwords, err := local.New(local.Config{AllowRegistration: appEnv.AllowRegistration}, local.Deps{
-		Users:      users,
-		Identities: identityStore.Identities(),
-		Sessions:   sessions,
-		Logger:     appLogger,
-		Count:      users.CountUsers,
-	})
-	if err != nil {
-		appLogger.Error("failed to configure the password login", slog.Any("error", err))
-		return 1
-	}
 	if kit.Enabled() {
-		appLogger.Info("single sign-on enabled",
-			slog.String("issuer", appEnv.Porte.Issuer),
-			slog.Bool("sso_only", appEnv.Porte.SSOOnly))
+		appLogger.Info("single sign-on enabled", slog.String("issuer", appEnv.Porte.Issuer))
 	}
 
 	if appEnv.RetentionDays > 0 {
@@ -145,13 +132,23 @@ func run() int {
 	}
 	go sweepSessions(shutdownSignal, sessions, appLogger)
 
+	var erasures *deletions.Service
+	if kit.Enabled() {
+		erasures = deletions.NewService(db, directory.Client{
+			Issuer:       appEnv.Porte.Issuer,
+			ClientID:     appEnv.Porte.ClientID,
+			ClientSecret: appEnv.Porte.ClientSecret,
+		}, identityStore.EraseIdentity, appLogger)
+		go erasures.Run(shutdownSignal)
+	}
+
 	antenneService := antenne.NewService(db, appLogger)
 	antenneService.AutoConnect(shutdownSignal)
 	defer antenneService.Shutdown()
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
-	router := buildRouter(db, kit, sessions, passwords, appEnv, appLogger, antenneService, health.DB(sqlDB))
+	router := buildRouter(db, kit, sessions, appEnv, appLogger, antenneService, erasures, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -204,10 +201,10 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, passwords *local.Kit, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, erasures *deletions.Service, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
-	authService := auth.NewService(db, passwords)
+	authService := auth.NewService(db)
 	apiKeysService := apikeys.NewService(db)
 	queriesService := queries.NewService(db)
 	sourceMapsService := sourcemaps.NewService(db)
@@ -217,13 +214,13 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		w.Header().Set("Retry-After", "60")
 		httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
 	})
-	credentialLimiter := httprate.Limit(20, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint), rateLimitExceeded)
 	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
 	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
 
 	browserIngestLimiter := httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKeyAndIP), rateLimitExceeded)
 	browserKeyCeiling := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKey), rateLimitExceeded)
 
+	clientDir := spa.DirFromEnv()
 	router := httpx.NewRouter(httpx.Config{
 		Logger: appLogger,
 		CORS: troncmiddleware.CORSConfig{
@@ -232,10 +229,11 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		TrustedProxies: appEnv.TrustedProxies,
 		CDNProxies:     appEnv.CDNProxies,
 		CDNHeader:      appEnv.CDNHeader,
+		Security:       securityConfig(clientDir, appLogger),
 	})
-	router.Use(middleware.SecurityHeaders)
 
 	health.Mount(router, checks...)
+	router.Get("/version", versionHandler)
 	apiref.Mount(router, referenceConfig())
 
 	requireAuth := middleware.RequireAuth(sessions, authService)
@@ -243,8 +241,11 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 	router.Route("/api", func(api chi.Router) {
 		sessions.Mount(api.With(sessionLimiter))
 		kit.Mount(api.With(sessionLimiter))
-		auth.RegisterRoutes(api, authService, appEnv.Porte.SSOOnly, credentialLimiter, sessionLimiter, requireAuth,
+		auth.RegisterRoutes(api, authService, sessionLimiter, requireAuth,
 			func(w http.ResponseWriter, r *http.Request) { sessions.ClearCookie(w, r, porte.SessionCookieName) })
+		if erasures != nil {
+			deletions.RegisterRoutes(api, erasures)
+		}
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
 		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
@@ -264,13 +265,28 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, password
 		})
 	})
 
-	clientDir := spa.DirFromEnv()
 	if spa.Available(clientDir) {
 		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
 		appLogger.Info("serving client", slog.String("dir", clientDir))
 	}
 
 	return router
+}
+
+// securityConfig extends tronc's default security headers with the inline
+// scripts adapter-static writes into the built client, which script-src 'self'
+// would otherwise block. A client directory that cannot be hashed is logged and
+// leaves the default script policy, which only reports.
+func securityConfig(clientDir string, appLogger *slog.Logger) troncmiddleware.SecurityConfig {
+	if !spa.Available(clientDir) {
+		return troncmiddleware.SecurityConfig{}
+	}
+	hashes, err := spa.InlineScriptHashes(clientDir)
+	if err != nil {
+		appLogger.Warn("failed to hash the client's inline scripts", slog.Any("error", err))
+		return troncmiddleware.SecurityConfig{}
+	}
+	return troncmiddleware.SecurityConfig{CSPSources: map[string][]string{"script-src": hashes}}
 }
 
 func referenceConfig() apiref.Config {

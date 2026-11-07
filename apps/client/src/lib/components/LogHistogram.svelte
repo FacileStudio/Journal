@@ -3,6 +3,9 @@
 	import { LEVELS, levelFill, levelWeight } from '$lib/levels';
 	import { bucketSummary, segmentPath, stackSegments, type HistBar, type Histogram } from '$lib/histogram';
 	import { formatTime } from '$lib/format';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	/*
 	 * Not a muse `BarChart`: the volume strip is a time *control* as much as a chart — a bucket
@@ -83,7 +86,7 @@
 				<button
 					type="button"
 					class="h-full min-w-0 flex-1 cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-fc-ring"
-					aria-label="{formatTime(new Date(bar.start).toISOString())} — {bucketSummary(bar)}"
+					aria-label="{formatTime(new Date(bar.start).toISOString())} — {bucketSummary(bar, t('histogram.none'))}"
 					disabled={!onSelect}
 					onmouseenter={() => (hover = i)}
 					onfocus={() => (hover = i)}
@@ -109,10 +112,10 @@
 
 		<div class="sr-only">
 			<table>
-				<caption>Log volume by level over the selected range</caption>
+				<caption>{t('histogram.caption')}</caption>
 				<thead>
 					<tr>
-						<th scope="col">Bucket</th>
+						<th scope="col">{t('histogram.bucket')}</th>
 						{#each LEVELS as level (level)}<th scope="col">{level}</th>{/each}
 					</tr>
 				</thead>
@@ -131,7 +134,7 @@
 			class="flex items-center justify-center text-fc-sm text-fc-fg-muted"
 			style:height="{height}px"
 		>
-			No volume in this range
+			{t('histogram.noVolume')}
 		</div>
 	{/if}
 </div>

@@ -77,11 +77,11 @@ export function segmentPath(x: number, y: number, w: number, h: number, baseline
 	return `M${x} ${y + r}a${r} ${r} 0 0 1 ${r}-${r}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - r}h-${w}z`;
 }
 
-export function bucketSummary(bar: HistBar): string {
+export function bucketSummary(bar: HistBar, empty: string): string {
 	const parts = LEVELS.filter((level) => bar.counts[level]).map(
 		(level) => `${level} ${bar.counts[level]}`
 	);
-	return parts.length ? parts.join(', ') : 'no entries';
+	return parts.length ? parts.join(', ') : empty;
 }
 
 export function bucketTotals(hist: Histogram): number[] {

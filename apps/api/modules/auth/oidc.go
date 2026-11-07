@@ -21,8 +21,8 @@ import (
 // becomes the administrator. That rule is product behaviour, it has to survive
 // the switch to SSO, and it is precisely why porte asks the app to own this
 // method instead of owning the write itself.
-// UserStore reads and writes the users porte owns, and is the adapter Journal
-// hands to the porte kit so its password and federated flows fit this database.
+// UserStore is the adapter Journal hands to the porte kit so the federated
+// flow fits this database.
 type UserStore struct {
 	orm *gorm.DB
 }
@@ -32,22 +32,19 @@ func NewUserStore(orm *gorm.DB) *UserStore {
 	return &UserStore{orm: orm}
 }
 
-var (
-	_ porte.UserStore         = (*UserStore)(nil)
-	_ porte.PasswordUserStore = (*UserStore)(nil)
-)
+var _ porte.UserStore = (*UserStore)(nil)
 
 // UpsertFromOIDC matches on (provider, subject) first, falls back to a
 // verified email, and creates the account when neither finds anything.
 //
-// The advisory lock is the one Register already takes: without it two people
-// signing in for the first time at the same moment both count zero users and
-// both become admin. Matching an existing account on the address alone is an
-// account-takeover primitive when the provider lets a user claim any address
-// without proving it, so an unverified claim is refused. An SSO account stores
-// an empty password_hash — not a valid Argon2id encoding, so VerifyPassword
-// refuses every input and no password can sign it in — and the first account
-// ever created becomes admin.
+// The advisory lock keeps two people signing in for the first time at the same
+// moment from both counting zero users and both becoming admin. Matching an
+// existing account on the address alone is an account-takeover primitive when
+// the provider lets a user claim any address without proving it, so an
+// unverified claim is refused. A verified address still does not link into an
+// account that already holds another subject of this issuer: that would hand a
+// recycled address to a stranger, so it is refused too. An SSO account stores
+// an empty password_hash, and the first account ever created becomes admin.
 func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (int64, error) {
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if _, err := mail.ParseAddress(email); err != nil {
@@ -71,7 +68,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		}
 		if linked != 0 {
 			userID = linked
-			return refreshProfile(tx, linked, email, name, photoURL(claims.Picture))
+			return refreshProfile(tx, linked, email, name, photoURL(claims.Picture), claims.Locale)
 		}
 
 		var existing schemas.User
@@ -81,8 +78,11 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 			if !claims.EmailVerified {
 				return errors.Conflict("an account with this email already exists and the identity provider did not verify the address")
 			}
+			if err := refuseOtherSubject(tx, existing.ID, claims); err != nil {
+				return err
+			}
 			userID = existing.ID
-			return refreshProfile(tx, existing.ID, email, name, photoURL(claims.Picture))
+			return refreshProfile(tx, existing.ID, email, name, photoURL(claims.Picture), claims.Locale)
 		case !stderrors.Is(err, gorm.ErrRecordNotFound):
 			return errors.Internal("failed to look up the account", err)
 		}
@@ -92,7 +92,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 			return errors.Internal("failed to count users", err)
 		}
 
-		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0, AvatarURL: photoURL(claims.Picture)}
+		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0, AvatarURL: photoURL(claims.Picture), Locale: localeOrDefault(claims.Locale)}
 		if err := tx.Create(&user).Error; err != nil {
 			return errors.Internal("failed to create the account", err)
 		}
@@ -111,15 +111,44 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 // provider that stops sending the claim does not blank the dashboard. The
 // avatar is always written: an empty one means the provider has no picture to
 // offer, and keeping the old URL would keep showing a picture the user removed.
-func refreshProfile(tx *gorm.DB, userID int64, email, name, avatarURL string) error {
+func refreshProfile(tx *gorm.DB, userID int64, email, name, avatarURL, locale string) error {
 	updates := map[string]any{"email": email, "avatar_url": avatarURL}
 	if name != "" {
 		updates["name"] = name
+	}
+	if locale != "" {
+		updates["locale"] = locale
 	}
 	if err := tx.Model(&schemas.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return errors.Internal("failed to update the account", err)
 	}
 	return nil
+}
+
+// refuseOtherSubject stops an address from linking into an account that already
+// holds a different subject of the same issuer.
+func refuseOtherSubject(tx *gorm.DB, userID int64, claims porte.Claims) error {
+	var others int64
+	err := tx.Raw(
+		`SELECT count(*) FROM porte_identities WHERE user_id = ? AND provider = ? AND subject <> ?`,
+		userID, claims.Provider, claims.Subject,
+	).Scan(&others).Error
+	if err != nil {
+		return errors.Internal("failed to check the account's identities", err)
+	}
+	if others > 0 {
+		return errors.Conflict("this account is already linked to another identity from the provider")
+	}
+	return nil
+}
+
+// localeOrDefault returns the normalised claim, or the default when the
+// provider sent none.
+func localeOrDefault(locale string) string {
+	if locale == "" {
+		return porte.DefaultLocale
+	}
+	return locale
 }
 
 // photoURL returns the picture claim when it is an https URL, and "" otherwise.
@@ -166,75 +195,4 @@ func (s *UserStore) BackfillAvatars(ctx context.Context, issuer string) (int64, 
 		return 0, errors.Internal("failed to backfill avatars", result.Error)
 	}
 	return result.RowsAffected, nil
-}
-
-// CreateFromPassword creates a user row for a local registration. porte has
-// already validated the address and hashed the password; what is left is the
-// part porte has no opinion about, which is the whole of what a Journal user
-// is: the first account created becomes the administrator.
-//
-// The advisory lock is the one Register has always taken. porte cannot take it
-// — it does not own this database — which is exactly why this method is here.
-func (s *UserStore) CreateFromPassword(ctx context.Context, email, name string) (int64, error) {
-	var userID int64
-	txErr := s.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(registrationLockKey)).Error; err != nil {
-			return errors.Internal("failed to acquire registration lock", err)
-		}
-		var count int64
-		if err := tx.Model(&schemas.User{}).Count(&count).Error; err != nil {
-			return errors.Internal("failed to count users", err)
-		}
-		var existing int64
-		if err := tx.Model(&schemas.User{}).Where("email = ?", email).Count(&existing).Error; err != nil {
-			return errors.Internal("failed to check email", err)
-		}
-		if existing > 0 {
-			return errors.Conflict("an account with this email already exists")
-		}
-		user := schemas.User{Email: email, Name: name, PasswordHash: "", IsAdmin: count == 0}
-		if err := tx.Create(&user).Error; err != nil {
-			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-				return errors.Conflict("an account with this email already exists")
-			}
-			return errors.Internal("failed to create the account", err)
-		}
-		userID = user.ID
-		return nil
-	})
-	if txErr != nil {
-		return 0, txErr
-	}
-	return userID, nil
-}
-
-// FindByEmail returns the user id for an address, or porte.ErrNotFound.
-func (s *UserStore) FindByEmail(ctx context.Context, email string) (int64, error) {
-	var user schemas.User
-	err := s.orm.WithContext(ctx).Select("id").Where("email = ?", email).First(&user).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, porte.ErrNotFound
-	}
-	if err != nil {
-		return 0, errors.Internal("failed to look up the account", err)
-	}
-	return user.ID, nil
-}
-
-// CountUsers backs porte/local's registration gate and the first-account rule.
-func (s *UserStore) CountUsers(ctx context.Context) (int64, error) {
-	var count int64
-	if err := s.orm.WithContext(ctx).Model(&schemas.User{}).Count(&count).Error; err != nil {
-		return 0, errors.Internal("failed to count users", err)
-	}
-	return count, nil
-}
-
-// ConfigExtra is Journal's addition to GET /auth/config. porte serves sso_only
-// and oidc_enabled there; allow_registration is Journal's own and the login
-// screen has read it since before any of this.
-func ConfigExtra(allowRegistration bool) func() map[string]any {
-	return func() map[string]any {
-		return map[string]any{"allow_registration": allowRegistration}
-	}
 }

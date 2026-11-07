@@ -3,12 +3,15 @@
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	let {
 		entries,
 		gapIds = [],
 		loading = false,
-		emptyTitle = 'No log entries match these filters',
+		emptyTitle,
 		emptyDescription,
 		onPivotApp,
 		onPivotLevel,
@@ -49,9 +52,9 @@
 
 	function sourceLabel(source: string | null): string {
 		switch (source) {
-			case 'browser': return 'browser';
-			case 'collector': return 'collector';
-			default: return 'server';
+			case 'browser': return t('table.sourceBrowser');
+			case 'collector': return t('table.sourceCollector');
+			default: return t('table.sourceServer');
 		}
 	}
 
@@ -148,12 +151,12 @@
 				.writeText(text)
 				.then(() => {
 					copiedId = entry.id;
-					toast.success('Entry context copied to clipboard.');
+					toast.success(t('clipboard.copied'));
 					setTimeout(() => (copiedId = null), 2000);
 				})
-				.catch(() => toast.danger('Could not copy to clipboard.'));
+				.catch(() => toast.danger(t('clipboard.failed')));
 		} else {
-			toast.danger('Clipboard is not available in this browser.');
+			toast.danger(t('clipboard.unavailable'));
 		}
 	}
 </script>
@@ -161,18 +164,18 @@
 {#if loading && entries.length === 0}
 	<div class="flex justify-center py-16"><Spinner /></div>
 {:else if entries.length === 0}
-	<EmptyState icon={icons.filter} title={emptyTitle} description={emptyDescription} />
+	<EmptyState icon={icons.filter} title={emptyTitle ?? t('table.empty')} description={emptyDescription} />
 {:else}
 	<Table class="table-fixed">
 		<thead>
 			<tr>
-				<th scope="col" class="whitespace-nowrap">Time</th>
+				<th scope="col" class="whitespace-nowrap">{t('table.time')}</th>
 				<!-- The message is the reason anyone opened this page, so on a phone the columns
 				     that can be recovered by expanding a row give up their width to it. -->
-				<th scope="col" class="hidden sm:table-cell">App</th>
-				<th scope="col">Level</th>
-				<th scope="col" class="hidden sm:table-cell">Source</th>
-				<th scope="col" class="w-full">Message</th>
+				<th scope="col" class="hidden sm:table-cell">{t('common.app')}</th>
+				<th scope="col">{t('common.level')}</th>
+				<th scope="col" class="hidden sm:table-cell">{t('logs.source')}</th>
+				<th scope="col" class="w-full">{t('table.message')}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -186,7 +189,7 @@
 						<button
 							type="button"
 							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title="Filter by {entry.app}"
+							title={t('table.filterBy', { value: entry.app })}
 							onclick={(event) => {
 								event.stopPropagation();
 								onPivotApp?.(entry.app);
@@ -199,7 +202,7 @@
 						<button
 							type="button"
 							class="rounded-fc-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title="Filter by {entry.level}"
+							title={t('table.filterBy', { value: entry.level })}
 							onclick={(event) => {
 								event.stopPropagation();
 								onPivotLevel?.(entry.level);
@@ -212,7 +215,7 @@
 						<button
 							type="button"
 							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title="Filter by source: {sourceOf(entry) ?? 'server'}"
+							title={t('table.filterBySource', { value: sourceOf(entry) ?? 'server' })}
 							onclick={(event) => {
 								event.stopPropagation();
 								onPivotSource?.(sourceOf(entry) ?? 'server');
@@ -261,7 +264,7 @@
 											{/each}
 										</div>
 										<p class="text-fc-xs text-fc-fg-muted break-all">
-											{stack.resolved} of {stack.frames.length} frames mapped from release
+											{t('table.frameMapped', { resolved: stack.resolved, total: stack.frames.length })}
 											<span class="font-fc-mono">{stack.release}</span>.
 										</p>
 									{:else}
@@ -271,7 +274,7 @@
 											)}</pre>
 										{#if stack && stack !== 'loading' && stack.release && stack.resolved === 0}
 											<p class="text-fc-xs text-fc-fg-muted break-all">
-												No source map uploaded for release
+												{t('table.noSourceMap')}
 												<span class="font-fc-mono">{stack.release}</span>.
 											</p>
 										{/if}
@@ -283,7 +286,7 @@
 											entry
 										)}</pre>
 								{:else}
-									<p class="text-fc-xs text-fc-fg-muted">No metadata.</p>
+									<p class="text-fc-xs text-fc-fg-muted">{t('table.noMeta')}</p>
 								{/if}
 								<div class="flex flex-wrap items-center gap-2">
 									{#if onContext}
@@ -293,7 +296,7 @@
 											icon={icons.clock}
 											onclick={() => onContext?.(entry.id)}
 										>
-											Context
+											{t('table.context')}
 										</Button>
 									{/if}
 									<Button
@@ -304,7 +307,7 @@
 										disabled={copiedId === entry.id}
 										class="transition-colors duration-200"
 									>
-										{copiedId === entry.id ? 'Copied' : 'Copy'}
+										{copiedId === entry.id ? t('common.copied') : t('common.copy')}
 									</Button>
 									{#if sourceOf(entry) && onPivotSource}
 										<Button
@@ -337,7 +340,7 @@
 										</Button>
 									{/if}
 									<span class="ml-auto text-fc-xs text-fc-fg-muted">
-										<span class="font-fc-mono sm:hidden">{entry.app} · </span>received
+										<span class="font-fc-mono sm:hidden">{entry.app} · </span>{t('table.received')}
 										{formatTime(entry.received_at)}
 									</span>
 								</div>
@@ -351,7 +354,7 @@
 						<td colspan="5">
 							<span class="flex items-center gap-2 text-fc-xs text-fc-warning">
 								<Icon icon={icons.warning} size={14} class="block" />
-								possible gap — some entries between these rows were never fetched
+								{t('table.gap')}
 							</span>
 						</td>
 					</tr>

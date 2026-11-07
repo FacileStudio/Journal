@@ -17,6 +17,7 @@ var Registry = Response{Modules: []Module{
 	alertsModule,
 	sourceMapsModule,
 	antenneModule,
+	deletionsModule,
 }}
 
 var idParam = []Field{{Name: "id", Type: "int64", Description: "Numeric identifier."}}
@@ -31,42 +32,15 @@ var (
 
 var authModule = Module{
 	Name:        "auth",
-	Description: "Dashboard accounts, through the suite's porte kit. Passwords are Argon2id; a session is a random 32 byte token stored SHA-256 hashed and valid for 30 days, sent as Authorization: Bearer <token> or, after an SSO login, as an HttpOnly __Host-session cookie. A cookie-authenticated request that is not GET, HEAD or OPTIONS must also carry an X-Facile-CSRF header with any non-empty value.",
+	Description: "Dashboard accounts, through the suite's porte kit; sign-in is Registre only. A session is a random 32 byte token stored SHA-256 hashed and valid for 30 days, sent as Authorization: Bearer <token> or, after an SSO login, as an HttpOnly __Host-session cookie. A cookie-authenticated request that is not GET, HEAD or OPTIONS must also carry an X-Facile-CSRF header with any non-empty value.",
 	Routes: []Route{
 		{
 			Method:       "GET",
 			Path:         "/auth/config",
 			Summary:      "Read the login screen's configuration",
-			Description:  "sso_only and oidc_enabled come from porte and follow OIDC_ISSUER and SSO_ONLY. allow_registration is Journal's own addition to the suite-wide shape.",
-			ResponseBody: `{"sso_only":bool,"oidc_enabled":bool,"allow_registration":bool}`,
+			Description:  "Served by porte. sso_only is true whenever OIDC_ISSUER is set: sign-in goes through Registre only.",
+			ResponseBody: `{"sso_only":bool,"oidc_enabled":bool}`,
 			Errors:       []Error{errSessionRate},
-		},
-		{
-			Method:       "POST",
-			Path:         "/auth/register",
-			Summary:      "Create an account",
-			Description:  "The first account created becomes admin. The user count is taken inside a transaction holding a pg_advisory_xact_lock, so ALLOW_REGISTRATION=false cannot lock an empty instance out. Returns 201.",
-			RequestBody:  `{"email":string,"name":string,"password":string}`,
-			ResponseBody: `{"token":string,"user":User}`,
-			Errors: []Error{
-				{Status: 400, Code: "invalid_argument", Description: "the email does not parse or the password is under 12 characters"},
-				{Status: 403, Code: "permission_denied", Description: "ALLOW_REGISTRATION=false and at least one account exists"},
-				{Status: 409, Code: "already_exists", Description: "an account with this email already exists"},
-				{Status: 429, Code: "rate_limited", Description: "more than 20 requests per minute from this IP on this endpoint"},
-			},
-		},
-		{
-			Method:       "POST",
-			Path:         "/auth/login",
-			Summary:      "Exchange credentials for a session token",
-			Description:  "A wrong password and an unknown account are the same 401. Expired session rows are opportunistically deleted here.",
-			RequestBody:  `{"email":string,"password":string}`,
-			ResponseBody: `{"token":string,"user":User}`,
-			Errors: []Error{
-				errInvalidBody,
-				{Status: 401, Code: "unauthenticated", Description: "invalid email or password"},
-				{Status: 429, Code: "rate_limited", Description: "more than 20 requests per minute from this IP on this endpoint"},
-			},
 		},
 		{
 			Method:       "POST",
@@ -527,6 +501,24 @@ var antenneModule = Module{
 				errUnauth,
 				errNotAdmin,
 				errSessionRate,
+			},
+		},
+	},
+}
+
+var deletionsModule = Module{
+	Name:        "deletions",
+	Description: "GDPR erasure. Registre tells Journal which people it erased; Journal deletes their account, identity, sessions and login codes. It also polls Registre's deletion list, so the push is optional.",
+	Routes: []Route{
+		{
+			Method:      "POST",
+			Path:        "/registre/deletions",
+			Summary:     "Receive Registre's signed user.deleted notice",
+			Description: "Called by Registre, not by a client, with a secevent+jwt body signed by the issuer. No session is needed: the signature, issuer, audience and time window are the authentication. Erasing is idempotent, so a replayed notice changes nothing.",
+			RequestBody: `<secevent+jwt> (application/secevent+jwt)`,
+			Errors: []Error{
+				{Status: 400, Code: "invalid_argument", Description: "the notice does not verify"},
+				{Status: 503, Code: "unavailable", Description: "the issuer's keys cannot be fetched yet; Registre retries"},
 			},
 		},
 	},
