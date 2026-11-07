@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { Alert, Button, Drawer, Icon, Spinner, icons, toast } from '@facile/muse';
+	import { useT } from '$lib/i18n';
+	import { formatDate } from '$lib/format';
+
+	const t = useT();
 
 	type LogEntry = {
 		id: number;
@@ -29,7 +33,7 @@
 					entry = data;
 				})
 				.catch((e: unknown) => {
-					error = e instanceof Error ? e.message : 'Could not load this entry.';
+					error = e instanceof Error ? e.message : t('drawer.loadFailed');
 				})
 				.finally(() => {
 					loading = false;
@@ -74,17 +78,17 @@
 		if (navigator.clipboard && navigator.clipboard.writeText) {
 			navigator.clipboard
 				.writeText(text)
-				.then(() => toast.success('Entry context copied to clipboard.'))
-				.catch(() => toast.danger('Could not copy to clipboard.'));
+				.then(() => toast.success(t('clipboard.copied')))
+				.catch(() => toast.danger(t('clipboard.failed')));
 		} else {
-			toast.danger('Clipboard is not available in this browser.');
+			toast.danger(t('clipboard.unavailable'));
 		}
 	}
 </script>
 
 <Drawer
 	{open}
-	title="Log entry"
+	title={t('drawer.title')}
 	description={entry ? `${entry.app} · ${entry.level}` : undefined}
 	onClose={onClose}
 >
@@ -92,7 +96,7 @@
 		{#if entry}
 			<Button class="w-full" variant="outline" onclick={copyEntry}>
 				<Icon icon={icons.copy} size={16} />
-				Copy entry context
+				{t('drawer.copyContext')}
 			</Button>
 		{/if}
 	{/snippet}
@@ -103,27 +107,27 @@
 				<Spinner />
 			</div>
 		{:else if error}
-			<Alert tone="danger" title="Could not load this entry">{error}</Alert>
+			<Alert tone="danger" title={t('drawer.loadFailed')}>{error}</Alert>
 		{:else if entry}
 			<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
 				<dt class="text-fc-muted-foreground font-medium">ID</dt>
 				<dd class="font-mono">{entry.id}</dd>
-				<dt class="text-fc-muted-foreground font-medium">App</dt>
+				<dt class="text-fc-muted-foreground font-medium">{t('common.app')}</dt>
 				<dd>{entry.app}</dd>
-				<dt class="text-fc-muted-foreground font-medium">Level</dt>
+				<dt class="text-fc-muted-foreground font-medium">{t('common.level')}</dt>
 				<dd>{entry.level}</dd>
-				<dt class="text-fc-muted-foreground font-medium">Created</dt>
-				<dd>{entry.created_at}</dd>
-				<dt class="text-fc-muted-foreground font-medium">Received</dt>
-				<dd>{entry.received_at}</dd>
-				<dt class="text-fc-muted-foreground font-medium pt-2">Message</dt>
+				<dt class="text-fc-muted-foreground font-medium">{t('drawer.created')}</dt>
+				<dd>{formatDate(entry.created_at)}</dd>
+				<dt class="text-fc-muted-foreground font-medium">{t('drawer.receivedLabel')}</dt>
+				<dd>{formatDate(entry.received_at)}</dd>
+				<dt class="text-fc-muted-foreground font-medium pt-2">{t('drawer.message')}</dt>
 				<dd class="pt-2">{entry.message}</dd>
 			</dl>
 
 			{#if entry.meta && Object.keys(entry.meta).length > 0}
 				<div>
 					<h3 class="text-fc-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
-						Meta
+						{t('drawer.meta')}
 					</h3>
 					<pre class="bg-fc-muted/40 text-fc-foreground overflow-auto rounded-lg p-3 text-xs"><code
 							>{JSON.stringify(entry.meta, null, 2)}</code

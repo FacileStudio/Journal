@@ -62,24 +62,19 @@ directory with `dist/` committed.
 Two independent credentials, both `Authorization: Bearer <token>`.
 
 **Dashboard sessions.** Issued and verified by [porte](https://github.com/FacileStudio/porte),
-the suite's authentication kit, which Journal is the first app to adopt. `POST
-/api/auth/register` and `/api/auth/login` return a random 32-byte URL-safe token; the single
-sign-on callback puts the same thing in an HttpOnly `__Host-session` cookie instead. Only the
+the suite's authentication kit, which Journal is the first app to adopt. Sign-in goes through
+Registre only: the single sign-on callback puts a random 32-byte URL-safe token in an HttpOnly
+`__Host-session` cookie, and the CLI exchange returns the same token in a body. Only the
 SHA-256 hex is stored, in `porte_sessions`, with a 30-day absolute TTL and a 7-day idle
 window that applies to the cookie transport only — a bearer belongs to a CLI or a nightly
 job, which is idle by design. Both transports are the same row, so one logout ends either.
-Passwords are `porte/local`'s: Argon2id (64 MiB, 3 iterations, parallelism 2, 16-byte salt,
-32-byte key) in the standard `$argon2id$…` encoding, unchanged from what this app hashed
-before, so every stored hash keeps verifying. A password is an identity row under the provider
-`local`, keyed on the account id since porte v0.3 — so one human can hold a password and an SSO
-subject at once, and either signs them into the same account. The address is looked up rather
-than keyed on, which is why changing one touches the user row and nothing else. A login for an
-unknown email runs `authcrypto.EqualizeTiming` against a throwaway hash so response timing does
-not leak account existence. Registration takes a `pg_advisory_xact_lock` and counts users inside
-the transaction: the first account created becomes admin, and `ALLOW_REGISTRATION=false` only
-blocks sign-ups once at least one account exists. The single sign-on callback goes through the
-same lock and the same rule, in `modules/auth`'s `UserStore` — porte resolves the identity and
-hands over the claims, and Journal decides what an account is.
+No password route exists. Accounts created before the switch keep their row and their data: the
+first verified Facile sign-in with the same address links to it. `modules/auth`'s `UserStore`
+takes a `pg_advisory_xact_lock` and applies porte's linking rules: link by `(issuer, subject)`
+first, then by a **verified** address only, and refuse when the account already holds another
+subject of the same issuer. The first account created becomes admin under the same lock, and the
+store keeps the `locale` claim in `users.locale`. porte resolves the identity and hands over the
+claims; Journal decides what an account is.
 
 **Ingest keys.** `POST /api/apikeys` (admin) mints `journal_<app>_<random>` and returns the
 full token exactly once; the row keeps a display `prefix` and the SHA-256 hash. A key is

@@ -4,6 +4,9 @@
 	import { backend, type SavedQuery } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	let queries = $state<SavedQuery[]>([]);
 	let loading = $state(true);
@@ -16,7 +19,7 @@
 		if (saved.params.levels?.length) parts.push(`levels:${saved.params.levels.join(',')}`);
 		if (saved.params.q) parts.push(`q:${saved.params.q}`);
 		if (saved.params.request_id) parts.push(`req:${saved.params.request_id}`);
-		return parts.length ? parts.join(' · ') : 'no filters';
+		return parts.length ? parts.join(' · ') : t('queries.noFilters');
 	}
 
 	function href(saved: SavedQuery): string {
@@ -33,7 +36,7 @@
 			queries = (await backend.listQueries()).queries;
 			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load saved queries';
+			error = err instanceof Error ? err.message : t('queries.loadFailed');
 		} finally {
 			loading = false;
 		}
@@ -45,9 +48,9 @@
 		try {
 			await backend.deleteQuery(saved.id);
 			await load();
-			toast.success(`Deleted “${saved.name}”.`);
+			toast.success(t('queries.deleted', { name: saved.name }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Could not delete the query');
+			toast.danger(err instanceof Error ? err.message : t('queries.deleteFailed'));
 		} finally {
 			pending = null;
 		}
@@ -56,37 +59,37 @@
 	onMount(load);
 </script>
 
-<svelte:head><title>Saved queries — Journal</title></svelte:head>
+<svelte:head><title>{t('queries.title')} — Journal</title></svelte:head>
 
 <PageHeader
-	title="Saved queries"
-	description="Named filter sets. Alert rules are built on top of them."
+	title={t('queries.title')}
+	description={t('queries.description')}
 >
 	{#snippet actions()}
-		<Button size="sm" variant="outline" href="/logs" icon={icons.plus}>Save a new one</Button>
+		<Button size="sm" variant="outline" href="/logs" icon={icons.plus}>{t('queries.saveNew')}</Button>
 	{/snippet}
 </PageHeader>
 
 {#if error}
-	<Alert tone="danger" title="Could not load saved queries">{error}</Alert>
+	<Alert tone="danger" title={t('queries.loadFailed')}>{error}</Alert>
 {:else if loading}
 	<div class="flex justify-center py-16"><Spinner /></div>
 {:else if queries.length === 0}
 	<EmptyState
 		icon={icons.filter}
-		title="No saved queries yet"
-		description="Set up a filter in the explorer, then save it — an alert rule can only watch a query that has a name."
+		title={t('queries.empty')}
+		description={t('queries.emptyHint')}
 	>
-		<Button href="/logs" icon={icons.history}>Open the explorer</Button>
+		<Button href="/logs" icon={icons.history}>{t('queries.openExplorer')}</Button>
 	</EmptyState>
 {:else}
 	<Table>
 		<thead>
 			<tr>
-				<th scope="col">Name</th>
-				<th scope="col">Filters</th>
-				<th scope="col">Created</th>
-				<th scope="col" aria-label="Actions"></th>
+				<th scope="col">{t('common.name')}</th>
+				<th scope="col">{t('queries.filters')}</th>
+				<th scope="col">{t('common.created')}</th>
+				<th scope="col" aria-label={t('common.actions')}></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -104,7 +107,7 @@
 							icon={icons.remove}
 							onclick={() => (pending = saved)}
 						>
-							Delete
+							{t('common.delete')}
 						</Button>
 					</td>
 				</tr>
@@ -117,9 +120,9 @@
 	open={pending !== null}
 	tone="danger"
 	icon={icons.remove}
-	title="Delete this saved query?"
-	description="Any alert rule built on it must be deleted first, and the filter set itself cannot be recovered."
-	confirmLabel="Delete"
+	title={t('queries.deleteTitle')}
+	description={t('queries.deleteBody')}
+	confirmLabel={t('common.delete')}
 	onConfirm={remove}
 	onCancel={() => (pending = null)}
 />

@@ -10,8 +10,8 @@ Docker-deployed.
 |-------|------|
 | API | Go 1.24, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
-| Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.4.0`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
-| Auth | Dashboard: email/password accounts, DB-backed sessions (Argon2id, 30-day token). Ingest: per-app API keys (SHA256-hashed, admin-managed) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
+| Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.12.1`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
+| Auth | Dashboard: sign-in through Registre only (porte OIDC), DB-backed sessions (30-day token); no sign-up and no password route. Ingest: per-app API keys (SHA256-hashed, admin-managed) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
 ## Key Commands
@@ -87,7 +87,7 @@ Journal/
         middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAuth, RequireAdmin
       schemas/                     # GORM models (log_entry, user, session, api_key, saved_query, alert_rule) + Migrate
       modules/
-        auth/                      # /api/auth/{config,register,login,logout,me} — sessions
+        auth/                      # /api/auth/{config,logout,me} — sessions; the OIDC routes come from porte
         ingest/                    # POST /api/ingest (single + batch, gzip), per-app key or legacy token
                                    # + POST /api/ingest/browser (public key, origin-checked, quotaed)
         logs/                      # GET /api/logs, /api/logs/histogram, /api/logs/{id}/context, GET /api/apps — session-protected
@@ -108,7 +108,7 @@ Journal/
         routes/
           +layout.svelte           # app.css, iconify-icon registration, stored theme, one <Toaster>
           +layout.ts               # prerender = false, ssr = false — the whole dashboard is client-rendered
-          login/+page.svelte       # canonical suite split-screen sign in / register
+          login/+page.svelte       # muse AuthScreen, the only sign-in surface
           (app)/+layout.svelte     # the shell: SideBar + Topbar + MobileNav, auth guard, user context
           (app)/+page.svelte       # Overview: stat cards, volume strip, level donut, busiest apps, recent errors
           (app)/logs/+page.svelte  # explorer: filters (URL-synced), histogram drill-down, live tail, pivots, context drawer
@@ -172,11 +172,10 @@ developer loop, not the bootstrap tier.
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `INGEST_TOKEN` | Legacy shared ingest token (unscoped). Empty disables it — per-app API keys are the primary ingest auth | — (empty) |
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
-| `ALLOW_REGISTRATION` | `false` locks dashboard sign-ups (first account always allowed) | `true` |
 | `OIDC_ISSUER` | Enables single sign-on through porte; makes the next four required | — |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | Provider credentials | — |
 | `OIDC_REDIRECT_URL` / `OIDC_SUCCESS_URL` | Callback and landing URLs | — |
-| `SSO_ONLY` | `true` unregisters the password routes; needs `OIDC_ISSUER` | `false` |
+| `APP_VERSION` | Reported by `GET /version`; baked in at build time from the build argument of the same name | `dev` |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins, read through `tronc/env`. `ALLOWED_ORIGINS` and `DOMAINS` remain accepted fallbacks | — (unset denies every cross-origin caller) |
 | `WEBHOOK_ALLOWED_HOSTS` | Comma-separated hostnames allowed as internal alert webhook targets | — |
 | `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |
@@ -229,20 +228,18 @@ about.
 
 Sessions are DB-backed: a random 32-byte token, stored SHA256-hashed in `porte_sessions`, 30-day
 absolute TTL plus a 7-day idle window on the cookie transport only. Two transports, one row —
-a password login returns the token and the client keeps it in `localStorage` (`journal.token`)
-and sends `Authorization: Bearer <token>`; the SSO callback puts it in an HttpOnly
-`__Host-session` cookie instead and no token ever reaches a URL. A cookie-authenticated write
-must carry `X-Facile-CSRF` with any non-empty value. Passwords are `porte/local`'s Argon2id — same parameters as before the move, so existing
-hashes keep verifying — and the first account created becomes admin (guarded by `pg_advisory_xact_lock`, in the register transaction
-and in the OIDC upsert alike). Login opportunistically deletes expired session rows.
+the SSO callback puts it in an HttpOnly `__Host-session` cookie and no token ever reaches a URL; a CLI
+exchange returns it in a body and the CLI sends `Authorization: Bearer <token>`. A cookie-authenticated write
+must carry `X-Facile-CSRF` with any non-empty value. The first account created becomes admin (guarded by `pg_advisory_xact_lock` in the OIDC upsert). Accounts that predate
+the switch link by a verified address on first Facile sign-in; an account that already holds another subject of the
+same issuer is never linked.
 
-- `GET /auth/config` → `{ sso_only, oidc_enabled, allow_registration }` (porte serves it; `allow_registration` rides in through `Deps.ConfigExtra`)
+- `GET /auth/config` → `{ sso_only, oidc_enabled }` (porte serves it)
 - `GET /auth/oidc` → starts SSO. Registered only with an `OIDC_ISSUER`. `?flow=cli` ends on a one-time code instead of a cookie.
-- `POST /auth/register` → `{ token, user }` (201). Body `{ email, name?, password }`, password ≥ 12 chars. Locked once accounts exist if `ALLOW_REGISTRATION=false` (first account always allowed). Duplicate email → 409.
-- `POST /auth/login` → `{ token, user }`. Body `{ email, password }`.
+- `POST /registre/deletions` → Registre's signed GDPR notice; polling runs too (`modules/deletions`, state in `directory_deletion_state`).
 - `POST /auth/logout` (session) → porte deletes the session and clears the cookie, `{ logged_out: true }`.
 - `GET /auth/me` (session) → `{ user }` (includes `is_admin`). porte authenticates, then `middleware.RequireAuth` hydrates email + `is_admin` from `users` — porte carries neither.
-- `SSO_ONLY=true` does not register `/auth/register` and `/auth/login` at all.
+- `/auth/register` and `/auth/login` do not exist; there is no password sign-in.
 
 `GET /logs*` and `GET /apps` require a valid Bearer session token; `/apikeys*` additionally
 requires `is_admin`. `/health` and `/ready` stay public and rate-limit exempt.

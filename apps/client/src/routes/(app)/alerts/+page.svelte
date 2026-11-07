@@ -20,6 +20,9 @@
 	import { backend, type AlertRule, type AuthUser, type SavedQuery, type AntenneSettings } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	const auth = getContext<{ user: AuthUser | null }>('auth');
 
@@ -85,7 +88,7 @@
 			queries = queriesRes.queries;
 			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load alert rules';
+			error = err instanceof Error ? err.message : t('alerts.loadFailed');
 		} finally {
 			loading = false;
 		}
@@ -122,9 +125,9 @@
 			await load();
 			open = false;
 			reset();
-			toast.success('Alert rule created.');
+			toast.success(t('alerts.created'));
 		} catch (err) {
-			createError = err instanceof Error ? err.message : 'Could not create the rule';
+			createError = err instanceof Error ? err.message : t('alerts.createFailed');
 		} finally {
 			creating = false;
 		}
@@ -136,7 +139,7 @@
 			await backend.updateAlert(rule.id, { enabled: !rule.enabled });
 			await load();
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Could not update the rule');
+			toast.danger(err instanceof Error ? err.message : t('alerts.updateFailed'));
 		} finally {
 			togglingId = null;
 		}
@@ -148,9 +151,9 @@
 		try {
 			await backend.deleteAlert(rule.id);
 			await load();
-			toast.success(`Deleted “${rule.name}”.`);
+			toast.success(t('alerts.deleted', { name: rule.name }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Could not delete the rule');
+			toast.danger(err instanceof Error ? err.message : t('alerts.deleteFailed'));
 		} finally {
 			pending = null;
 		}
@@ -165,11 +168,11 @@
 	});
 </script>
 
-<svelte:head><title>Alerts — Journal</title></svelte:head>
+<svelte:head><title>{t('alerts.title')} — Journal</title></svelte:head>
 
 <PageHeader
-	title="Alerts"
-	description="A rule counts matches of a saved query over a rolling window and POSTs to a webhook when the count reaches the threshold."
+	title={t('alerts.title')}
+	description={t('alerts.description')}
 >
 	{#snippet actions()}
 		<Button
@@ -181,41 +184,41 @@
 				open = true;
 			}}
 		>
-			New rule
+			{t('alerts.newRule')}
 		</Button>
 	{/snippet}
 </PageHeader>
 
 {#if error}
-	<Alert tone="danger" title="Could not load alert rules">{error}</Alert>
+	<Alert tone="danger" title={t('alerts.loadFailed')}>{error}</Alert>
 {:else if loading}
 	<div class="flex justify-center py-16"><Spinner /></div>
 {:else if queries.length === 0}
 	<EmptyState
 		icon={icons.filter}
-		title="Save a query first"
-		description="An alert rule watches a named filter set, so there is nothing to watch until one exists."
+		title={t('alerts.saveQueryFirst')}
+		description={t('alerts.saveQueryHint')}
 	>
-		<Button href="/logs" icon={icons.history}>Open the explorer</Button>
+		<Button href="/logs" icon={icons.history}>{t('queries.openExplorer')}</Button>
 	</EmptyState>
 {:else if alerts.length === 0}
 	<EmptyState
 		icon={icons.notification}
-		title="No alert rules yet"
-		description="Pick a saved query, a threshold and a window, and Journal will call your webhook when the count is reached."
+		title={t('alerts.empty')}
+		description={t('alerts.emptyHint')}
 	>
-		<Button icon={icons.plus} onclick={() => (open = true)}>New rule</Button>
+		<Button icon={icons.plus} onclick={() => (open = true)}>{t('alerts.newRule')}</Button>
 	</EmptyState>
 {:else}
 	<Table>
 		<thead>
 			<tr>
-				<th scope="col">Rule</th>
-				<th scope="col">Condition</th>
-				<th scope="col">Target</th>
-				<th scope="col">Last fired</th>
-				<th scope="col">Enabled</th>
-				<th scope="col" aria-label="Actions"></th>
+				<th scope="col">{t('alerts.rule')}</th>
+				<th scope="col">{t('alerts.condition')}</th>
+				<th scope="col">{t('alerts.target')}</th>
+				<th scope="col">{t('alerts.lastFired')}</th>
+				<th scope="col">{t('alerts.enabled')}</th>
+				<th scope="col" aria-label={t('common.actions')}></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -224,23 +227,23 @@
 					<td class="font-medium">{rule.name}</td>
 					<td class="text-fc-fg-muted">
 						<span class="font-fc-mono text-fc-xs">{rule.query_name}</span>
-						· ≥ {rule.threshold} in {rule.window_minutes}m
+						· {t('alerts.conditionValue', { threshold: rule.threshold, minutes: rule.window_minutes })}
 					</td>
 					<td class="font-fc-mono text-fc-xs text-fc-fg-muted">
 						{#if rule.provider === 'antenne'}
-							Antenne (global)
+							{t('alerts.antenneGlobal')}
 						{:else}
 							{host(rule.webhook_url)}
 						{/if}
 					</td>
 					<td class="whitespace-nowrap text-fc-fg-muted">
-						{rule.last_fired_at ? formatDate(rule.last_fired_at) : 'never'}
+						{rule.last_fired_at ? formatDate(rule.last_fired_at) : t('common.never')}
 					</td>
 					<td>
 						<Switch
 							checked={rule.enabled}
 							disabled={togglingId === rule.id}
-							aria-label="Enable {rule.name}"
+							aria-label={t('alerts.enable', { name: rule.name })}
 							onchange={() => toggle(rule)}
 						/>
 					</td>
@@ -251,7 +254,7 @@
 							icon={icons.remove}
 							onclick={() => (pending = rule)}
 						>
-							Delete
+							{t('common.delete')}
 						</Button>
 					</td>
 				</tr>
@@ -262,54 +265,54 @@
 
 <Drawer
 	bind:open
-	title="New alert rule"
-	description="Journal evaluates every rule once a minute and re-arms only after a full window."
+	title={t('alerts.drawerTitle')}
+	description={t('alerts.drawerHint')}
 	onClose={reset}
 >
 	<div class="flex flex-col gap-4">
 		{#if createError}
-			<Alert tone="danger" title="Could not create the rule">{createError}</Alert>
+			<Alert tone="danger" title={t('alerts.createErrorTitle')}>{createError}</Alert>
 		{/if}
 
-		<Field label="Name">
-			<Input bind:value={name} placeholder="Nuage error spike" />
+		<Field label={t('common.name')}>
+			<Input bind:value={name} placeholder={t('alerts.namePlaceholder')} />
 		</Field>
 
-		<Field label="Saved query" helper="The filter set whose matches are counted.">
+		<Field label={t('alerts.savedQuery')} helper={t('alerts.savedQueryHint')}>
 			<Select bind:value={savedQueryId}>
-				<option value="" disabled>Pick a saved query…</option>
+				<option value="" disabled>{t('alerts.pickQuery')}</option>
 				{#each queries as saved (saved.id)}
 					<option value={String(saved.id)}>{saved.name}</option>
 				{/each}
 			</Select>
 		</Field>
 
-		<Field label="Target">
+		<Field label={t('alerts.target')}>
 			<Select bind:value={provider}>
-				<option value="webhook">Webhook</option>
-				<option value="antenne">Antenne (global)</option>
+				<option value="webhook">{t('alerts.webhook')}</option>
+				<option value="antenne">{t('alerts.antenneGlobal')}</option>
 			</Select>
 		</Field>
 
 		{#if provider === 'webhook'}
 			<div class="grid gap-4 sm:grid-cols-2">
 				<Field
-					label="Threshold"
-					error={thresholdValid ? undefined : 'A whole number, 1 or more.'}
+					label={t('alerts.threshold')}
+					error={thresholdValid ? undefined : t('alerts.thresholdError')}
 				>
 					<Input type="number" min="1" bind:value={threshold} />
 				</Field>
 				<Field
-					label="Window (minutes)"
-					error={windowValid ? undefined : 'Between 1 and 1440.'}
+					label={t('alerts.window')}
+					error={windowValid ? undefined : t('alerts.windowError')}
 				>
 					<Input type="number" min="1" max="1440" bind:value={windowMinutes} />
 				</Field>
 			</div>
 
 			<Field
-				label="Webhook URL"
-				error={webhookUrl && !webhookValid ? 'Must be an http or https URL.' : undefined}
+				label={t('alerts.webhookUrl')}
+				error={webhookUrl && !webhookValid ? t('alerts.webhookUrlError') : undefined}
 			>
 				<Input
 					bind:value={webhookUrl}
@@ -319,22 +322,22 @@
 			</Field>
 
 			<Field
-				label="Auth header"
-				helper="Optional. Name and secret are set together or not at all."
-				error={headerPairValid ? undefined : 'Set both the header name and its secret.'}
+				label={t('alerts.authHeader')}
+				helper={t('alerts.authHeaderHint')}
+				error={headerPairValid ? undefined : t('alerts.authHeaderError')}
 			>
 				<Input bind:value={webhookHeader} class="font-fc-mono" placeholder="X-Antenne-Token" />
 			</Field>
 
-			<SecretField bind:value={webhookSecret} label="Auth secret" editable mask="full" />
+			<SecretField bind:value={webhookSecret} label={t('alerts.authSecret')} editable mask="full" />
 		{/if}
 	</div>
 
 	{#snippet footer()}
 		<div class="flex justify-end gap-2">
-			<Button size="lg" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
+			<Button size="lg" variant="ghost" onclick={() => (open = false)}>{t('common.cancel')}</Button>
 			<Button size="lg" disabled={creating || !formValid} onclick={create}>
-				{creating ? 'Creating…' : 'Create rule'}
+				{creating ? t('common.creating') : t('alerts.createRule')}
 			</Button>
 		</div>
 	{/snippet}
@@ -344,9 +347,9 @@
 	open={pending !== null}
 	tone="danger"
 	icon={icons.remove}
-	title="Delete this alert rule?"
-	description="It stops firing immediately and its webhook is forgotten — nothing will tell you the next time the query matches."
-	confirmLabel="Delete"
+	title={t('alerts.deleteTitle')}
+	description={t('alerts.deleteBody')}
+	confirmLabel={t('common.delete')}
 	onConfirm={remove}
 	onCancel={() => (pending = null)}
 />

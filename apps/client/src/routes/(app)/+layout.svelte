@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons } from '@facile/muse';
+	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
 	import { clearToken } from '$lib/auth';
+	import { session } from '$lib/session.svelte';
+	import { useT, type Key } from '$lib/i18n';
 	import { setContext } from 'svelte';
 
 	let { children } = $props();
+
+	const t = useT();
 
 	let user = $state<AuthUser | null>(null);
 	let ready = $state(false);
@@ -17,12 +21,12 @@
 	 * No Settings row: settings is reached from the user card at the bottom of the rail and from
 	 * the avatar in MobileNav, and log out lives inside it. See muse CHARTE §14.
 	 */
-	const links = [
-		{ label: 'Overview', href: '/', icon: icons.dashboard },
-		{ label: 'Logs', href: '/logs', icon: icons.history },
-		{ label: 'Apps', href: '/apps', icon: icons.server },
-		{ label: 'Queries', href: '/queries', icon: icons.filter },
-		{ label: 'Alerts', href: '/alerts', icon: icons.notification, adminOnly: true }
+	const links: { key: Key; href: string; icon: string; adminOnly?: boolean }[] = [
+		{ key: 'nav.overview', href: '/', icon: icons.dashboard },
+		{ key: 'nav.logs', href: '/logs', icon: icons.history },
+		{ key: 'nav.apps', href: '/apps', icon: icons.server },
+		{ key: 'nav.queries', href: '/queries', icon: icons.filter },
+		{ key: 'nav.alerts', href: '/alerts', icon: icons.notification, adminOnly: true }
 	];
 
 	async function logout() {
@@ -50,6 +54,7 @@
 			.me()
 			.then((res) => {
 				user = res.user;
+				session.locale = resolveLocale(res.user.locale);
 				ready = true;
 			})
 			.catch(() => {
@@ -72,7 +77,7 @@
 	const navPages = $derived(
 		links
 			.filter((link) => !link.adminOnly || user?.is_admin)
-			.map((link) => ({ label: link.label, href: link.href, icon: link.icon, active: isActive(link.href) }))
+			.map((link) => ({ label: t(link.key), href: link.href, icon: link.icon, active: isActive(link.href) }))
 	);
 	const onSettings = $derived(page.url.pathname.startsWith('/settings'));
 
@@ -80,7 +85,7 @@
 	   inside the settings layout, and keying this one on the full path replays both. */
 	const routeKey = $derived(onSettings ? '/settings' : page.url.pathname);
 	const navUser = $derived.by(() => ({
-		name: user?.name || user?.email || 'Account',
+		name: user?.name || user?.email || t('nav.account'),
 		avatar: user?.avatar_url || undefined
 	}));
 </script>

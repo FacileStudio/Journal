@@ -8,11 +8,10 @@ import (
 )
 
 // Config is the process configuration: the tronc core plus Journal's ingest,
-// registration, retention and OIDC policy.
+// retention and OIDC policy.
 type Config struct {
 	troncenv.Core
 	IngestToken         string
-	AllowRegistration   bool
 	RetentionDays       int
 	WebhookAllowedHosts []string
 
@@ -47,10 +46,6 @@ func Load() (Config, error) {
 		WebhookAllowedHosts: troncenv.List("WEBHOOK_ALLOWED_HOSTS"),
 	}
 
-	if cfg.AllowRegistration, err = troncenv.Bool("ALLOW_REGISTRATION", true); err != nil {
-		return Config{}, err
-	}
-
 	if cfg.RetentionDays, err = troncenv.Int("RETENTION_DAYS", 90); err != nil {
 		return Config{}, err
 	}
@@ -66,12 +61,6 @@ func Load() (Config, error) {
 		RedirectURL:  troncenv.String("OIDC_REDIRECT_URL", ""),
 		SuccessURL:   troncenv.String("OIDC_SUCCESS_URL", ""),
 		CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
-	}
-	if cfg.Porte.SSOOnly, err = troncenv.Bool("SSO_ONLY", false); err != nil {
-		return Config{}, err
-	}
-	if cfg.Porte.SSOOnly && !cfg.Porte.Enabled() {
-		return Config{}, fmt.Errorf("SSO_ONLY=true with no OIDC_ISSUER leaves no way to sign in")
 	}
 	if err := cfg.Porte.Validate(); err != nil {
 		return Config{}, err

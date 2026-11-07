@@ -24,6 +24,9 @@
 	} from '@facile/muse';
 	import { backend, type ApiKey, type ApiKeyKind, type AuthUser } from '$lib/backend';
 	import { formatDate } from '$lib/format';
+	import { useT } from '$lib/i18n';
+
+	const t = useT();
 
 	const APP_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 	const ORIGIN = /^https?:\/\/[^/?#\s]+$/;
@@ -110,7 +113,7 @@ export const handleError = handleErrorWith(journal);`
 			antenneConnectError = settings.connect_error ?? '';
 			error = '';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load settings';
+			error = err instanceof Error ? err.message : t('keys.loadSettingsFailed');
 		} finally {
 			loading = false;
 			antenneLoading = false;
@@ -130,9 +133,9 @@ export const handleError = handleErrorWith(journal);`
 			antenneEnabled = settings.enabled;
 			antenneConnected = settings.connected;
 			antenneConnectError = settings.connect_error ?? '';
-			toast.success('Antenne settings updated.');
+			toast.success(t('antenne.updated'));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to update Antenne settings');
+			toast.danger(err instanceof Error ? err.message : t('antenne.updateFailed'));
 		} finally {
 			antenneLoading = false;
 		}
@@ -150,7 +153,7 @@ export const handleError = handleErrorWith(journal);`
 
 	async function create() {
 		if (!canCreate) {
-			createError = 'Check the app name, the origins and the quota.';
+			createError = t('keys.checkFields');
 			return;
 		}
 		creating = true;
@@ -165,7 +168,7 @@ export const handleError = handleErrorWith(journal);`
 			issued = { app: res.key.app, kind: res.key.kind, token: res.token };
 			await load();
 		} catch (err) {
-			createError = err instanceof Error ? err.message : 'Could not create the key';
+			createError = err instanceof Error ? err.message : t('keys.createErrorTitle');
 		} finally {
 			creating = false;
 		}
@@ -177,9 +180,9 @@ export const handleError = handleErrorWith(journal);`
 		try {
 			await backend.revokeApiKey(key.id);
 			await load();
-			toast.success(`Revoked the key for ${key.app}.`);
+			toast.success(t('keys.revoked', { app: key.app }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Could not revoke the key');
+			toast.danger(err instanceof Error ? err.message : t('keys.revokeFailed'));
 		} finally {
 			pending = null;
 		}
@@ -195,17 +198,17 @@ export const handleError = handleErrorWith(journal);`
 </script>
 
 <div class="flex min-w-0 flex-col gap-10">
-	<SettingsSection title="Ingest endpoints" description="Where shippers and pages send their entries.">
+	<SettingsSection title={t('keys.endpoints')} description={t('keys.endpointsHint')}>
 		<SettingsRow
-			label="Servers"
-			description="The trailing /api is load-bearing — without it the dashboard's catch-all answers 200 and every line is discarded."
+			label={t('keys.servers')}
+			description={t('keys.serversHint')}
 			stacked
 		>
 			<SecretField value={ingestUrl} sensitive={false} />
 		</SettingsRow>
 		<SettingsRow
-			label="Browsers"
-			description="Authenticated by a public key, restricted to that key's origins, and capped by its daily quota. Used by the @facile/journal SDK."
+			label={t('keys.browsers')}
+			description={t('keys.browsersHint')}
 			stacked
 		>
 			<SecretField value={browserUrl} sensitive={false} />
@@ -213,8 +216,8 @@ export const handleError = handleErrorWith(journal);`
 	</SettingsSection>
 
 	<SettingsSection
-		title="Ingest keys"
-		description="One key is scoped to one app name. Multiple active keys per app are allowed, so rotation is add-new → redeploy → revoke-old with no downtime."
+		title={t('keys.title')}
+		description={t('keys.titleHint')}
 		bare
 	>
 		{#snippet actions()}
@@ -226,33 +229,33 @@ export const handleError = handleErrorWith(journal);`
 					open = true;
 				}}
 			>
-				New key
+				{t('keys.new')}
 			</Button>
 		{/snippet}
 
 		{#if error}
-			<Alert tone="danger" title="Could not load API keys">{error}</Alert>
+			<Alert tone="danger" title={t('keys.loadFailed')}>{error}</Alert>
 		{:else if loading}
 			<div class="flex justify-center py-16"><Spinner /></div>
 		{:else if keys.length === 0}
 			<EmptyState
 				icon={icons.key}
-				title="No ingest keys yet"
-				description="Without a key and without the legacy INGEST_TOKEN, every POST to /api/ingest is rejected."
+				title={t('keys.empty')}
+				description={t('keys.emptyHint')}
 			>
-				<Button icon={icons.plus} onclick={() => (open = true)}>New key</Button>
+				<Button icon={icons.plus} onclick={() => (open = true)}>{t('keys.new')}</Button>
 			</EmptyState>
 		{:else}
 			<Table>
 				<thead>
 					<tr>
-						<th scope="col">App</th>
-						<th scope="col">Kind</th>
-						<th scope="col" class="hidden sm:table-cell">Prefix</th>
-						<th scope="col">Scope</th>
-						<th scope="col" class="hidden sm:table-cell">Created</th>
-						<th scope="col">Status</th>
-						<th scope="col" aria-label="Actions"></th>
+						<th scope="col">{t('common.app')}</th>
+						<th scope="col">{t('keys.kind')}</th>
+						<th scope="col" class="hidden sm:table-cell">{t('keys.prefix')}</th>
+						<th scope="col">{t('keys.scope')}</th>
+						<th scope="col" class="hidden sm:table-cell">{t('common.created')}</th>
+						<th scope="col">{t('common.status')}</th>
+						<th scope="col" aria-label={t('common.actions')}></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -262,7 +265,7 @@ export const handleError = handleErrorWith(journal);`
 							<td class="font-fc-mono text-fc-xs">{key.app}</td>
 							<td>
 								<Badge tone={key.kind === 'public' ? 'warning' : 'neutral'}>
-									{key.kind === 'public' ? 'public' : 'secret'}
+									{key.kind === 'public' ? t('keys.public') : t('keys.secret')}
 								</Badge>
 							</td>
 							<td class="hidden font-fc-mono text-fc-xs text-fc-fg-muted sm:table-cell">{key.prefix}…</td>
@@ -273,16 +276,16 @@ export const handleError = handleErrorWith(journal);`
 											<span class="truncate font-fc-mono text-fc-xs" title={origin}>{hostOf(origin)}</span>
 										{/each}
 										<span class="text-fc-xs">
-											{key.used_today.toLocaleString()} / {key.daily_quota.toLocaleString()} today
+											{t('keys.usedToday', { used: key.used_today, quota: key.daily_quota })}
 										</span>
 									</div>
 								{:else}
-									<span class="text-fc-xs">servers, no quota</span>
+									<span class="text-fc-xs">{t('keys.serversNoQuota')}</span>
 								{/if}
 							</td>
 							<td class="hidden whitespace-nowrap text-fc-fg-muted sm:table-cell">{formatDate(key.created_at)}</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">
-								{key.revoked_at ? `revoked ${formatDate(key.revoked_at)}` : 'active'}
+								{key.revoked_at ? t('keys.revokedOn', { date: formatDate(key.revoked_at) }) : t('keys.active')}
 							</td>
 							<td class="text-right">
 								{#if !key.revoked_at}
@@ -292,7 +295,7 @@ export const handleError = handleErrorWith(journal);`
 										icon={icons.revoke}
 										onclick={() => (pending = key)}
 									>
-										Revoke
+										{t('keys.revoke')}
 									</Button>
 								{/if}
 							</td>
@@ -303,18 +306,15 @@ export const handleError = handleErrorWith(journal);`
 		{/if}
 	</SettingsSection>
 
-	<SettingsSection
-		title="Antenne"
-		description="Configure the global Antenne instance for alert delivery."
-	>
+	<SettingsSection title={t('antenne.title')} description={t('antenne.hint')}>
 		{#if error}
-			<Alert tone="danger" title="Could not load Antenne settings">{error}</Alert>
+			<Alert tone="danger" title={t('antenne.loadFailed')}>{error}</Alert>
 		{:else if loading}
 			<div class="flex justify-center py-16"><Spinner /></div>
 		{:else}
 			<SettingsRow
-				label="Enabled"
-				description="When enabled, alerts will be sent to the configured Antenne instance."
+				label={t('antenne.enabled')}
+				description={t('antenne.enabledHint')}
 				stacked
 			>
 				<Switch
@@ -326,8 +326,8 @@ export const handleError = handleErrorWith(journal);`
 				/>
 			</SettingsRow>
 			<SettingsRow
-				label="Instance URL"
-				description="The URL of your Antenne instance (e.g., https://antenne.facile.studio)"
+				label={t('antenne.url')}
+				description={t('antenne.urlHint')}
 				stacked
 			>
 				<Input
@@ -338,36 +338,33 @@ export const handleError = handleErrorWith(journal);`
 				/>
 			</SettingsRow>
 			<SettingsRow
-				label="Secret"
-				description="The secret key for authenticating with Antenne"
+				label={t('antenne.secret')}
+				description={t('antenne.secretHint')}
 				stacked
 			>
 				<SecretField
 					bind:value={antenneSecret}
-					label="Antenne Secret"
+					label={t('antenne.secretLabel')}
 					onchange={updateAntenneSettings}
 					editable
 					mask="full"
 				/>
 			</SettingsRow>
-			<SettingsRow
-				label="Status"
-				stacked
-			>
+			<SettingsRow label={t('common.status')} stacked>
 				{#if antenneConnected}
 					<span class="flex items-center gap-2">
 						<StatusDot tone="success" />
-						<span class="font-fc-mono text-fc-xs">Connected</span>
+						<span class="font-fc-mono text-fc-xs">{t('antenne.connected')}</span>
 					</span>
 				{:else if antenneConnectError}
 					<span class="flex items-center gap-2">
 						<StatusDot tone="danger" />
-						<span class="font-fc-mono text-fc-xs">Error: {antenneConnectError}</span>
+						<span class="font-fc-mono text-fc-xs">{t('antenne.error', { message: antenneConnectError })}</span>
 					</span>
 				{:else}
 					<span class="flex items-center gap-2">
 						<StatusDot tone="warning" />
-						<span class="font-fc-mono text-fc-xs">Disconnected</span>
+						<span class="font-fc-mono text-fc-xs">{t('antenne.disconnected')}</span>
 					</span>
 				{/if}
 			</SettingsRow>
@@ -377,27 +374,24 @@ export const handleError = handleErrorWith(journal);`
 
 <Drawer
 	bind:open
-	title={issued ? 'Key created' : 'New ingest key'}
-	description={issued
-		? undefined
-		: 'The app name scopes the key: entries it ships must carry this name or none at all.'}
+	title={issued ? t('keys.created') : t('keys.newTitle')}
+	description={issued ? undefined : t('keys.newHint')}
 	onClose={reset}
 >
 	{#if issued}
 		<div class="flex flex-col gap-4">
 			{#if issued.kind === 'public'}
-				<Alert tone="info" title="This one belongs in your bundle">
-					A public key is meant to be shipped to browsers. What protects Journal is the origin
-					allowlist, the rate limit and the daily quota — not the secrecy of this string.
+				<Alert tone="info" title={t('keys.publicAlertTitle')}>
+					{t('keys.publicAlertBody')}
 				</Alert>
 			{:else}
-				<Alert tone="warning" title="Copy it now">
-					This is the only time the token is shown. Journal stores nothing but its SHA-256.
+				<Alert tone="warning" title={t('keys.copyNowTitle')}>
+					{t('keys.copyNowBody')}
 				</Alert>
 			{/if}
 			<SecretField
 				value={issued.token}
-				label="Token for {issued.app}"
+				label={t('keys.tokenFor', { app: issued.app })}
 				sensitive={issued.kind === 'secret'}
 				autoHideMs={0}
 			/>
@@ -410,22 +404,22 @@ export const handleError = handleErrorWith(journal);`
 	{:else}
 		<div class="flex flex-col gap-4">
 			{#if createError}
-				<Alert tone="danger" title="Could not create the key">{createError}</Alert>
+				<Alert tone="danger" title={t('keys.createErrorTitle')}>{createError}</Alert>
 			{/if}
 
 			<OptionCards
-				label="Kind"
+				label={t('keys.kind')}
 				bind:value={kind}
 				options={[
-					{ value: 'secret', label: 'Secret — servers', icon: icons.server },
-					{ value: 'public', label: 'Public — browsers', icon: icons.globe }
+					{ value: 'secret', label: t('keys.optionSecret'), icon: icons.server },
+					{ value: 'public', label: t('keys.optionPublic'), icon: icons.globe }
 				]}
 			/>
 
 			<Field
-				label="App name"
-				helper="Lowercase letters, digits and hyphens."
-				error={appName && !appNameValid ? 'Must match ^[a-z0-9][a-z0-9-]{0,63}$.' : undefined}
+				label={t('keys.appName')}
+				helper={t('keys.appNameHint')}
+				error={appName && !appNameValid ? t('keys.appNameError') : undefined}
 			>
 				<Input
 					bind:value={appName}
@@ -438,11 +432,9 @@ export const handleError = handleErrorWith(journal);`
 
 			{#if kind === 'public'}
 				<Field
-					label="Allowed origins"
-					helper="One per line, scheme://host[:port], no path and no wildcard. Up to 8. Anything else is refused."
-					error={originsText && !originsValid
-						? 'Each line must look like https://shop.example or http://localhost:5173, 8 at most.'
-						: undefined}
+					label={t('keys.origins')}
+					helper={t('keys.originsHint')}
+					error={originsText && !originsValid ? t('keys.originsError') : undefined}
 				>
 					<Textarea
 						bind:value={originsText}
@@ -454,9 +446,9 @@ export const handleError = handleErrorWith(journal);`
 				</Field>
 
 				<Field
-					label="Daily quota"
-					helper="Entries accepted per UTC day. The bound that holds if this key is abused — set it to a few times what a normal day looks like."
-					error={quota && !quotaValid ? 'Between 1 and 10000000.' : undefined}
+					label={t('keys.quota')}
+					helper={t('keys.quotaHint')}
+					error={quota && !quotaValid ? t('keys.quotaError') : undefined}
 				>
 					<Input bind:value={quota} class="font-fc-mono" inputmode="numeric" autocomplete="off" />
 				</Field>
@@ -467,11 +459,11 @@ export const handleError = handleErrorWith(journal);`
 	{#snippet footer()}
 		<div class="flex justify-end gap-2">
 			{#if issued}
-				<Button size="lg" onclick={() => (open = false)}>Done</Button>
+				<Button size="lg" onclick={() => (open = false)}>{t('common.done')}</Button>
 			{:else}
-				<Button size="lg" variant="ghost" onclick={() => (open = false)}>Cancel</Button>
+				<Button size="lg" variant="ghost" onclick={() => (open = false)}>{t('common.cancel')}</Button>
 				<Button size="lg" disabled={creating || !canCreate} onclick={create}>
-					{creating ? 'Creating…' : 'Create key'}
+					{creating ? t('common.creating') : t('keys.createKey')}
 				</Button>
 			{/if}
 		</div>
@@ -482,9 +474,9 @@ export const handleError = handleErrorWith(journal);`
 	open={pending !== null}
 	tone="danger"
 	icon={icons.revoke}
-	title="Revoke this ingest key?"
-	description="Any pipeline still using it starts failing immediately, and a revoked key cannot be un-revoked — issue a new one and redeploy instead."
-	confirmLabel="Revoke"
+	title={t('keys.revokeTitle')}
+	description={t('keys.revokeBody')}
+	confirmLabel={t('keys.revoke')}
 	onConfirm={revoke}
 	onCancel={() => (pending = null)}
 />

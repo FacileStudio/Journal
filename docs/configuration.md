@@ -31,7 +31,6 @@ passes `ALLOWED_ORIGINS`.
 | Variable | Required | Default | What it does |
 |---|---|---|---|
 | `INGEST_TOKEN` | no | — | Legacy unscoped bearer token for `POST /api/ingest`. Empty disables it, leaving per-app API keys as the only ingest credential |
-| `ALLOW_REGISTRATION` | no | `true` | `false` blocks dashboard sign-ups once at least one account exists. The first account is always allowed, so you cannot lock yourself out. Must parse as a boolean |
 | `RETENTION_DAYS` | no | `90` | Delete entries older than N days, hourly. `0` keeps forever. A negative value exits 1 |
 | `WEBHOOK_ALLOWED_HOSTS` | no | — | Comma-separated hostnames alert webhooks may reach past the SSRF guard. Without it, private, loopback, link-local, and metadata addresses are refused |
 
@@ -47,7 +46,6 @@ The variable names are the suite convention and are the same in every Facile app
 | `OIDC_CLIENT_SECRET` | with issuer | — | Client secret |
 | `OIDC_REDIRECT_URL` | with issuer | — | Callback URL, e.g. `https://journal.facile.studio/api/auth/oidc/callback`. Must match the provider's registration exactly |
 | `OIDC_SUCCESS_URL` | with issuer | — | Where the browser lands after a successful login |
-| `SSO_ONLY` | no | `false` | `true` stops registering `/auth/register` and `/auth/login`. Requires `OIDC_ISSUER`: without one it would leave no way to sign in, so the API exits 1 rather than lock you out |
 | `OIDC_CLAIMS_SCOPE` | no | — | The scope carrying a flat `roles` claim, e.g. `roles`. Empty disables role handling. The API refuses to start if the provider does not advertise the scope — a half-configured claim makes every role check deny in silence, which is the worst failure mode available |
 
 `OIDC_ISSUER` is all-or-nothing, and discovery runs at startup: an unreachable issuer or a
@@ -96,8 +94,8 @@ These never reach the Go processes; `docker-compose.yml` interpolates them.
 
 ## Traps
 
-- **A missing `DATABASE_URL` exits 1.** So does a non-numeric `PORT`, a non-boolean
-  `ALLOW_REGISTRATION`, and a negative `RETENTION_DAYS`. The failure is logged before the
+- **A missing `DATABASE_URL` exits 1.** So does a non-numeric `PORT`
+  and a negative `RETENTION_DAYS`. The failure is logged before the
   listener starts, so the container restart loop is the first symptom.
 - **`JOURNAL_URL` must end in `/api`** for any shipper, the collector and the Go SDK
   included. The SPA catch-all answers unmatched paths with `200` and `index.html`, so a base

@@ -12,12 +12,8 @@ export type AuthUser = {
 	name: string;
 	is_admin: boolean;
 	avatar_url: string;
+	locale: string;
 	created_at: string;
-};
-
-export type AuthResponse = {
-	token: string;
-	user: AuthUser;
 };
 
 export type MeResponse = {
@@ -27,7 +23,6 @@ export type MeResponse = {
 export type AuthConfig = {
 	sso_only: boolean;
 	oidc_enabled: boolean;
-	allow_registration: boolean;
 };
 
 // Where the browser goes to start single sign-on. It is a navigation, not a
@@ -288,20 +283,6 @@ export const backend = {
 
 	authConfig() {
 		return apiFetch<AuthConfig>('/auth/config');
-	},
-
-	login(email: string, password: string) {
-		return apiFetch<AuthResponse>('/auth/login', {
-			method: 'POST',
-			body: JSON.stringify({ email, password })
-		});
-	},
-
-	register(email: string, password: string, name = '') {
-		return apiFetch<AuthResponse>('/auth/register', {
-			method: 'POST',
-			body: JSON.stringify({ email, password, name })
-		});
 	},
 
 	logout() {
