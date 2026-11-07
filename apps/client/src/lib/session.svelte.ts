@@ -19,3 +19,8 @@ export function rememberLocale(locale: Locale) {
 		document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=31536000; samesite=lax`;
 	}
 }
+
+export function adoptLocale(locale: Locale) {
+	if (browser && readCookie()) return;
+	session.locale = locale;
+}

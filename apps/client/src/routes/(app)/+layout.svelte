@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale } from '@facile/muse';
+	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale, type Locale, type Theme } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
 	import { clearToken } from '$lib/auth';
-	import { session } from '$lib/session.svelte';
+	import { adoptLocale, rememberLocale, session } from '$lib/session.svelte';
+	import { setTheme, theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { setContext } from 'svelte';
 
@@ -17,10 +18,6 @@
 	let collapsed = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
 
-	/*
-	 * No Settings row: settings is reached from the user card at the bottom of the rail and from
-	 * the avatar in MobileNav, and log out lives inside it. See muse CHARTE §14.
-	 */
 	const links: { key: Key; href: string; icon: string; adminOnly?: boolean }[] = [
 		{ key: 'nav.overview', href: '/', icon: icons.dashboard },
 		{ key: 'nav.logs', href: '/logs', icon: icons.history },
@@ -54,7 +51,7 @@
 			.me()
 			.then((res) => {
 				user = res.user;
-				session.locale = resolveLocale(res.user.locale);
+				adoptLocale(resolveLocale(res.user.locale));
 				ready = true;
 			})
 			.catch(() => {
@@ -86,8 +83,17 @@
 	const routeKey = $derived(onSettings ? '/settings' : page.url.pathname);
 	const navUser = $derived.by(() => ({
 		name: user?.name || user?.email || t('nav.account'),
+		email: user?.email,
 		avatar: user?.avatar_url || undefined
 	}));
+	const userMenu = $derived({
+		helpHref: 'https://github.com/FacileStudio/Journal/tree/main/docs',
+		onSignOut: logout,
+		locale: session.locale,
+		onLocaleChange: (next: Locale) => rememberLocale(next),
+		theme: theme.mode,
+		onThemeChange: (next: Theme) => setTheme(next)
+	});
 </script>
 
 {#if ready}
@@ -101,6 +107,7 @@
 				user={navUser}
 				userHref="/settings"
 				userActive={onSettings}
+				{userMenu}
 				class="h-full"
 			/>
 		</div>
@@ -125,7 +132,7 @@
 			</div>
 		</main>
 
-		<MobileNav items={navPages} user={navUser} profileHref="/settings" profileActive={onSettings} />
+		<MobileNav items={navPages} user={navUser} profileHref="/settings" profileActive={onSettings} {userMenu} />
 	</div>
 {:else}
 	<div class="flex h-dvh w-full items-center justify-center bg-fc-page">

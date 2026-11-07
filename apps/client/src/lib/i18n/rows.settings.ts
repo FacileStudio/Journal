@@ -4,47 +4,12 @@ export const settings = {
 	'settings.title': ['Settings', 'Réglages', 'Ajustes', 'Einstellungen'],
 	'settings.sections': ['Settings sections', 'Sections des réglages', 'Secciones de ajustes', 'Einstellungsbereiche'],
 	'settings.profile': ['Profile', 'Profil', 'Perfil', 'Profil'],
-	'settings.appearance': ['Appearance', 'Apparence', 'Apariencia', 'Darstellung'],
+	'settings.preferences': ['Preferences', 'Préférences', 'Preferencias', 'Präferenzen'],
 	'settings.api': ['API', 'API', 'API', 'API'],
 	'settings.advanced': ['Advanced', 'Avancé', 'Avanzado', 'Erweitert'],
-	'profile.account': ['Account', 'Compte', 'Cuenta', 'Konto'],
-	'profile.accountHint': [
-		'Your dashboard identity on this instance.',
-		'Votre identité sur le tableau de bord de cette instance.',
-		'Su identidad en el panel de esta instancia.',
-		'Ihre Identität im Dashboard dieser Instanz.'
-	],
-	'profile.email': ['Email', 'E-mail', 'Correo electrónico', 'E-Mail'],
-	'profile.emailHint': [
-		'Sign-in address. It comes from your Facile account.',
-		'Adresse de connexion. Elle vient de votre compte Facile.',
-		'Dirección de acceso. Procede de su cuenta Facile.',
-		'Anmeldeadresse. Sie stammt aus Ihrem Facile-Konto.'
-	],
-	'profile.role': ['Role', 'Rôle', 'Rol', 'Rolle'],
-	'profile.roleHint': [
-		'Admins manage ingest keys and alert rules.',
-		'Les administrateurs gèrent les clés d’ingestion et les règles d’alerte.',
-		'Los administradores gestionan las claves de ingesta y las reglas de alerta.',
-		'Admins verwalten Ingest-Schlüssel und Warnregeln.'
-	],
 	'profile.admin': ['Admin', 'Administrateur', 'Administrador', 'Admin'],
 	'profile.member': ['Member', 'Membre', 'Miembro', 'Mitglied'],
 	'profile.since': ['Member since', 'Membre depuis', 'Miembro desde', 'Mitglied seit'],
-	'profile.session': ['Session', 'Session', 'Sesión', 'Sitzung'],
-	'profile.sessionHint': [
-		'This browser holds a 30-day session.',
-		'Ce navigateur détient une session de 30 jours.',
-		'Este navegador tiene una sesión de 30 días.',
-		'Dieser Browser hält eine 30-Tage-Sitzung.'
-	],
-	'profile.logout': ['Log out', 'Se déconnecter', 'Cerrar sesión', 'Abmelden'],
-	'profile.logoutHint': [
-		'Revokes the session on the server, not just here.',
-		'Révoque la session sur le serveur, pas seulement ici.',
-		'Revoca la sesión en el servidor, no solo aquí.',
-		'Beendet die Sitzung auf dem Server, nicht nur hier.'
-	],
 	'profile.danger': ['Danger zone', 'Zone de danger', 'Zona de peligro', 'Gefahrenbereich'],
 	'profile.dangerHint': [
 		'Erasure under GDPR Article 17. The account and every session are destroyed. Log entries stay until they expire (RETENTION_DAYS): they name apps, and an app can write personal data into a message.',
@@ -70,23 +35,6 @@ export const settings = {
 	],
 	'profile.confirmButton': ['Delete forever', 'Supprimer définitivement', 'Eliminar para siempre', 'Endgültig löschen'],
 	'profile.deleting': ['Deleting…', 'Suppression…', 'Eliminando…', 'Wird gelöscht…'],
-	'theme.title': ['Theme', 'Thème', 'Tema', 'Design'],
-	'theme.hint': [
-		'Applied to this browser. Every device you sign in from keeps its own choice.',
-		'Appliqué à ce navigateur. Chaque appareil conserve son propre choix.',
-		'Se aplica a este navegador. Cada dispositivo conserva su propia elección.',
-		'Gilt für diesen Browser. Jedes Gerät behält seine eigene Wahl.'
-	],
-	'theme.scheme': ['Colour scheme', 'Schéma de couleurs', 'Esquema de color', 'Farbschema'],
-	'theme.schemeHint': [
-		'System follows your OS for as long as the app is open.',
-		'« Système » suit votre OS tant que l’application est ouverte.',
-		'«Sistema» sigue a su sistema operativo mientras la aplicación esté abierta.',
-		'„System“ folgt Ihrem Betriebssystem, solange die App geöffnet ist.'
-	],
-	'theme.system': ['System', 'Système', 'Sistema', 'System'],
-	'theme.light': ['Light', 'Clair', 'Claro', 'Hell'],
-	'theme.dark': ['Dark', 'Sombre', 'Oscuro', 'Dunkel'],
 	'advanced.instance': ['Instance', 'Instance', 'Instancia', 'Instanz'],
 	'advanced.instanceHint': [
 		'Facts about the server this dashboard is talking to.',

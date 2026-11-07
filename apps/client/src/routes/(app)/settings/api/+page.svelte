@@ -251,9 +251,9 @@ export const handleError = handleErrorWith(journal);`
 					<tr>
 						<th scope="col">{t('common.app')}</th>
 						<th scope="col">{t('keys.kind')}</th>
-						<th scope="col" class="hidden sm:table-cell">{t('keys.prefix')}</th>
+						<th scope="col" class="hidden 2xl:table-cell">{t('keys.prefix')}</th>
 						<th scope="col">{t('keys.scope')}</th>
-						<th scope="col" class="hidden sm:table-cell">{t('common.created')}</th>
+						<th scope="col" class="hidden 2xl:table-cell">{t('common.created')}</th>
 						<th scope="col">{t('common.status')}</th>
 						<th scope="col" aria-label={t('common.actions')}></th>
 					</tr>
@@ -268,7 +268,7 @@ export const handleError = handleErrorWith(journal);`
 									{key.kind === 'public' ? t('keys.public') : t('keys.secret')}
 								</Badge>
 							</td>
-							<td class="hidden font-fc-mono text-fc-xs text-fc-fg-muted sm:table-cell">{key.prefix}…</td>
+							<td class="hidden font-fc-mono text-fc-xs text-fc-fg-muted 2xl:table-cell">{key.prefix}…</td>
 							<td class="max-w-[11rem] text-fc-fg-muted sm:max-w-none">
 								{#if key.kind === 'public'}
 									<div class="flex flex-col gap-1">
@@ -283,7 +283,7 @@ export const handleError = handleErrorWith(journal);`
 									<span class="text-fc-xs">{t('keys.serversNoQuota')}</span>
 								{/if}
 							</td>
-							<td class="hidden whitespace-nowrap text-fc-fg-muted sm:table-cell">{formatDate(key.created_at)}</td>
+							<td class="hidden whitespace-nowrap text-fc-fg-muted 2xl:table-cell">{formatDate(key.created_at)}</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">
 								{key.revoked_at ? t('keys.revokedOn', { date: formatDate(key.revoked_at) }) : t('keys.active')}
 							</td>
