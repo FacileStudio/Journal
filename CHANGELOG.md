@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Libraries: porte v0.12.0 to v0.12.1 (GDPR erasure no longer fails on a schema without
+  `porte_magic_links`), `@facile/muse` v0.12.1 to v0.13.0 (borderless controls with the light
+  `fc-field` fill, `Select` as a custom combobox, badges that never wrap). No app code change:
+  the filters and the alert form already use `Select` through `class`, `bind:value` and
+  `aria-label`.
+
 ## [0.1.0] - 2026-11-07
 
 ### Changed
