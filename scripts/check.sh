@@ -70,6 +70,7 @@ for dir in $GO_MODULES; do
 
     "$GO" vet ./... || s=1
     "$GO" test ./... || s=1
+    "$GO" test -count=1 -run "^TestVersionIsTheReleaseVersion$" -ldflags "-X github.com/FacileStudio/Journal/apps/api.version=$(sh ../../scripts/version.sh ../client/package.json)" . || s=1
 
     if [ -z "${JOURNAL_TEST_DATABASE_URL:-}" ]; then
       echo "check: JOURNAL_TEST_DATABASE_URL is unset, the database-backed tests were skipped (CI still runs them)" >&2

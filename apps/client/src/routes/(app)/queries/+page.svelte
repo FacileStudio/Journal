@@ -66,7 +66,7 @@
 	description={t('queries.description')}
 >
 	{#snippet actions()}
-		<Button size="sm" variant="outline" href="/logs" icon={icons.plus}>{t('queries.saveNew')}</Button>
+		<Button size="sm" variant="secondary" href="/logs" icon={icons.plus}>{t('queries.saveNew')}</Button>
 	{/snippet}
 </PageHeader>
 

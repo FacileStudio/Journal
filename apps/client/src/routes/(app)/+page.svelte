@@ -65,7 +65,7 @@
 
 <PageHeader title={t('overview.title')} description={t('overview.description')}>
 	{#snippet actions()}
-		<Button size="sm" variant="outline" href="/logs" icon={icons.history}>{t('overview.openLogs')}</Button>
+		<Button size="sm" variant="secondary" href="/logs" icon={icons.history}>{t('overview.openLogs')}</Button>
 	{/snippet}
 </PageHeader>
 

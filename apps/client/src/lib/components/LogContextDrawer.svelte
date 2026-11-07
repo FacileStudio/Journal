@@ -94,7 +94,7 @@
 >
 	{#snippet footer()}
 		{#if entry}
-			<Button class="w-full" variant="outline" onclick={copyEntry}>
+			<Button class="w-full" variant="secondary" onclick={copyEntry}>
 				<Icon icon={icons.copy} size={16} />
 				{t('drawer.copyContext')}
 			</Button>

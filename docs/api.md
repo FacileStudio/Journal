@@ -71,7 +71,7 @@ Journal also polls Registre's deletion list, so the push is optional. See [gdpr.
 `user` is `{"id","email","name","is_admin","avatar_url","locale","created_at"}`. Session tokens
 last 30 days. `locale` is `fr`, `en`, `es` or `de`, taken from the Registre profile at sign-in.
 
-`GET /version` (root, not under `/api`) returns `{"version":"<APP_VERSION>"}`.
+`GET /version` (root, not under `/api`) returns `{"version":"v<version in apps/client/package.json>"}`.
 
 ## Ingest
 
