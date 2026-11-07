@@ -28,7 +28,6 @@ import (
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/oidc"
-	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
 
 	"github.com/FacileStudio/tronc/apiref"
@@ -94,7 +93,12 @@ func run() int {
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	identityStore := portepg.New(sqlDB)
+	identityStore, err := newPorteStore(sqlDB)
+	if err != nil {
+		appLogger.Error("failed to configure porte token sealing", slog.Any("error", err))
+		return 1
+	}
+	resealInBackground(shutdownSignal, identityStore, appLogger)
 	users := auth.NewUserStore(db)
 	if _, err := users.BackfillAvatars(shutdownSignal, appEnv.Porte.Issuer); err != nil {
 		appLogger.Warn("avatar backfill failed", slog.Any("error", err))
