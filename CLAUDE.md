@@ -8,7 +8,7 @@ Docker-deployed.
 
 | Layer | Tech |
 |-------|------|
-| API | Go 1.26, tronc v0.21.0, porte v0.18.1, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
+| API | Go 1.26, tronc v0.21.0, porte v0.18.2, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
 | Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.18.0`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
 | Auth | Dashboard: sign-in through Registre only (porte OIDC), DB-backed sessions (30-day token); no sign-up and no password route. Ingest: per-app API keys (SHA256-hashed, admin-managed) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |

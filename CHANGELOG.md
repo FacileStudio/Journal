@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-11-10
+
+### Changed
+
+- build(api): porte v0.18.2. Journal builds its sign-in store with `kit.NewStore`, which reads the `users` table at boot and fails the boot if a column the kit writes is missing. Every column the kit does not write already had a database default, so no account was created with a NULL column; `TestNoUsersColumnIsLeftUnwritten` and `TestAFirstSignInLeavesNoColumnNull` keep it that way.
+
 ## [0.3.0] - 2026-11-10
 
 ### Added
