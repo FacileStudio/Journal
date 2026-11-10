@@ -5,6 +5,7 @@
 ### Changed
 
 - Licence: Journal is now licensed under `AGPL-3.0-only` (see `LICENSE`); before this, the repository carried no licence.
+- Licence: the SDKs under `sdk/` (`sdk/browser`, published as `@facile/journal`, and the Go module `sdk/journal`) are `MIT`, so any program may embed them. Each carries its own `LICENSE`. The rest of the repository stays `AGPL-3.0-only`.
 
 ## [0.2.4] - 2026-11-07
 

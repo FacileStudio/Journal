@@ -135,3 +135,5 @@ and freelancers. One login, zero cloud dependency.
 ## License
 
 Journal is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). A commercial licence is available from Facile Studio for use that cannot meet the AGPL's terms.
+
+The two SDKs under `sdk/` are MIT, so any program may embed them: [`sdk/browser`](sdk/browser/LICENSE) (`@facile/journal`) and [`sdk/journal`](sdk/journal/LICENSE) (the Go module). Everything else in this repository is `AGPL-3.0-only`.

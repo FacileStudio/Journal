@@ -47,3 +47,7 @@ lights up the dashboard's request_id pivot.
   fills it from the key's scope. The legacy shared token needs `App` set.
 - `Close()` drains the buffer on shutdown (best effort, bounded), is
   idempotent, and counts anything undeliverable in `Dropped()`.
+
+## License
+
+This SDK is licensed under the [MIT License](LICENSE). The Journal server it ships to is `AGPL-3.0-only`.

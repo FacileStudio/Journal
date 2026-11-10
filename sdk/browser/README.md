@@ -157,3 +157,7 @@ bun run build     # dist/ is committed; that is what github:FacileStudio/Journal
 `src/`, and `git subtree split`s this directory onto the `ts` branch — a `github:` dependency
 installs the repository root, so the branch must hold this package at *its* root. `#ts` is a
 moving reference, not a version: pushing it is the release.
+
+## License
+
+`@facile/journal` is licensed under the [MIT License](LICENSE). The Journal server it ships to is `AGPL-3.0-only`.
