@@ -1,7 +1,7 @@
 github.com/FacileStudio/antenne-client/go v1.0.0 h1:DaiSu71H9vez382mhjtGH8JXznTE1YMA2Ezm49pPs9Q=
 github.com/FacileStudio/antenne-client/go v1.0.0/go.mod h1:L36VhKkpNZ0zLo0AfV8w3NwaKv6poZpDnff4xlq+Zso=
-github.com/FacileStudio/porte v0.18.0 h1:m9SJ0nyz+lFo6gfiEHcfZBy2FwWSxteVmz+/0UV1OaM=
-github.com/FacileStudio/porte v0.18.0/go.mod h1:V7gSnyj+w9itRiG9yesKXc0Vc+OYL+IJojWa1LOmkow=
+github.com/FacileStudio/porte v0.18.1 h1:c+BvuVwUJ+EdgXmJZZfCH07vBVhkNPfNJtszwQdraY0=
+github.com/FacileStudio/porte v0.18.1/go.mod h1:V7gSnyj+w9itRiG9yesKXc0Vc+OYL+IJojWa1LOmkow=
 github.com/FacileStudio/porte/directory v0.4.0 h1:U+86bDXChiMUBUQnN5VwEyiBoCiLwduwo5IYqRBkC60=
 github.com/FacileStudio/porte/directory v0.4.0/go.mod h1:i7UxoAqCgqAq4ny9/bbuqT/Z69xD7GYG1w3fpH6EhTw=
 github.com/FacileStudio/tronc v0.21.0 h1:lXm4Y69Y0irciHxJ5FcDuyAhkgzWx+GWaIl/2/oCDFM=
