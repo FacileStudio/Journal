@@ -37,8 +37,10 @@ mise run install
 Conventional Commits subject, `type(scope): summary`, and rewrites the subject with the
 gitmoji for that type, so do not type the emoji yourself.
 
-`pre-push` runs `sh scripts/check.sh`. The script is unchanged by the move to lefthook and is
-still the gate; only its caller moved. lefthook caches the shared config at the pinned `ref`,
+`pre-push` runs `sh scripts/check.sh`, then `filet gate .`, which needs filet v0.19.0 or later
+on `PATH` (`GOBIN=$HOME/go/bin go install github.com/FacileStudio/filet@v0.19.0`). At the repo
+root the gate runs `filet check` and `douane scan -fail critical -scope prod`; the script covers
+the per-module steps. lefthook caches the shared config at the pinned `ref`,
 so there is no network call per commit. Bump that `ref` in `lefthook.yml` to pick up a new
 policy.
 
@@ -129,7 +131,10 @@ in `apps/api`, `apps/collector`, and `sdk/journal`, then `bun run typecheck`, `b
 `dist/` freshness check in `sdk/browser`, then `bun run check` in `apps/client`.
 It reports and never rewrites, except under `--format`.
 
-The lefthook `pre-push` job execs the same script, so a push runs the full gate. Bypass a
+The lefthook `pre-push` job execs the same script, so a push runs the full gate. CI runs the
+same steps, plus filet v0.19.0 (`preset: facile`, see `filet.yml`) and douane 0.7.0, whose
+archive is checked against a pinned sha256. A douane finding that no bump can fix yet goes in a
+`douane.yml` permit with a reason and an expiry within 90 days. Bypass a
 known-unrelated failure with `git push --no-verify`.
 
 Two deliberate details in the script are worth knowing before you edit it. It is invoked as
