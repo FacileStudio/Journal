@@ -14,6 +14,7 @@
 	const t = useT();
 
 	let user = $state<AuthUser | null>(null);
+	let invitations = $state<{ count: number; href: string } | null>(null);
 	let ready = $state(false);
 	let collapsed = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
@@ -53,12 +54,22 @@
 				user = res.user;
 				adoptLocale(resolveLocale(res.user.locale));
 				ready = true;
+				loadInvitations();
 			})
 			.catch(() => {
 				clearToken();
 				void goto('/login');
 			});
 	});
+
+	/* Registre's pending space invitations for the user menu. An answer without href is no row,
+	   and a failure is no row either: the menu never waits on Registre. */
+	function loadInvitations() {
+		backend
+			.invitations()
+			.then((answer) => (invitations = answer.href ? { count: answer.count, href: answer.href } : null))
+			.catch(() => (invitations = null));
+	}
 
 	/* <main> is the scroll container and sits outside PageTransition, so its scrollTop survives
 	   a route change unless someone puts it back. */
@@ -93,7 +104,8 @@
 		locale: session.locale,
 		onLocaleChange: (next: Locale) => rememberLocale(next),
 		theme: theme.mode,
-		onThemeChange: (next: Theme) => setTheme(next)
+		onThemeChange: (next: Theme) => setTheme(next),
+		invitations
 	});
 </script>
 

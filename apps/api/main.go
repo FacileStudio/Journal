@@ -136,14 +136,16 @@ func run() int {
 	}
 	go sweepSessions(shutdownSignal, sessions, appLogger)
 
-	var erasures *deletions.Service
+	var sso ssoRoutes
 	if oidcKit.Enabled() {
-		erasures = deletions.NewService(db, directory.Client{
+		registre := directory.Client{
 			Issuer:       appEnv.Porte.Issuer,
 			ClientID:     appEnv.Porte.ClientID,
 			ClientSecret: appEnv.Porte.ClientSecret,
-		}, users.EraseAccount, identityStore.EraseIdentity, appLogger)
-		go erasures.Run(shutdownSignal)
+		}
+		sso.erasures = deletions.NewService(db, registre, users.EraseAccount, identityStore.EraseIdentity, appLogger)
+		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: identityStore.Identities(), Logger: appLogger}
+		go sso.erasures.Run(shutdownSignal)
 	}
 
 	antenneService := antenne.NewService(db, sqlDB, appLogger)
@@ -153,7 +155,7 @@ func run() int {
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
-	router := buildRouter(db, oidcKit, sessions, users, appEnv, appLogger, antenneService, erasures, health.DB(sqlDB))
+	router := buildRouter(db, oidcKit, sessions, users, appEnv, appLogger, antenneService, sso, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -206,7 +208,7 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, users *kit.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, erasures *deletions.Service, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, users *kit.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, sso ssoRoutes, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
 	authService := auth.NewService(db)
@@ -242,9 +244,7 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 		_ = kit.Mount(api.With(sessionLimiter), kit.Config{Sessions: sessions, OIDC: oidcKit})
 		auth.RegisterRoutes(api, authService, sessionLimiter, requireAuth,
 			func(w http.ResponseWriter, r *http.Request) { sessions.ClearCookie(w, r, porte.SessionCookieName) })
-		if erasures != nil {
-			deletions.RegisterRoutes(api, erasures)
-		}
+		sso.register(api.With(sessionLimiter, requireAuth), api, appLogger)
 		ingest.RegisterRoutes(api, ingestService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
 		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
@@ -270,6 +270,27 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	}
 
 	return router
+}
+
+// ssoRoutes are the routes that exist only with an OIDC issuer: Registre's
+// signed deletion push, and the user menu's pending space invitations.
+type ssoRoutes struct {
+	erasures    *deletions.Service
+	invitations *kit.InvitationsConfig
+}
+
+// register mounts the deletion push on the bare API router, since Registre
+// signs it and holds no session, and the invitations behind the session.
+func (sso ssoRoutes) register(signedIn, api chi.Router, appLogger *slog.Logger) {
+	if sso.erasures != nil {
+		deletions.RegisterRoutes(api, sso.erasures)
+	}
+	if sso.invitations == nil {
+		return
+	}
+	if err := kit.MountInvitations(signedIn, *sso.invitations); err != nil {
+		appLogger.Error("failed to mount the invitations route", slog.Any("error", err))
+	}
 }
 
 // perMinute is a throughput limiter of n requests a minute per key: a token

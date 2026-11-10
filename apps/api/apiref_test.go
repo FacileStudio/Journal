@@ -51,11 +51,13 @@ func testKitFor(t *testing.T, appEnv env.Config, sqlDB *sql.DB) (*oidc.Kit, *ses
 func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	t.Helper()
 	oidcKit, sessions, users := testKitFor(t, appEnv, nil)
-	var erasures *deletions.Service
+	var sso ssoRoutes
 	if oidcKit.Enabled() {
-		erasures = deletions.NewService(nil, directory.Client{Issuer: appEnv.Porte.Issuer}, nil, nil, slog.New(slog.DiscardHandler))
+		registre := directory.Client{Issuer: appEnv.Porte.Issuer, ClientID: "journal", ClientSecret: "secret"}
+		sso.erasures = deletions.NewService(nil, registre, nil, nil, slog.New(slog.DiscardHandler))
+		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: portepg.New(nil).Identities()}
 	}
-	return buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, erasures)
+	return buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso)
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

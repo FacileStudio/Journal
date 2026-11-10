@@ -239,6 +239,7 @@ same issuer is never linked.
 - `POST /registre/deletions` → Registre's signed GDPR notice; polling runs too (`modules/deletions`, state in `directory_deletion_state`).
 - `POST /auth/logout` (session) → porte deletes the session and clears the cookie, `{ logged_out: true }`.
 - `GET /auth/me` (session) → `{ user }` (includes `is_admin`). porte authenticates, then `kit.RequireAuth` hydrates email + `is_admin` from `users` — porte's session carries neither. The kit rewrites the stored email at sign-in only when the provider verified it.
+- `GET /me/invitations` (session) → `{ count, href? }`, the signed-in user's pending Registre space invitations, from `porte/kit`'s `MountInvitations`. Registered only with an `OIDC_ISSUER`; never fails (Registre down answers `{ count: 0 }`). The user menu shows a row only when `href` is set.
 - `/auth/register` and `/auth/login` do not exist; there is no password sign-in.
 
 `GET /logs*` and `GET /apps` require a valid Bearer session token; `/apikeys*` additionally

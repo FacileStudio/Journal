@@ -1,5 +1,7 @@
 package docs
 
+import "github.com/FacileStudio/porte/kit"
+
 // Registry inventories every application route the Go binary registers. Paths
 // are written relative to the /api mount, which is the reference's declared
 // server. The /health and /ready probes are deliberately absent: tronc/health
@@ -19,6 +21,14 @@ var Registry = Response{Modules: []Module{
 	antenneModule,
 	deletionsModule,
 }}
+
+// invitationsRoute is porte/kit's own entry for GET /me/invitations, with
+// the response schema the reference renders.
+func invitationsRoute() Route {
+	route := kit.InvitationsRoute()
+	route.ResponseBody = kit.InvitationsResponse{}
+	return route
+}
 
 var idParam = []Field{{Name: "id", Type: "int64", Description: "Numeric identifier."}}
 
@@ -129,6 +139,7 @@ var authModule = Module{
 				errSessionRate,
 			},
 		},
+		invitationsRoute(),
 	},
 }
 

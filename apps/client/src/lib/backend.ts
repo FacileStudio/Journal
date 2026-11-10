@@ -20,6 +20,11 @@ export type MeResponse = {
 	user: AuthUser;
 };
 
+export type InvitationsAnswer = {
+	count: number;
+	href?: string;
+};
+
 export type AuthConfig = {
 	sso_only: boolean;
 	oidc_enabled: boolean;
@@ -295,6 +300,10 @@ export const backend = {
 
 	me() {
 		return apiFetch<MeResponse>('/auth/me');
+	},
+
+	invitations() {
+		return apiFetch<InvitationsAnswer>('/me/invitations');
 	},
 
 	deleteMe() {
