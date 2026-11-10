@@ -15,24 +15,25 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/deletions"
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/go-chi/chi/v5"
-	"gorm.io/gorm"
 )
 
-// testKitFor builds the porte kit and session manager over a database.
-func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*oidc.Kit, *session.Manager) {
+// testKitFor builds the OIDC kit, the session manager and the user store over
+// a database.
+func testKitFor(t *testing.T, appEnv env.Config, sqlDB *sql.DB) (*oidc.Kit, *session.Manager, *kit.Store) {
 	t.Helper()
 	store := portepg.New(sqlDB)
-	users := auth.NewUserStore(db)
+	users := auth.NewUserStore(sqlDB)
 	sessions, err := session.New(appEnv.Porte, session.Deps{Sessions: store.Sessions()})
 	if err != nil {
 		t.Fatalf("session.New: %v", err)
 	}
-	kit, err := oidc.New(context.Background(), appEnv.Porte, oidc.Deps{
+	oidcKit, err := oidc.New(context.Background(), appEnv.Porte, oidc.Deps{
 		Users:      users,
 		Identities: store.Identities(),
 		Sessions:   sessions,
@@ -41,7 +42,7 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 	if err != nil {
 		t.Fatalf("build the kit: %v", err)
 	}
-	return kit, sessions
+	return oidcKit, sessions, users
 }
 
 // testRouter builds the real router with a nil database. Nothing here serves a
@@ -49,12 +50,12 @@ func testKitFor(t *testing.T, appEnv env.Config, db *gorm.DB, sqlDB *sql.DB) (*o
 // reference, both of which are assembled before any handler runs.
 func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	t.Helper()
-	kit, sessions := testKitFor(t, appEnv, nil, nil)
+	oidcKit, sessions, users := testKitFor(t, appEnv, nil)
 	var erasures *deletions.Service
-	if kit.Enabled() {
-		erasures = deletions.NewService(nil, directory.Client{Issuer: appEnv.Porte.Issuer}, nil, slog.New(slog.DiscardHandler))
+	if oidcKit.Enabled() {
+		erasures = deletions.NewService(nil, directory.Client{Issuer: appEnv.Porte.Issuer}, nil, nil, slog.New(slog.DiscardHandler))
 	}
-	return buildRouter(nil, kit, sessions, appEnv, slog.New(slog.DiscardHandler), nil, erasures)
+	return buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, erasures)
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

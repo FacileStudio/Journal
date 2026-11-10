@@ -15,17 +15,19 @@ import (
 // Registre's signed push on directory.DeletionsPath. Journal does not sync
 // Registre spaces, so this is the only use it makes of the directory client.
 type Service struct {
-	orm      *gorm.DB
-	logger   *slog.Logger
-	receiver *directory.Deletions
+	orm          *gorm.DB
+	logger       *slog.Logger
+	eraseAccount func(context.Context, string, string) error
+	receiver     *directory.Deletions
 }
 
-// NewService builds the receiver over Journal's tables. erase removes porte's
-// own rows for the identity: pg.Store.EraseIdentity.
-func NewService(
-	orm *gorm.DB, client directory.Client, erase func(context.Context, string, string) error, logger *slog.Logger,
+// NewService builds the receiver over Journal's tables. eraseAccount deletes
+// the account behind an identity, which is porte/kit's Store.EraseAccount;
+// erase removes porte's own rows for the identity: pg.Store.EraseIdentity.
+func NewService(orm *gorm.DB, client directory.Client, eraseAccount, erase func(context.Context, string, string) error,
+	logger *slog.Logger,
 ) *Service {
-	service := &Service{orm: orm, logger: logger}
+	service := &Service{orm: orm, logger: logger, eraseAccount: eraseAccount}
 	service.receiver = &directory.Deletions{
 		Client:          client,
 		OnPersonDeleted: service.ErasePerson,
@@ -46,25 +48,19 @@ func (s *Service) Handler() http.Handler {
 	return s.receiver.Handler()
 }
 
-// ErasePerson deletes the account behind a Registre identity. The row's
-// foreign keys cascade into the identity with its provider tokens, the
-// sessions (named tokens included) and the login codes. Journal keeps no other
-// per-person row: ingest keys, saved queries, alert rules and source maps
-// belong to the instance, not to a person. A subject that is already gone is a
-// no-op, so a replayed notice changes nothing.
+// ErasePerson deletes the account behind a Registre identity through the kit,
+// in one transaction. The row's foreign keys cascade into the identity with
+// its provider tokens, the sessions (named tokens included) and the login
+// codes. Journal keeps no other per-person row: ingest keys, saved queries,
+// alert rules and source maps belong to the instance, not to a person. A
+// subject that is already gone is a no-op, so a replayed notice changes
+// nothing.
 //
 // Unlike a self-service delete, this one never refuses for the last
 // administrator: an erasure Registre has already performed cannot be blocked
 // here. It logs a warning when no administrator remains instead.
 func (s *Service) ErasePerson(ctx context.Context, provider, subject string) error {
-	var userIDs []int64
-	err := s.orm.WithContext(ctx).Raw(
-		`SELECT user_id FROM porte_identities WHERE provider = ? AND subject = ?`, provider, subject,
-	).Scan(&userIDs).Error
-	if err != nil || len(userIDs) == 0 {
-		return err
-	}
-	if err := s.orm.WithContext(ctx).Exec(`DELETE FROM users WHERE id = ?`, userIDs[0]).Error; err != nil {
+	if err := s.eraseAccount(ctx, provider, subject); err != nil {
 		return err
 	}
 	s.warnWithoutAdmin(ctx)

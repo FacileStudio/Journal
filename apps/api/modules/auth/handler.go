@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
 )
@@ -21,7 +21,7 @@ func newHandler(service *Service, clearCookie func(http.ResponseWriter, *http.Re
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	identity, ok := authcontext.From(r.Context())
+	identity, ok := kit.FromContext(r.Context())
 	if !ok {
 		httpjson.WriteError(w, errors.Unauthorized("not authenticated"))
 		return
@@ -36,7 +36,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
-	identity, ok := authcontext.From(r.Context())
+	identity, ok := kit.FromContext(r.Context())
 	if !ok {
 		httpjson.WriteError(w, errors.Unauthorized("not authenticated"))
 		return

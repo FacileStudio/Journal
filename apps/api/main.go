@@ -27,6 +27,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	"github.com/FacileStudio/porte/session"
 
@@ -99,8 +100,8 @@ func run() int {
 		return 1
 	}
 	resealInBackground(shutdownSignal, identityStore, appLogger)
-	users := auth.NewUserStore(db)
-	if _, err := users.BackfillAvatars(shutdownSignal, appEnv.Porte.Issuer); err != nil {
+	users := auth.NewUserStore(sqlDB)
+	if _, err := users.BackfillPictures(shutdownSignal, appEnv.Porte.Issuer); err != nil {
 		appLogger.Warn("avatar backfill failed", slog.Any("error", err))
 	}
 
@@ -113,7 +114,7 @@ func run() int {
 		return 1
 	}
 
-	kit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
+	oidcKit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
 		Users:      users,
 		Identities: identityStore.Identities(),
 		Sessions:   sessions,
@@ -125,7 +126,7 @@ func run() int {
 		return 1
 	}
 
-	if kit.Enabled() {
+	if oidcKit.Enabled() {
 		appLogger.Info("single sign-on enabled", slog.String("issuer", appEnv.Porte.Issuer))
 	}
 
@@ -137,12 +138,12 @@ func run() int {
 	go sweepSessions(shutdownSignal, sessions, appLogger)
 
 	var erasures *deletions.Service
-	if kit.Enabled() {
+	if oidcKit.Enabled() {
 		erasures = deletions.NewService(db, directory.Client{
 			Issuer:       appEnv.Porte.Issuer,
 			ClientID:     appEnv.Porte.ClientID,
 			ClientSecret: appEnv.Porte.ClientSecret,
-		}, identityStore.EraseIdentity, appLogger)
+		}, users.EraseAccount, identityStore.EraseIdentity, appLogger)
 		go erasures.Run(shutdownSignal)
 	}
 
@@ -152,7 +153,7 @@ func run() int {
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
-	router := buildRouter(db, kit, sessions, appEnv, appLogger, antenneService, erasures, health.DB(sqlDB))
+	router := buildRouter(db, oidcKit, sessions, users, appEnv, appLogger, antenneService, erasures, health.DB(sqlDB))
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -205,7 +206,7 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, erasures *deletions.Service, checks ...health.Check) chi.Router {
+func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, users *kit.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, erasures *deletions.Service, checks ...health.Check) chi.Router {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
 	authService := auth.NewService(db)
@@ -240,11 +241,10 @@ func buildRouter(db *gorm.DB, kit *oidc.Kit, sessions *session.Manager, appEnv e
 	router.Get("/version", versionHandler)
 	apiref.Mount(router, referenceConfig())
 
-	requireAuth := middleware.RequireAuth(sessions, authService)
+	requireAuth := kit.RequireAuth(sessions, users)
 
 	router.Route("/api", func(api chi.Router) {
-		sessions.Mount(api.With(sessionLimiter))
-		kit.Mount(api.With(sessionLimiter))
+		_ = kit.Mount(api.With(sessionLimiter), kit.Config{Sessions: sessions, OIDC: oidcKit})
 		auth.RegisterRoutes(api, authService, sessionLimiter, requireAuth,
 			func(w http.ResponseWriter, r *http.Request) { sessions.ClearCookie(w, r, porte.SessionCookieName) })
 		if erasures != nil {

@@ -15,7 +15,11 @@ import (
 // carries no https picture clears it, so a removed picture stops showing.
 func TestUpsertFromOIDCStoresThePictureURL(t *testing.T) {
 	db := testdb.Migrated(t)
-	store := auth.NewUserStore(db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	store := auth.NewUserStore(sqlDB)
 	ctx := context.Background()
 	claims := porte.Claims{
 		Provider:      "registre",
@@ -54,13 +58,17 @@ func TestUpsertFromOIDCStoresThePictureURL(t *testing.T) {
 	}
 }
 
-// TestBackfillAvatarsFillsOnlyEmptyRowsFromThisIssuer seeds three accounts:
+// TestBackfillPicturesFillsOnlyEmptyRowsFromThisIssuer seeds three accounts:
 // one linked to the issuer with no avatar, one linked with an avatar already,
 // and one linked to another provider. Only the first is filled, and a second
 // run changes nothing.
-func TestBackfillAvatarsFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
+func TestBackfillPicturesFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
 	db := testdb.Migrated(t)
-	store := auth.NewUserStore(db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	store := auth.NewUserStore(sqlDB)
 	ctx := context.Background()
 	issuer := "https://sso.facile.studio"
 	if err := db.Exec(
@@ -80,7 +88,7 @@ func TestBackfillAvatarsFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
 	}
 
 	for run, wantRows := range []int64{1, 0} {
-		rows, err := store.BackfillAvatars(ctx, issuer)
+		rows, err := store.BackfillPictures(ctx, issuer)
 		if err != nil {
 			t.Fatalf("run %d: %v", run, err)
 		}

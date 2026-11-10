@@ -4,17 +4,11 @@ import (
 	"context"
 	stderrors "errors"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )
-
-// registrationLockKey is the advisory lock the account rules are taken under.
-// porte cannot take it — it does not own this database — which is why the
-// first-account rule lives in this package's UserStore.
-const registrationLockKey = 0x6A6F75726E616C
 
 // Service exposes the current-user endpoint and account erasure.
 type Service struct {
@@ -26,33 +20,6 @@ type Service struct {
 // and who is an administrator.
 func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
-}
-
-// IdentityForUser turns the user id porte authenticated into the identity the
-// rest of Journal reads. porte hands the middleware a session and a user id
-// and stops there: it holds no email and no is_admin, because what a role may
-// do is the app's business and the profile lives in the app's own table. A
-// session pointing at a user that no longer exists — the foreign key cascades
-// a delete, so this is a race rather than a leak — is still not an
-// authenticated request and is refused.
-func (s *Service) IdentityForUser(ctx context.Context, userID int64) (authcontext.Identity, error) {
-	var out struct {
-		ID      int64
-		Email   string
-		IsAdmin bool
-	}
-	err := s.orm.WithContext(ctx).
-		Model(&schemas.User{}).
-		Select("id", "email", "is_admin").
-		Where("id = ?", userID).
-		Scan(&out).Error
-	if err != nil {
-		return authcontext.Identity{}, errors.Internal("failed to load the account", err)
-	}
-	if out.ID == 0 {
-		return authcontext.Identity{}, errors.Unauthorized("invalid auth token")
-	}
-	return authcontext.Identity{UserID: out.ID, Email: out.Email, IsAdmin: out.IsAdmin}, nil
 }
 
 // DeleteAccount erases the caller's account: one row, whose foreign keys

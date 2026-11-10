@@ -83,8 +83,8 @@ Journal/
         errors/                    # typed errors -> HTTP status mapping
         logger/                    # structured slog logging
         authcrypto/                # Argon2id password hashing + session/API token gen/hash, strict Bearer parsing
-        authcontext/               # request-scoped authenticated identity + ingest key scope
-        middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAuth, RequireAdmin
+        authcontext/               # request-scoped ingest key scope (the signed-in identity is porte/kit's)
+        middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAdmin
       schemas/                     # GORM models (log_entry, user, session, api_key, saved_query, alert_rule) + Migrate
       modules/
         auth/                      # /api/auth/{config,logout,me} — sessions; the OIDC routes come from porte
@@ -221,8 +221,8 @@ at the root. Anything not under `/api` falls through to the dashboard's index do
 Dashboard accounts, through **porte** — the suite's shared authentication kit, which Journal
 is the first app to adopt. `porte/oidc` owns the middleware, `/auth/config`, `/auth/logout`
 and the whole OIDC flow; `porte/pg` owns `porte_sessions`, `porte_identities` and
-`porte_login_codes`. Journal keeps its own `users` table and implements `porte.UserStore` over
-it, because `is_admin` and first-account-becomes-admin are product rules porte has no opinion
+`porte_login_codes`. Journal keeps its own `users` table and hands porte the `porte/kit` store over
+it (`modules/auth/store.go`, `Columns{Admin: "is_admin"}`), because `is_admin` and first-account-becomes-admin are product rules porte has no opinion
 about.
 
 Sessions are DB-backed: a random 32-byte token, stored SHA256-hashed in `porte_sessions`, 30-day
@@ -237,7 +237,7 @@ same issuer is never linked.
 - `GET /auth/oidc` → starts SSO. Registered only with an `OIDC_ISSUER`. `?flow=cli` ends on a one-time code instead of a cookie.
 - `POST /registre/deletions` → Registre's signed GDPR notice; polling runs too (`modules/deletions`, state in `directory_deletion_state`).
 - `POST /auth/logout` (session) → porte deletes the session and clears the cookie, `{ logged_out: true }`.
-- `GET /auth/me` (session) → `{ user }` (includes `is_admin`). porte authenticates, then `middleware.RequireAuth` hydrates email + `is_admin` from `users` — porte carries neither.
+- `GET /auth/me` (session) → `{ user }` (includes `is_admin`). porte authenticates, then `kit.RequireAuth` hydrates email + `is_admin` from `users` — porte's session carries neither. The kit rewrites the stored email at sign-in only when the provider verified it.
 - `/auth/register` and `/auth/login` do not exist; there is no password sign-in.
 
 `GET /logs*` and `GET /apps` require a valid Bearer session token; `/apikeys*` additionally

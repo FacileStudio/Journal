@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
 )
@@ -11,7 +11,7 @@ import (
 // RequireAdmin rejects the request unless the authenticated caller IsAdmin.
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		identity, ok := authcontext.From(request.Context())
+		identity, ok := kit.FromContext(request.Context())
 		if !ok || !identity.IsAdmin {
 			httpjson.WriteError(w, errors.Forbidden("admin access required"))
 			return

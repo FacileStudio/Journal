@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -35,13 +36,9 @@ type liveApp struct {
 func newLiveApp(t *testing.T) liveApp {
 	t.Helper()
 	db := testdb.Migrated(t)
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("sql handle: %v", err)
-	}
 	appEnv := env.Config{IngestToken: testIngestToken}
-	kit, sessions := testKitFor(t, appEnv, db, sqlDB)
-	router := buildRouter(db, kit, sessions, appEnv, slog.New(slog.DiscardHandler), nil, nil)
+	oidcKit, sessions, users := testKitFor(t, appEnv, sqlHandle(t, db))
+	router := buildRouter(db, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, nil)
 	return liveApp{router: router, db: db, sessions: sessions}
 }
 
@@ -159,7 +156,7 @@ func TestIngestNeedsATokenAndNoSession(t *testing.T) {
 // unverified address may never adopt an account that already exists.
 func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	db := testdb.Migrated(t)
-	users := auth.NewUserStore(db)
+	users := auth.NewUserStore(sqlHandle(t, db))
 	ctx := context.Background()
 
 	userID, err := users.UpsertFromOIDC(ctx, claims("abc", "someone@facile.studio", "Someone", true))
@@ -203,7 +200,7 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 // handed over, verified or not.
 func TestAnExistingAccountLinksByVerifiedEmailOnly(t *testing.T) {
 	db := testdb.Migrated(t)
-	users := auth.NewUserStore(db)
+	users := auth.NewUserStore(sqlHandle(t, db))
 	ctx := context.Background()
 	legacy := schemas.User{Email: "legacy@facile.studio", Name: "Legacy", PasswordHash: "x", IsAdmin: true}
 	if err := db.Create(&legacy).Error; err != nil {
@@ -283,4 +280,13 @@ func TestBrowserIngestStaysReadableCrossOrigin(t *testing.T) {
 	if refused := post("https://evil.example"); refused.Code != http.StatusForbidden {
 		t.Fatalf("unlisted origin = %d, want 403", refused.Code)
 	}
+}
+
+func sqlHandle(t *testing.T, db *gorm.DB) *sql.DB {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	return sqlDB
 }

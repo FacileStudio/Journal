@@ -52,7 +52,7 @@ directory with `dist/` committed.
    - ingest: 600/min keyed by the SHA-256 of the bearer token
    Over the limit answers `429` with `Retry-After: 60`.
 5. `/api/auth/*` is public except `me`; `/api/ingest` runs `middleware.RequireIngestAuth`;
-   everything else runs `middleware.RequireAuth`, and `/api/apikeys` plus `/api/alerts` add
+   everything else runs porte's `kit.RequireAuth`, and `/api/apikeys` plus `/api/alerts` add
    `middleware.RequireAdmin`.
 6. Handlers decode with `tronc/httpjson`, delegate to their service, and write typed errors
    from `tronc/errors`.
@@ -69,11 +69,12 @@ SHA-256 hex is stored, in `porte_sessions`, with a 30-day absolute TTL and a 7-d
 window that applies to the cookie transport only — a bearer belongs to a CLI or a nightly
 job, which is idle by design. Both transports are the same row, so one logout ends either.
 No password route exists. Accounts created before the switch keep their row and their data: the
-first verified Facile sign-in with the same address links to it. `modules/auth`'s `UserStore`
-takes a `pg_advisory_xact_lock` and applies porte's linking rules: link by `(issuer, subject)`
+first verified Facile sign-in with the same address links to it. The `porte/kit` store built in
+`modules/auth/store.go` takes an advisory lock and applies porte's linking rules: link by `(issuer, subject)`
 first, then by a **verified** address only, and refuse when the account already holds another
 subject of the same issuer. The first account created becomes admin under the same lock, and the
-store keeps the `locale` claim in `users.locale`. porte resolves the identity and hands over the
+store keeps the `locale` claim in `users.locale`. It rewrites the stored address only when the
+provider marks it verified. porte resolves the identity and hands over the
 claims; Journal decides what an account is.
 
 **Ingest keys.** `POST /api/apikeys` (admin) mints `journal_<app>_<random>` and returns the

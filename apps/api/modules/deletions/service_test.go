@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
+	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte/directory"
 	portepg "github.com/FacileStudio/porte/pg"
@@ -85,7 +86,7 @@ func seed(t *testing.T) *fixture {
 		t.Fatalf("sql handle: %v", err)
 	}
 	client := directory.Client{Issuer: f.issuer, ClientID: "journal", ClientSecret: "s3cret"}
-	f.service = NewService(f.db, client, portepg.New(sqlDB).EraseIdentity, quietLogger())
+	f.service = NewService(f.db, client, auth.NewUserStore(sqlDB).EraseAccount, portepg.New(sqlDB).EraseIdentity, quietLogger())
 	return f
 }
 
@@ -149,7 +150,7 @@ func TestPollErasesTheListedPersonOnce(t *testing.T) {
 	}
 
 	seedPerson(t, f.db, f.issuer, "again@facile.studio", "sub-gone", false)
-	restarted := NewService(f.db, f.service.receiver.Client, f.service.receiver.Erase, quietLogger())
+	restarted := NewService(f.db, f.service.receiver.Client, f.service.eraseAccount, f.service.receiver.Erase, quietLogger())
 	if err := restarted.receiver.Poll(context.Background()); err != nil {
 		t.Fatalf("second poll: %v", err)
 	}
