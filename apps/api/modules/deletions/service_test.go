@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -186,5 +187,22 @@ func TestPushWithoutASignatureIsRefused(t *testing.T) {
 	}
 	if got := count(t, f.db, `SELECT count(*) FROM users`); got != 2 {
 		t.Fatalf("an unsigned push erased someone: %d users", got)
+	}
+}
+
+// Every table with a foreign key to users is one the erasure test seeds and
+// checks. A new table that references a person fails here until EraseData
+// and assertErased cover it.
+func TestErasureCoversEveryTableThatReferencesAUser(t *testing.T) {
+	db := testdb.Migrated(t)
+	var tables []string
+	err := db.Raw(`SELECT DISTINCT conrelid::regclass::text FROM pg_constraint
+		WHERE contype = 'f' AND confrelid = 'users'::regclass ORDER BY 1`).Scan(&tables).Error
+	if err != nil {
+		t.Fatalf("list the foreign keys: %v", err)
+	}
+	want := []string{"porte_identities", "porte_login_codes", "porte_sessions"}
+	if !slices.Equal(tables, want) {
+		t.Fatalf("tables referencing users = %v, want %v: erase the new one and assert it", tables, want)
 	}
 }
