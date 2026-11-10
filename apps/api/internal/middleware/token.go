@@ -45,7 +45,7 @@ func RequireIngestAuth(legacyToken string, keys IngestKeyVerifier) func(http.Han
 
 // KeyByBearerTokenHash names the rate bucket by the hashed bearer token, so
 // each key is limited independently.
-func KeyByBearerTokenHash(request *http.Request) (string, error) {
+func KeyByBearerTokenHash(request *http.Request) string {
 	token, _ := authcrypto.BearerToken(request.Header.Get("Authorization"))
-	return authcrypto.HashToken(token), nil
+	return authcrypto.HashToken(token)
 }

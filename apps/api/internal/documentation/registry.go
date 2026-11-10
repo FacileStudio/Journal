@@ -146,7 +146,7 @@ var ingestModule = Module{
 				"ts (optional RFC3339 stored as created_at; more than 5 minutes in the future is replaced by server time), and meta (optional object stored as jsonb; keys that look like credentials — password, token, cookie, secret and their variants, at any nesting depth — are replaced with \"[scrubbed]\" on the way in).\n\n" +
 				"**Body size: the 8 MB cap applies to uncompressed bodies too.** Content-Encoding: gzip is accepted, and the two limits are 8 MB on the body as it arrives and 32 MB once decompressed — " +
 				"32 MB is only the decompressed ceiling, never a licence to POST a 20 MB plain JSON batch. A plain body above 8 MB is rejected with 413, so a shipper batching large meta payloads must split them.\n\n" +
-				"Rate limiting is 600/min keyed on the SHA-256 of the bearer token and answers 429 with Retry-After: 60. " +
+				"Rate limiting is 600/min keyed on the SHA-256 of the bearer token and answers 429 with Retry-After in seconds. " +
 				"Shippers should buffer and retry on 429 and 5xx, and drop on other 4xx. Returns 201; entries are written in batches of 500.",
 			Auth:         "bearer",
 			RequestBody:  `{"app":string,"level":string,"message":string,"ts":string,"meta":object} or {"entries":[…]}`,

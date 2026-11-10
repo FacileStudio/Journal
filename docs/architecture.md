@@ -46,11 +46,13 @@ directory with `dist/` committed.
 2. `middleware.SecurityHeaders` sets `X-Content-Type-Options`, `X-Frame-Options: DENY`,
    HSTS, `Referrer-Policy`, and `Permissions-Policy` on every response, SPA included.
 3. `tronc/health.Mount` registers `/health` and `/ready` at both the root and under `/api`.
-4. Rate limiters from `go-chi/httprate` wrap the route groups:
-   - credential routes: 20/min keyed by IP and endpoint
-   - session routes: 300/min keyed by IP
-   - ingest: 600/min keyed by the SHA-256 of the bearer token
-   Over the limit answers `429` with `Retry-After: 60`.
+4. `tronc/middleware.Ratelimit` token buckets wrap the route groups, each refilled at its rate
+   per minute with room for one minute's worth, and bounded at 50,000 keys:
+   - session routes: 300/min keyed by IP (an IPv6 visitor by their /64)
+   - ingest and source-map upload: 600/min keyed by the SHA-256 of the bearer token
+   - browser ingest: 60/min per (key, IP) under a 600/min per-key ceiling
+   Over the limit answers `429` with the `rate_limited` envelope and `Retry-After` in whole
+   seconds until a token is back. No `X-RateLimit-*` headers are sent.
 5. `/api/auth/*` is public except `me`; `/api/ingest` runs `middleware.RequireIngestAuth`;
    everything else runs porte's `kit.RequireAuth`, and `/api/apikeys` plus `/api/alerts` add
    `middleware.RequireAdmin`.

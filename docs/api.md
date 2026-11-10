@@ -103,7 +103,7 @@ Limits: at most 1000 entries per batch, otherwise `400`. `Content-Encoding: gzip
 accepted, with an 8 MB cap on the compressed body and 32 MB on the decompressed one. Both
 caps also apply to uncompressed bodies, which is the practical trap here — **a plain JSON
 body above 8 MB is rejected**, so a shipper batching large `meta` payloads must split them.
-Rate limiting is 600/min per token hash, answered as `429` with `Retry-After: 60`.
+Rate limiting is 600/min per token hash, answered as `429` with `Retry-After` in whole seconds.
 
 Response `201 {"ingested": n}`. Entries are written in batches of 500.
 

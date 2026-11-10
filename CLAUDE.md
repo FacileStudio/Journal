@@ -276,7 +276,7 @@ Single entry **or** batch (max 1000 entries, else 400). `Content-Encoding: gzip`
 (optional, default `info`), `message` (required, truncated at 64KB on a rune boundary with
 `" [truncated]"` appended), `ts` (optional RFC3339 → `created_at`; more than 5 min in the
 future → server receipt time), `meta` (optional object). Rate-limited responses are 429 with
-`Retry-After: 60` — shippers should buffer and retry on 429/5xx and drop on other 4xx.
+`Retry-After` in whole seconds — shippers should buffer and retry on 429/5xx and drop on other 4xx.
 
 ```jsonc
 { "app": "nuage", "level": "error", "message": "boom", "meta": { "k": "v" } }

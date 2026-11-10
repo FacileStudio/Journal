@@ -139,12 +139,9 @@ func TestKeyByBrowserKeyAndIP(t *testing.T) {
 	three := httptest.NewRequest(http.MethodPost, "/ingest/browser?key=a", nil)
 	three.RemoteAddr = "10.0.0.2:1234"
 
-	first, err := KeyByBrowserKeyAndIP(one)
-	if err != nil {
-		t.Fatalf("KeyByBrowserKeyAndIP: %v", err)
-	}
-	second, _ := KeyByBrowserKeyAndIP(two)
-	third, _ := KeyByBrowserKeyAndIP(three)
+	first := KeyByBrowserKeyAndIP(one)
+	second := KeyByBrowserKeyAndIP(two)
+	third := KeyByBrowserKeyAndIP(three)
 
 	if first == second {
 		t.Fatal("two keys from one IP share a bucket")

@@ -41,7 +41,6 @@ import (
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 	"github.com/FacileStudio/tronc/spa"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/httprate"
 	"gorm.io/gorm"
 )
 
@@ -216,15 +215,10 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	sourceMapsService := sourcemaps.NewService(db)
 	alertsService := alerts.NewService(db)
 
-	rateLimitExceeded := httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "60")
-		httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
-	})
-	sessionLimiter := httprate.Limit(300, time.Minute, httprate.WithKeyFuncs(httprate.KeyByIP), rateLimitExceeded)
-	ingestLimiter := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBearerTokenHash), rateLimitExceeded)
-
-	browserIngestLimiter := httprate.Limit(60, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKeyAndIP), rateLimitExceeded)
-	browserKeyCeiling := httprate.Limit(600, time.Minute, httprate.WithKeyFuncs(middleware.KeyByBrowserKey), rateLimitExceeded)
+	sessionLimiter := perMinute(300, troncmiddleware.RemoteAddrKey64)
+	ingestLimiter := perMinute(600, middleware.KeyByBearerTokenHash)
+	browserIngestLimiter := perMinute(60, middleware.KeyByBrowserKeyAndIP)
+	browserKeyCeiling := perMinute(600, middleware.KeyByBrowserKey)
 
 	clientDir := spa.DirFromEnv()
 	router := httpx.NewRouter(httpx.Config{
@@ -276,6 +270,22 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	}
 
 	return router
+}
+
+// perMinute is a throughput limiter of n requests a minute per key: a token
+// bucket refilled at n a minute with room for n, as tronc's
+// docs/ratelimit.md prescribes for Journal. A refusal is the 429 envelope the
+// SDKs and the dashboard parse, with Retry-After set to the real wait. At most
+// 50,000 keys are remembered, so an address-rotating caller cannot grow the
+// map without bound.
+func perMinute(n int, key func(*http.Request) string) func(http.Handler) http.Handler {
+	return troncmiddleware.Ratelimit(troncmiddleware.RatelimitConfig{
+		Limit: float64(n) / 60, Burst: n, KeyFunc: key, MaxKeys: 50000, OnRefuse: refuseRateLimited,
+	})
+}
+
+func refuseRateLimited(w http.ResponseWriter, _ *http.Request) {
+	httpjson.WriteError(w, errors.RateLimited("rate limit exceeded"))
 }
 
 // securityConfig extends tronc's default security headers with the inline

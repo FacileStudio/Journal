@@ -11,7 +11,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
-	"github.com/go-chi/httprate"
+	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 )
 
 // BrowserKeyVerifier resolves a public ingest key. It returns the whole record
@@ -102,16 +102,13 @@ func OriginAllowed(origin string, allowed []string) bool {
 // visitor; per IP alone would let a hundred keys share one bucket behind a
 // corporate NAT. The pair is what a burst from one browser actually looks like.
 //
-// It shapes honest traffic and nothing more. The IP comes from chi's RealIP,
-// which rewrites RemoteAddr from X-Forwarded-For without checking who the peer
-// is, so anything that can set a header can mint itself a fresh bucket — see
-// KeyByBrowserKey for the bound that holds anyway.
-func KeyByBrowserKeyAndIP(request *http.Request) (string, error) {
-	ip, err := httprate.KeyByIP(request)
-	if err != nil {
-		return "", err
-	}
-	return authcrypto.HashToken(BrowserKeyToken(request)) + "|" + ip, nil
+// It shapes honest traffic and nothing more. The IP is RemoteAddr as
+// httpx.NewRouter's RealIP left it, which trusts X-Forwarded-For only from a
+// configured proxy, and an IPv6 visitor is keyed by their /64. A visitor who
+// controls a whole /64 can still mint fresh buckets, so KeyByBrowserKey is the
+// bound that holds anyway.
+func KeyByBrowserKeyAndIP(request *http.Request) string {
+	return authcrypto.HashToken(BrowserKeyToken(request)) + "|" + troncmiddleware.RemoteAddrKey64(request)
 }
 
 // KeyByBrowserKey buckets on the credential alone.
@@ -121,6 +118,6 @@ func KeyByBrowserKeyAndIP(request *http.Request) (string, error) {
 // far above what any real page produces — it exists to bound write pressure
 // when a public key leaks, not to shape traffic. The daily quota is the other
 // bound that owes nothing to the network layer.
-func KeyByBrowserKey(request *http.Request) (string, error) {
-	return authcrypto.HashToken(BrowserKeyToken(request)), nil
+func KeyByBrowserKey(request *http.Request) string {
+	return authcrypto.HashToken(BrowserKeyToken(request))
 }
