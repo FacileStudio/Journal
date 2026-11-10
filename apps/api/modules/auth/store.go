@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/FacileStudio/porte/kit"
@@ -16,6 +17,11 @@ import (
 // and the stored address is rewritten only when the provider verified it.
 // Journal keeps no per-person row beyond users, whose foreign keys cascade
 // into porte's identities, sessions and login codes, so there is no EraseData.
-func NewUserStore(sqlDB *sql.DB) *kit.Store {
-	return &kit.Store{DB: sqlDB, Columns: kit.Columns{Admin: "is_admin"}}
+//
+// kit.NewStore reads the table once: every column the kit does not write has
+// a database default (schemas.Migrate gives password_hash and created_at
+// theirs), so Unwritten is empty and no OnCreate is needed. It fails when the
+// table or a named column is missing, which is a boot error.
+func NewUserStore(ctx context.Context, sqlDB *sql.DB) (*kit.Store, error) {
+	return kit.NewStore(ctx, kit.Store{DB: sqlDB, Columns: kit.Columns{Admin: "is_admin"}})
 }

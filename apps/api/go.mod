@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	github.com/FacileStudio/antenne-client/go v1.0.0
-	github.com/FacileStudio/porte v0.18.1
+	github.com/FacileStudio/porte v0.18.2
 	github.com/FacileStudio/porte/directory v0.4.0
 	github.com/FacileStudio/tronc v0.21.0
 	github.com/go-chi/chi/v5 v5.4.0

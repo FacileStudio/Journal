@@ -87,7 +87,11 @@ func seed(t *testing.T) *fixture {
 		t.Fatalf("sql handle: %v", err)
 	}
 	client := directory.Client{Issuer: f.issuer, ClientID: "journal", ClientSecret: "s3cret"}
-	f.service = NewService(f.db, client, auth.NewUserStore(sqlDB).EraseAccount, portepg.New(sqlDB).EraseIdentity, quietLogger())
+	users, err := auth.NewUserStore(context.Background(), sqlDB)
+	if err != nil {
+		t.Fatalf("user store: %v", err)
+	}
+	f.service = NewService(f.db, client, users.EraseAccount, portepg.New(sqlDB).EraseIdentity, quietLogger())
 	return f
 }
 

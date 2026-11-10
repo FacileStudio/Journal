@@ -2,12 +2,14 @@ package auth_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/kit"
 )
 
 // TestUpsertFromOIDCStoresThePictureURL pins the avatar to the provider's own
@@ -19,7 +21,7 @@ func TestUpsertFromOIDCStoresThePictureURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
 	}
-	store := auth.NewUserStore(sqlDB)
+	store := newStore(t, sqlDB)
 	ctx := context.Background()
 	claims := porte.Claims{
 		Provider:      "registre",
@@ -68,7 +70,7 @@ func TestBackfillPicturesFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
 	}
-	store := auth.NewUserStore(sqlDB)
+	store := newStore(t, sqlDB)
 	ctx := context.Background()
 	issuer := "https://sso.facile.studio"
 	if err := db.Exec(
@@ -122,7 +124,7 @@ func TestAFirstSignInLeavesNoColumnNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
 	}
-	userID, err := auth.NewUserStore(sqlDB).UpsertFromOIDC(context.Background(), porte.Claims{
+	userID, err := newStore(t, sqlDB).UpsertFromOIDC(context.Background(), porte.Claims{
 		Provider: "https://sso.test", Subject: "new", Email: "new@facile.studio", EmailVerified: true,
 	})
 	if err != nil {
@@ -145,5 +147,28 @@ func TestAFirstSignInLeavesNoColumnNull(t *testing.T) {
 	var user schemas.User
 	if err := db.First(&user, userID).Error; err != nil {
 		t.Fatalf("GORM cannot scan the new account: %v", err)
+	}
+}
+
+func newStore(t *testing.T, sqlDB *sql.DB) *kit.Store {
+	t.Helper()
+	store, err := auth.NewUserStore(context.Background(), sqlDB)
+	if err != nil {
+		t.Fatalf("user store: %v", err)
+	}
+	return store
+}
+
+// Step zero of porte's docs/kit.md: every users column the kit does not write
+// has a database default, so none is left NULL on a new account. A nullable
+// column added without a default fails here, not in production.
+func TestNoUsersColumnIsLeftUnwritten(t *testing.T) {
+	db := testdb.Migrated(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	if unwritten := newStore(t, sqlDB).Unwritten(); len(unwritten) != 0 {
+		t.Fatalf("unwritten = %v, want none", unwritten)
 	}
 }

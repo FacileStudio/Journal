@@ -13,7 +13,6 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
-	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/session"
@@ -156,7 +155,7 @@ func TestIngestNeedsATokenAndNoSession(t *testing.T) {
 // unverified address may never adopt an account that already exists.
 func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 	db := testdb.Migrated(t)
-	users := auth.NewUserStore(sqlHandle(t, db))
+	users := newUserStore(t, sqlHandle(t, db))
 	ctx := context.Background()
 
 	userID, err := users.UpsertFromOIDC(ctx, claims("abc", "someone@facile.studio", "Someone", true))
@@ -200,7 +199,7 @@ func TestUpsertFromOIDCOwnsTheAccountRules(t *testing.T) {
 // handed over, verified or not.
 func TestAnExistingAccountLinksByVerifiedEmailOnly(t *testing.T) {
 	db := testdb.Migrated(t)
-	users := auth.NewUserStore(sqlHandle(t, db))
+	users := newUserStore(t, sqlHandle(t, db))
 	ctx := context.Background()
 	legacy := schemas.User{Email: "legacy@facile.studio", Name: "Legacy", PasswordHash: "x", IsAdmin: true}
 	if err := db.Create(&legacy).Error; err != nil {

@@ -28,7 +28,10 @@ import (
 func testKitFor(t *testing.T, appEnv env.Config, sqlDB *sql.DB) (*oidc.Kit, *session.Manager, *kit.Store) {
 	t.Helper()
 	store := portepg.New(sqlDB)
-	users := auth.NewUserStore(sqlDB)
+	users := &kit.Store{}
+	if sqlDB != nil {
+		users = newUserStore(t, sqlDB)
+	}
 	sessions, err := session.New(appEnv.Porte, session.Deps{Sessions: store.Sessions()})
 	if err != nil {
 		t.Fatalf("session.New: %v", err)
@@ -43,6 +46,16 @@ func testKitFor(t *testing.T, appEnv env.Config, sqlDB *sql.DB) (*oidc.Kit, *ses
 		t.Fatalf("build the kit: %v", err)
 	}
 	return oidcKit, sessions, users
+}
+
+// newUserStore builds Journal's kit store over a migrated test database.
+func newUserStore(t *testing.T, sqlDB *sql.DB) *kit.Store {
+	t.Helper()
+	users, err := auth.NewUserStore(context.Background(), sqlDB)
+	if err != nil {
+		t.Fatalf("user store: %v", err)
+	}
+	return users
 }
 
 // testRouter builds the real router with a nil database. Nothing here serves a

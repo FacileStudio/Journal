@@ -99,7 +99,11 @@ func run() int {
 		return 1
 	}
 	resealInBackground(shutdownSignal, identityStore, appLogger)
-	users := auth.NewUserStore(sqlDB)
+	users, err := auth.NewUserStore(shutdownSignal, sqlDB)
+	if err != nil {
+		appLogger.Error("failed to read the users table", slog.Any("error", err))
+		return 1
+	}
 	if _, err := users.BackfillPictures(shutdownSignal, appEnv.Porte.Issuer); err != nil {
 		appLogger.Warn("avatar backfill failed", slog.Any("error", err))
 	}
