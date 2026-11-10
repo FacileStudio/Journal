@@ -1,9 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-11-10
+
+### Added
+
+- feat: the user menu shows pending Registre space invitations. porte/kit's `GET /api/me/invitations` is mounted when `OIDC_ISSUER` is set, and the dashboard passes the answer to muse's `SideBar` and `MobileNav`. No other route moved: a route walk over three configurations (bare, OIDC, OIDC with the CLI audience) lists the same 115 routes with the same unauthenticated status codes, plus this one.
+- ci: douane 0.7.0 scans production dependencies on every push (`-fail critical -scope prod`), from a release archive checked against its sha256.
+- test(api): `TestIngestContractIsFrozen` pins what every shipper sees on `/api/ingest`, `/api/ingest/browser` and `/api/sourcemaps`: the server key, the browser key, the legacy token, single, batch, empty and gzip payloads, and every status and body.
 
 ### Changed
 
+- refactor(api): sign-in runs through `porte/kit`. Its store replaces Journal's own `UserStore`, `kit.RequireAuth` replaces the hand-written middleware, and Registre erasures go through `Store.EraseAccount` in one transaction. One rule changes, by owner decision for every app: the stored email is rewritten at sign-in only when the provider marks it verified. `users.password_hash` and `users.created_at` get database defaults, because the kit inserts only the columns it knows.
+- feat(api): `alert.fired` goes through antenne-client v1's outbox. The evaluator marks an Antenne rule fired and queues its event in one transaction, and a drainer sends queued events in id order, so an alert survives a bus outage or a restart. The old, never-written `antenne_outbox` table is converted in place to the library's shape, rows kept. The wire envelope is unchanged. A failed first dial is retried with backoff, and the client reconnects for as long as the process runs. `ANTENNE_URL`, or the older `ANTENNE_INSTANCE`, with `ANTENNE_SECRET`, configures the connection when Settings holds none.
+- refactor(api): the four rate limiters are tronc's `middleware.Ratelimit` token buckets with the same rates and keys, per tronc's `docs/ratelimit.md`. A refusal keeps the `rate_limited` envelope; `Retry-After` is now the real wait in whole seconds instead of a fixed 60, and the `X-RateLimit-*` headers are gone. Nothing in the suite read them.
+- refactor(client): the dashboard uses `@facile/client` v0.1.0 for its fetch kernel, 401 redirect and theme store. The theme keeps its `journal.theme` key. The browser no longer sends a bearer token from `localStorage`: the session is the HttpOnly cookie, and a leftover `journal.token` is deleted on load.
+- build: tronc v0.21.0, porte v0.18.1 (directory v0.4.0), antenne-client `go` v1.0.0 (the `enveloppe` module is gone), muse v0.18.0. The Go modules require go 1.26.10; chi, go-jose, x/crypto and x/text are bumped to clear what douane reports.
+- ci: filet v0.19.0 with `preset: facile`. The preset reports 137 findings where the old config reported 63, all of them warnings or information, so the ratchet baseline `.filet-baseline.json` is empty. The pre-push hook also runs `filet gate .`.
 - Licence: Journal is now licensed under `AGPL-3.0-only` (see `LICENSE`); before this, the repository carried no licence.
 - Licence: the SDKs under `sdk/` (`sdk/browser`, published as `@facile/journal`, and the Go module `sdk/journal`) are `MIT`, so any program may embed them. Each carries its own `LICENSE`. The rest of the repository stays `AGPL-3.0-only`.
 
