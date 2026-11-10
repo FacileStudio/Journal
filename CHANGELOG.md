@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Licence: Journal is now licensed under `AGPL-3.0-only` (see `LICENSE`); before this, the repository carried no licence.
+
 ## [0.2.4] - 2026-11-07
 
 ### Changed
