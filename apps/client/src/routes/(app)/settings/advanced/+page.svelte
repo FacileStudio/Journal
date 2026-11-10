@@ -3,7 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { Button, ConfirmModal, DangerZone, SecretField, SettingsRow, SettingsSection, StatusDot, icons } from '@facile/muse';
 	import { backend } from '$lib/backend';
-	import { clearToken } from '$lib/auth';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -18,7 +17,6 @@
 		deleteError = null;
 		try {
 			await backend.deleteMe();
-			clearToken();
 			await goto('/login');
 		} catch (error) {
 			deleteError = error instanceof Error ? error.message : t('profile.deleteFailed');

@@ -3,7 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { Alert, AuthScreen, Icon, icons } from '@facile/muse';
 	import { backend, ssoLoginUrl } from '$lib/backend';
-	import { clearToken } from '$lib/auth';
 	import { rememberLocale } from '$lib/session.svelte';
 	import { useT } from '$lib/i18n';
 
@@ -20,7 +19,7 @@
 			await backend.me();
 			void goto('/');
 		} catch {
-			clearToken();
+			return;
 		}
 	});
 </script>

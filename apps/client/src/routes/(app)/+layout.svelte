@@ -3,9 +3,8 @@
 	import { page } from '$app/state';
 	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale, type Locale, type Theme } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
-	import { clearToken } from '$lib/auth';
 	import { adoptLocale, rememberLocale, session } from '$lib/session.svelte';
-	import { setTheme, theme } from '$lib/theme.svelte';
+	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { setContext } from 'svelte';
 
@@ -33,7 +32,6 @@
 		} catch {
 			/* token already gone or network hiccup — clear locally regardless */
 		}
-		clearToken();
 		await goto('/login');
 	}
 
@@ -57,7 +55,6 @@
 				loadInvitations();
 			})
 			.catch(() => {
-				clearToken();
 				void goto('/login');
 			});
 	});
@@ -104,7 +101,7 @@
 		locale: session.locale,
 		onLocaleChange: (next: Locale) => rememberLocale(next),
 		theme: theme.mode,
-		onThemeChange: (next: Theme) => setTheme(next),
+		onThemeChange: (next: Theme) => theme.set(next),
 		invitations
 	});
 </script>

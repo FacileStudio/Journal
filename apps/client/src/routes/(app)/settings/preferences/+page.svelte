@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { PreferencesSection, type Locale, type Theme } from '@facile/muse';
 	import { rememberLocale } from '$lib/session.svelte';
-	import { setTheme, theme } from '$lib/theme.svelte';
+	import { theme } from '$lib/theme.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -11,6 +11,6 @@
 
 <PreferencesSection
 	theme={theme.mode}
-	onThemeChange={(next: Theme) => setTheme(next)}
+	onThemeChange={(next: Theme) => theme.set(next)}
 	onLocaleChange={(next: Locale) => rememberLocale(next)}
 />

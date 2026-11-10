@@ -1,8 +1,11 @@
-import { browser } from '$app/environment';
-import { goto } from '$app/navigation';
-import { clearToken, getToken } from './auth';
+import { createApi, redirectToLogin } from '@facile/client';
 
 const backendBaseUrl = '/api';
+
+/* The suite's fetch kernel: same-origin cookie, X-Facile-CSRF on every write, the tronc error
+   envelope as ApiError, and a 401 off the auth routes sends the browser to /login. The auth
+   routes call it quiet, because a 401 there is the answer the caller asked for. */
+const apiFetch = createApi({ base: backendBaseUrl, onUnauthorized: redirectToLogin });
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -242,64 +245,19 @@ export interface UpdateAntenneSettings {
 	enabled: boolean;
 }
 
-type ApiErrorPayload = {
-	error?: { message?: string };
-};
-
-// A session issued by single sign-on lives in an HttpOnly cookie the browser
-// attaches whether or not the page meant to send it, which is the whole CSRF
-// problem. The API refuses a cookie-authenticated write without this header,
-// and its presence is the entire signal: a browser will not attach a custom
-// header cross-site without a preflight the API never answers. The value is
-// irrelevant.
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-	const headers = new Headers(options.headers);
-	if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
-		headers.set('Content-Type', 'application/json');
-	}
-	const token = getToken();
-	if (token) headers.set('Authorization', `Bearer ${token}`);
-	if (!SAFE_METHODS.has((options.method ?? 'GET').toUpperCase())) {
-		headers.set('X-Facile-CSRF', '1');
-	}
-
-	const response = await fetch(`${backendBaseUrl}${path}`, { ...options, headers });
-	if (response.status === 401 && !path.startsWith('/auth/')) {
-		clearToken();
-		if (browser) {
-			goto('/login');
-			return new Promise<never>(() => {});
-		}
-	}
-	if (!response.ok) {
-		let payload: ApiErrorPayload | undefined;
-		try {
-			payload = (await response.json()) as ApiErrorPayload;
-		} catch {
-			payload = undefined;
-		}
-		throw new Error(payload?.error?.message || `Request failed with status ${response.status}`);
-	}
-	const text = await response.text();
-	if (!text) return {} as T;
-	return JSON.parse(text) as T;
-}
-
 export const backend = {
 	baseUrl: backendBaseUrl,
 
 	authConfig() {
-		return apiFetch<AuthConfig>('/auth/config');
+		return apiFetch<AuthConfig>('/auth/config', {}, { quiet: true });
 	},
 
 	logout() {
-		return apiFetch<{ logged_out: boolean }>('/auth/logout', { method: 'POST' });
+		return apiFetch<{ logged_out: boolean }>('/auth/logout', { method: 'POST' }, { quiet: true });
 	},
 
 	me() {
-		return apiFetch<MeResponse>('/auth/me');
+		return apiFetch<MeResponse>('/auth/me', {}, { quiet: true });
 	},
 
 	invitations() {
@@ -307,7 +265,7 @@ export const backend = {
 	},
 
 	deleteMe() {
-		return apiFetch<void>('/auth/me', { method: 'DELETE' });
+		return apiFetch<void>('/auth/me', { method: 'DELETE' }, { quiet: true });
 	},
 
 	listLogs(params: ListLogsParams = {}) {
@@ -419,5 +377,6 @@ export const backend = {
 				antenne_secret: settings.secret,
 				antenne_enabled: settings.enabled
 			})
-		});	}
+		});
+	}
 };

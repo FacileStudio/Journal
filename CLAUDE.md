@@ -98,9 +98,8 @@ Journal/
     client/
       src/
         app.css                    # `@import '@facile/muse/styles'` + `@source` + the suite-name alias block. Nothing else.
-        lib/backend.ts             # typed API client (auth, logs, histogram, context, api keys, queries, alerts)
-        lib/auth.ts                # localStorage session token (journal.token)
-        lib/theme.svelte.ts        # system/light/dark, toggles BOTH .dark and .light on <html>
+        lib/backend.ts             # typed API client over @facile/client's createApi (cookie session, CSRF, 401 -> /login)
+        lib/theme.svelte.ts        # @facile/client's theme store under journal.theme; toggles BOTH .dark and .light on <html>
         lib/format.ts              # formatTime / formatClock / formatDate / formatRelative / toLocalInput
         lib/levels.ts              # level -> muse tone, chart fill, chip class, volume-strip weight
         lib/histogram.ts           # sparse buckets -> dense bars, stacked pixel geometry (pure, testable)
