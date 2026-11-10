@@ -11,7 +11,7 @@ export default defineConfig({
 	 * optimizer, stays green. Excluding the package leaves it to the svelte plugin.
 	 */
 	optimizeDeps: {
-		exclude: ['@facile/muse']
+		exclude: ['@facile/muse', '@facile/client']
 	},
 	server: {
 		proxy: {
