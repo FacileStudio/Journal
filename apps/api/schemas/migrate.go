@@ -211,7 +211,10 @@ CREATE INDEX IF NOT EXISTS antenne_outbox_sent ON antenne_outbox (sent_at) WHERE
 // idempotency key; nothing ever wrote to it, but a row that is there keeps
 // its id and gets a key of its own. A payload that is not JSON is kept as a
 // JSON string rather than failing the boot. The attempts column is the
-// marker, so every boot after the first skips this.
+// marker, so every boot after the first skips this. Every step tolerates a
+// half-converted table, because rolling back to v0.2 runs the old
+// AutoMigrate over the new one: it adds attempts back and turns payload into
+// text again, and the next boot of this version converts it once more.
 const convertLegacyOutbox = `
 DO $$
 BEGIN
@@ -219,12 +222,13 @@ BEGIN
 	            WHERE table_schema = current_schema() AND table_name = 'antenne_outbox' AND column_name = 'attempts') THEN
 		DROP INDEX IF EXISTS idx_antenne_outbox_created_at;
 		ALTER TABLE antenne_outbox DROP COLUMN attempts, DROP COLUMN IF EXISTS last_error,
-			ADD COLUMN idempotency_key text, ADD COLUMN sent_at timestamptz;
-		UPDATE antenne_outbox SET idempotency_key = 'journal_legacy_outbox_' || id,
+			ADD COLUMN IF NOT EXISTS idempotency_key text, ADD COLUMN IF NOT EXISTS sent_at timestamptz,
+			DROP CONSTRAINT IF EXISTS antenne_outbox_idempotency_key_key;
+		UPDATE antenne_outbox SET idempotency_key = coalesce(idempotency_key, 'journal_legacy_outbox_' || id),
 			channel = coalesce(channel, ''), created_at = coalesce(created_at, now());
 		ALTER TABLE antenne_outbox
 			ALTER COLUMN payload TYPE jsonb
-				USING CASE WHEN payload IS JSON THEN payload::jsonb ELSE to_jsonb(payload) END,
+				USING CASE WHEN payload::text IS JSON THEN payload::text::jsonb ELSE to_jsonb(payload::text) END,
 			ALTER COLUMN payload SET NOT NULL,
 			ALTER COLUMN channel SET NOT NULL,
 			ALTER COLUMN idempotency_key SET NOT NULL,

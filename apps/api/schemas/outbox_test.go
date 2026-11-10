@@ -113,3 +113,27 @@ func TestTheLegacyOutboxIsConvertedNotDuplicated(t *testing.T) {
 		t.Fatalf("converted rows = %q, want %q", payloads, wantRows)
 	}
 }
+
+// Rolling back to v0.2 runs its AutoMigrate over the converted table, which
+// adds attempts back and turns payload into text. The next boot of this
+// version converts it again and keeps the keys the library wrote.
+func TestTheOutboxSurvivesARollback(t *testing.T) {
+	want := libraryOutbox(t)
+	db := testdb.Migrated(t)
+	if err := db.Exec(`INSERT INTO antenne_outbox (channel, payload, idempotency_key) VALUES ('alert.fired', '{"n":1}', 'k1')`).Error; err != nil {
+		t.Fatalf("queue an event: %v", err)
+	}
+	if err := db.AutoMigrate(&legacyOutbox{}); err != nil {
+		t.Fatalf("roll back: %v", err)
+	}
+	if err := schemas.Migrate(db); err != nil {
+		t.Fatalf("migrate after the rollback: %v", err)
+	}
+	if got := describeOutbox(t, db); !slices.Equal(got, want) {
+		t.Fatalf("antenne_outbox after a rollback =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	var key string
+	if err := db.Raw(`SELECT idempotency_key FROM antenne_outbox`).Scan(&key).Error; err != nil || key != "k1" {
+		t.Fatalf("idempotency key after a rollback = %q, %v; want k1", key, err)
+	}
+}
