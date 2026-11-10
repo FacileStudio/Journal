@@ -112,3 +112,38 @@ func TestBackfillPicturesFillsOnlyEmptyRowsFromThisIssuer(t *testing.T) {
 		}
 	}
 }
+
+// porte/kit inserts an account with only the columns it names. Every other
+// column of users must come out of the database default, never NULL, or the
+// first sign-in leaves a row GORM cannot scan.
+func TestAFirstSignInLeavesNoColumnNull(t *testing.T) {
+	db := testdb.Migrated(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	userID, err := auth.NewUserStore(sqlDB).UpsertFromOIDC(context.Background(), porte.Claims{
+		Provider: "https://sso.test", Subject: "new", Email: "new@facile.studio", EmailVerified: true,
+	})
+	if err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	var columns []string
+	if err := db.Raw(`SELECT column_name FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'users'`).Scan(&columns).Error; err != nil {
+		t.Fatalf("list the columns: %v", err)
+	}
+	for _, column := range columns {
+		var null bool
+		if err := db.Raw(`SELECT `+column+` IS NULL FROM users WHERE id = ?`, userID).Scan(&null).Error; err != nil {
+			t.Fatalf("read %s: %v", column, err)
+		}
+		if null {
+			t.Errorf("users.%s is NULL after a first sign-in through the kit", column)
+		}
+	}
+	var user schemas.User
+	if err := db.First(&user, userID).Error; err != nil {
+		t.Fatalf("GORM cannot scan the new account: %v", err)
+	}
+}
