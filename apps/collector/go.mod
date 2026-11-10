@@ -1,3 +1,3 @@
 module github.com/FacileStudio/Journal/apps/collector
 
-go 1.26
+go 1.26.10
