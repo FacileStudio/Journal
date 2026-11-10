@@ -146,8 +146,12 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, d delivery, logger *slog.Lo
 		return
 	}
 
+	if rule.Provider == schemas.AlertProviderAntenne && d.antenne != nil {
+		deliverAntenne(ctx, d, logger, rule, count, now)
+		return
+	}
 	if rule.Provider == schemas.AlertProviderAntenne {
-		deliverAntenne(ctx, d, logger, rule, count)
+		logger.Warn("antenne service not available", slog.String("alert", rule.Name))
 	} else {
 		payload := webhookPayload{
 			Alert:         rule.Name,
@@ -171,12 +175,16 @@ func evaluateRule(ctx context.Context, orm *gorm.DB, d delivery, logger *slog.Lo
 	}
 }
 
-func deliverAntenne(ctx context.Context, d delivery, logger *slog.Logger, rule schemas.AlertRule, count int64) {
-	if d.antenne == nil {
-		logger.Warn("antenne service not available", slog.String("alert", rule.Name))
+// deliverAntenne marks the rule fired and queues its event in one transaction;
+// the outbox drainer sends it. A failed transaction leaves the rule unfired,
+// so the next tick tries again.
+func deliverAntenne(ctx context.Context, d delivery, logger *slog.Logger, rule schemas.AlertRule, count int64, now time.Time) {
+	if err := d.antenne.FireAlert(ctx, rule, count, now); err != nil {
+		if ctx.Err() == nil {
+			logger.Warn("alert antenne queue failed", slog.String("alert", rule.Name), slog.Any("error", err))
+		}
 		return
 	}
-	d.antenne.EmitAlert(rule, count)
 	logger.Info("alert fired via antenne", slog.String("alert", rule.Name), slog.Int64("count", count))
 }
 

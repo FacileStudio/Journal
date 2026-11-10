@@ -137,6 +137,14 @@ loopback, link-local, multicast, unspecified, and private addresses. Hosts liste
 `WEBHOOK_ALLOWED_HOSTS` use a client without the address filter, which is how an internal
 target such as Antenne is reached on the compose network.
 
+A rule whose provider is `antenne` publishes `alert.fired` on the Antenne bus instead. The
+evaluator marks the rule fired and queues the event in one transaction, through
+`antenne-client`'s outbox (`antenne_outbox`), and a drainer sends queued events in id order
+through the live connection. An event survives a bus outage or a restart and is sent once the
+connection is back. The connection comes from Settings → API (`app_settings`), or, when no
+settings row exists, from `ANTENNE_URL` (or the older `ANTENNE_INSTANCE`) and `ANTENNE_SECRET`.
+With neither, the rule is still marked fired and nothing is queued.
+
 ## Cross-app integration
 
 Journal is the receiving end of the suite's logging path rather than a participant in the

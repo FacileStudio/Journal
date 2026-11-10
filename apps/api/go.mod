@@ -3,8 +3,7 @@ module github.com/FacileStudio/Journal/apps/api
 go 1.26
 
 require (
-	github.com/FacileStudio/antenne-client/go v0.0.0-20260824150250-7681849d44f9
-	github.com/FacileStudio/enveloppe/go v0.0.0-20260824150156-c6a22ad287ee
+	github.com/FacileStudio/antenne-client/go v1.0.0
 	github.com/FacileStudio/porte v0.18.0
 	github.com/FacileStudio/porte/directory v0.4.0
 	github.com/FacileStudio/tronc v0.21.0
@@ -26,8 +25,6 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
-	github.com/kr/text v0.2.0 // indirect
-	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect

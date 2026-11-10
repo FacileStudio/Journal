@@ -15,7 +15,7 @@ import "gorm.io/gorm"
 // deploy. password_hash and created_at get database defaults because
 // porte/kit inserts an account with the columns it knows and nothing else.
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}, &SourceMap{}, &AppSetting{}, &AntenneOutbox{}); err != nil {
+	if err := db.AutoMigrate(&LogEntry{}, &User{}, &APIKey{}, &APIKeyUsage{}, &SavedQuery{}, &AlertRule{}, &SourceMap{}, &AppSetting{}); err != nil {
 		return err
 	}
 
@@ -50,8 +50,8 @@ func Migrate(db *gorm.DB) error {
 		`UPDATE alert_rules SET provider = 'webhook' WHERE provider IS NULL OR provider = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_alert_rules_provider ON alert_rules (provider) WHERE enabled`,
 		`CREATE TABLE IF NOT EXISTS app_settings (id int PRIMARY KEY, antenne_url text NOT NULL DEFAULT '', antenne_secret text NOT NULL DEFAULT '', antenne_enabled bool NOT NULL DEFAULT false)`,
-		`CREATE TABLE IF NOT EXISTS antenne_outbox (id bigserial PRIMARY KEY, channel text NOT NULL, payload text NOT NULL, attempts int NOT NULL DEFAULT 0, last_error text, created_at timestamptz NOT NULL DEFAULT now())`,
-		`CREATE INDEX IF NOT EXISTS idx_antenne_outbox_created_at ON antenne_outbox (created_at)`,
+		convertLegacyOutbox,
+		antenneOutbox,
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {
@@ -187,4 +187,51 @@ SELECT id, 'local', id::text, password_hash
   FROM users
  WHERE password_hash <> ''
 ON CONFLICT (provider, subject) DO NOTHING;
+`
+
+// antenneOutbox is antenne-client's outbox.Migration, Up half, made idempotent
+// because Migrate runs on every boot. outbox_test.go proves the table it
+// builds is the one the library's own migration builds.
+const antenneOutbox = `
+CREATE TABLE IF NOT EXISTS antenne_outbox (
+    id BIGSERIAL PRIMARY KEY,
+    channel TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS antenne_outbox_unsent ON antenne_outbox (id) WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS antenne_outbox_sent ON antenne_outbox (sent_at) WHERE sent_at IS NOT NULL;
+`
+
+// convertLegacyOutbox turns the antenne_outbox Journal created before
+// antenne-client v1 into the library's table, in place, so there is one
+// outbox and not two. The old table carried attempts and last_error and no
+// idempotency key; nothing ever wrote to it, but a row that is there keeps
+// its id and gets a key of its own. A payload that is not JSON is kept as a
+// JSON string rather than failing the boot. The attempts column is the
+// marker, so every boot after the first skips this.
+const convertLegacyOutbox = `
+DO $$
+BEGIN
+	IF EXISTS (SELECT 1 FROM information_schema.columns
+	            WHERE table_schema = current_schema() AND table_name = 'antenne_outbox' AND column_name = 'attempts') THEN
+		DROP INDEX IF EXISTS idx_antenne_outbox_created_at;
+		ALTER TABLE antenne_outbox DROP COLUMN attempts, DROP COLUMN IF EXISTS last_error,
+			ADD COLUMN idempotency_key text, ADD COLUMN sent_at timestamptz;
+		UPDATE antenne_outbox SET idempotency_key = 'journal_legacy_outbox_' || id,
+			channel = coalesce(channel, ''), created_at = coalesce(created_at, now());
+		ALTER TABLE antenne_outbox
+			ALTER COLUMN payload TYPE jsonb
+				USING CASE WHEN payload IS JSON THEN payload::jsonb ELSE to_jsonb(payload) END,
+			ALTER COLUMN payload SET NOT NULL,
+			ALTER COLUMN channel SET NOT NULL,
+			ALTER COLUMN idempotency_key SET NOT NULL,
+			ALTER COLUMN created_at SET DEFAULT now(),
+			ALTER COLUMN created_at SET NOT NULL,
+			ADD CONSTRAINT antenne_outbox_idempotency_key_key UNIQUE (idempotency_key);
+	END IF;
+END
+$$;
 `

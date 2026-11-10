@@ -177,6 +177,7 @@ developer loop, not the bootstrap tier.
 | `OIDC_REDIRECT_URL` / `OIDC_SUCCESS_URL` | Callback and landing URLs | — |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins, read through `tronc/env`. `ALLOWED_ORIGINS` and `DOMAINS` remain accepted fallbacks | — (unset denies every cross-origin caller) |
 | `WEBHOOK_ALLOWED_HOSTS` | Comma-separated hostnames allowed as internal alert webhook targets | — |
+| `ANTENNE_URL` / `ANTENNE_SECRET` | Antenne connection when Settings → API holds none; `ANTENNE_INSTANCE` is the older spelling. Not forwarded by compose | — |
 | `CLIENT_DIR` | Directory holding the built dashboard; the SPA route is skipped if it has no `index.html` | `./client` |
 
 ## Schema

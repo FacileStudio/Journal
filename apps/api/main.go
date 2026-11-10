@@ -147,9 +147,10 @@ func run() int {
 		go erasures.Run(shutdownSignal)
 	}
 
-	antenneService := antenne.NewService(db, appLogger)
+	antenneService := antenne.NewService(db, sqlDB, appLogger)
 	antenneService.AutoConnect(shutdownSignal)
 	defer antenneService.Shutdown()
+	go antenneService.Drain(shutdownSignal)
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
