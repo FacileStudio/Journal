@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2] - 2026-11-11
+
+### Security
+
+- fix(antenne): `GET` and `PUT /api/settings/antenne` no longer return the Antenne shared secret. `settings.secret` becomes `settings.secret_set`, and a `PUT` without `antenne_secret` keeps the stored secret, so the dashboard never holds it. The route stays admin only (`is_admin`).
+
+### Changed
+
+- refactor(api): clear the two findings staticcheck 2026.2.1 reports (S1016, SA4000), which failed `filet gate` before any test ran.
+
 ## [0.3.1] - 2026-11-10
 
 ### Changed
