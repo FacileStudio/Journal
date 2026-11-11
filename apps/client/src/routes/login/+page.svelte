@@ -4,6 +4,7 @@
 	import { Alert, AuthScreen, Icon, icons } from '@facile/muse';
 	import { backend, ssoLoginUrl } from '$lib/backend';
 	import { rememberLocale } from '$lib/session.svelte';
+	import { rememberReturn, safePath } from '$lib/return-path';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -11,13 +12,15 @@
 	let refused = $state('');
 
 	onMount(async () => {
-		refused = new URLSearchParams(location.search).get('error') ?? '';
+		const query = new URLSearchParams(location.search);
+		refused = query.get('error') ?? '';
+		rememberReturn(query.get('next'));
 		/* A single sign-on session is an HttpOnly cookie, so there is nothing here to
 		   inspect: the API is the only thing that can say whether this browser is already
 		   signed in. */
 		try {
 			await backend.me();
-			void goto('/');
+			void goto(safePath(new URLSearchParams(location.search).get('next')) ?? '/');
 		} catch {
 			return;
 		}
