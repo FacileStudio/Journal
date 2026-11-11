@@ -34,7 +34,7 @@ func TestTokenHashDeterministicAndUnique(t *testing.T) {
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
-	if HashToken(token) != HashToken(token) {
+	if first := HashToken(token); first != HashToken(token) {
 		t.Fatal("token hash is not deterministic")
 	}
 	other, err := NewToken()

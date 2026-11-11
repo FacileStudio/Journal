@@ -49,12 +49,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, token, err := h.service.Create(r.Context(), NewKey{
-		App:            req.App,
-		Kind:           req.Kind,
-		AllowedOrigins: req.AllowedOrigins,
-		DailyQuota:     req.DailyQuota,
-	})
+	key, token, err := h.service.Create(r.Context(), NewKey(req))
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
