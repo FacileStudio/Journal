@@ -14,40 +14,33 @@
 			})();
 		</script>
 
-		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
-		<link rel="alternate icon" href="%sveltekit.assets%/favicon.ico" sizes="any" />
-		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
-		<link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
-
-		<meta name="color-scheme" content="light dark" />
-		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+		<title>Journal · Central logs for your infrastructure</title>
+		<meta name="description" content="Collects Docker logs, searches them instantly, spots errors and sends an alert before your users notice." />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="/favicon.ico" sizes="48x48" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/site.webmanifest" />
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
 		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
-
 		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="Journal" />
+		<meta property="og:site_name" content="Facile" />
+		<meta property="og:locale" content="en_US" />
 		<meta property="og:url" content="https://journal.facile.studio/" />
-		<meta property="og:title" content="Journal — Centralized logging" />
-		<meta
-			property="og:description"
-			content="Centralized logging for the Facile Suite. Apps ship structured entries over HTTP; search, filter and pivot them from one dashboard."
-		/>
+		<meta property="og:title" content="Journal · Central logs for your infrastructure" />
+		<meta property="og:description" content="Collects Docker logs, searches them instantly, spots errors and sends an alert before your users notice." />
 		<meta property="og:image" content="https://journal.facile.studio/og-image.png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="Journal: Central logs for your infrastructure" />
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content="Journal — Centralized logging" />
-		<meta
-			name="twitter:description"
-			content="Centralized logging for the Facile Suite. Apps ship structured entries over HTTP; search, filter and pivot them from one dashboard."
-		/>
+		<meta name="twitter:title" content="Journal · Central logs for your infrastructure" />
+		<meta name="twitter:description" content="Collects Docker logs, searches them instantly, spots errors and sends an alert before your users notice." />
 		<meta name="twitter:image" content="https://journal.facile.studio/og-image.png" />
+
+		<meta name="color-scheme" content="light dark" />
+
 		%sveltekit.head%
 
-		<title>Journal — Centralized logging</title>
-		<meta
-			name="description"
-			content="Centralized logging for the Facile Suite. Apps ship structured entries over HTTP; search, filter and pivot them from one dashboard."
-		/>
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
