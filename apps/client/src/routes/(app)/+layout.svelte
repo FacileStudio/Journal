@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale, type Locale, type Theme } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
+	import { JOURNAL_ICON } from '$lib/icons';
 	import { adoptLocale, rememberLocale, session } from '$lib/session.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
@@ -114,7 +115,7 @@
 	<div class="flex h-dvh w-full overflow-hidden bg-fc-page">
 		<div class="hidden h-full shrink-0 p-3 md:block">
 			<SideBar
-				icon={icons.text}
+				icon={JOURNAL_ICON}
 				title="Journal"
 				bind:collapsed
 				pages={navPages}

@@ -2,12 +2,15 @@
 	import '../app.css';
 	import { browser } from '$app/environment';
 	import { Toaster, provideLocale } from '@facile/muse';
+	import { registerAppIcons } from '$lib/icons';
 	import { theme } from '$lib/theme.svelte';
 	import { session } from '$lib/session.svelte';
 
 	let { children } = $props();
 
 	provideLocale(() => session.locale);
+
+	registerAppIcons();
 
 	if (browser) {
 		theme.restore();

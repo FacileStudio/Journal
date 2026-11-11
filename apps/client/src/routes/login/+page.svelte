@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Alert, AuthScreen, Icon, icons } from '@facile/muse';
+	import { Alert, AuthScreen, Icon } from '@facile/muse';
+	import { JOURNAL_ICON } from '$lib/icons';
 	import { backend, ssoLoginUrl } from '$lib/backend';
 	import { rememberLocale } from '$lib/session.svelte';
 	import { rememberReturn, safePath } from '$lib/return-path';
@@ -33,7 +34,7 @@
 
 <AuthScreen appName="Journal" href={ssoLoginUrl} onLocaleChange={rememberLocale}>
 	{#snippet logo()}
-		<Icon icon={icons.text} size={32} />
+		<Icon icon={JOURNAL_ICON} size={32} />
 	{/snippet}
 	{#snippet tagline()}
 		{t('app.tagline')}
