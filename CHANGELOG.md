@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.4.1] - 2026-11-11
+
+### Fixed
+
+- fix(deps): vite 7.3.8, @sveltejs/kit 2.70.4 and svelte 5.57.3, plus overrides for devalue 5.9.4, postcss 8.5.32, nanoid 3.3.20, source-map-js 1.2.2 and cookie 0.7.2. Clears every high and medium npm advisory douane reported in the client lockfile.
+
 ## [0.4.0] - 2026-11-11
 
 ### Added
