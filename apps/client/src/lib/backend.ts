@@ -228,7 +228,7 @@ export type CreateAlertParams = {
 
 export interface AntenneSettings {
 	url: string;
-	secret: string;
+	secret_set: boolean;
 	enabled: boolean;
 }
 
@@ -239,9 +239,10 @@ export interface AntenneSettingsResponse {
 	connect_error?: string;
 }
 
+/** An undefined secret keeps the stored one. */
 export interface UpdateAntenneSettings {
 	url: string;
-	secret: string;
+	secret?: string;
 	enabled: boolean;
 }
 

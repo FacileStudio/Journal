@@ -1,10 +1,11 @@
 package antenne
 
-// PoolSettings are the Antenne connection details stored in AppSetting.
+// PoolSettings are the Antenne connection details as the API shows them. The
+// secret never leaves the server: SecretSet says whether one is stored.
 type PoolSettings struct {
-	URL     string `json:"url"`
-	Secret  string `json:"secret"`
-	Enabled bool   `json:"enabled"`
+	URL       string `json:"url"`
+	SecretSet bool   `json:"secret_set"`
+	Enabled   bool   `json:"enabled"`
 }
 
 // PoolSettingsResponse is what the HTTP handler returns.
@@ -26,11 +27,12 @@ type PoolEventsResponse struct {
 	Events []PoolEventToggle `json:"events"`
 }
 
-// UpdatePoolRequest is the body of PUT /api/settings/antenne.
+// UpdatePoolRequest is the body of PUT /api/settings/antenne. A missing or
+// null antenne_secret keeps the stored secret.
 type UpdatePoolRequest struct {
-	URL     string `json:"antenne_url"`
-	Secret  string `json:"antenne_secret"`
-	Enabled bool   `json:"antenne_enabled"`
+	URL     string  `json:"antenne_url"`
+	Secret  *string `json:"antenne_secret"`
+	Enabled bool    `json:"antenne_enabled"`
 }
 
 // UpdatePoolEventsRequest is the body of PUT /api/settings/antenne/events.

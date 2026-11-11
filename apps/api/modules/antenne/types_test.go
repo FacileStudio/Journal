@@ -8,7 +8,7 @@ import (
 
 func TestSettingsResponseJSONShape(t *testing.T) {
 	body, err := json.Marshal(PoolSettingsResponse{
-		Settings:     PoolSettings{URL: "https://antenne.example", Secret: "s", Enabled: true},
+		Settings:     PoolSettings{URL: "https://antenne.example", SecretSet: true, Enabled: true},
 		Connected:    true,
 		FromEnv:      true,
 		ConnectError: "boom",
@@ -21,7 +21,7 @@ func TestSettingsResponseJSONShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
-		"settings":      map[string]any{"url": "https://antenne.example", "secret": "s", "enabled": true},
+		"settings":      map[string]any{"url": "https://antenne.example", "secret_set": true, "enabled": true},
 		"connected":     true,
 		"from_env":      true,
 		"connect_error": "boom",
@@ -36,7 +36,14 @@ func TestUpdateRequestJSONShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"antenne_url":"u","antenne_secret":"s","antenne_enabled":true}`), &req); err != nil {
 		t.Fatal(err)
 	}
-	if req.URL != "u" || req.Secret != "s" || !req.Enabled {
+	if req.URL != "u" || req.Secret == nil || *req.Secret != "s" || !req.Enabled {
 		t.Fatalf("request = %+v", req)
+	}
+	var keep UpdatePoolRequest
+	if err := json.Unmarshal([]byte(`{"antenne_url":"u","antenne_enabled":true}`), &keep); err != nil {
+		t.Fatal(err)
+	}
+	if keep.Secret != nil {
+		t.Fatal("a body without antenne_secret must keep the stored secret")
 	}
 }

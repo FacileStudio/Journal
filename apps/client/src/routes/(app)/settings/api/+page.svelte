@@ -40,6 +40,7 @@
 	let antenneLoading = $state(false);
 	let antenneUrl = $state('');
 	let antenneSecret = $state('');
+	let antenneSecretSet = $state(false);
 	let antenneEnabled = $state(false);
 	let antenneConnected = $state(false);
 	let antenneConnectError = $state('');
@@ -100,7 +101,8 @@ export const handleError = handleErrorWith(journal);`
 
 	function applyAntenne(res: AntenneSettingsResponse) {
 		antenneUrl = res.settings.url;
-		antenneSecret = res.settings.secret;
+		antenneSecretSet = res.settings.secret_set;
+		antenneSecret = '';
 		antenneEnabled = res.settings.enabled;
 		antenneConnected = res.connected;
 		antenneConnectError = res.connect_error ?? '';
@@ -129,7 +131,7 @@ export const handleError = handleErrorWith(journal);`
 			applyAntenne(
 				await backend.updateAntenneSettings({
 					url: antenneUrl,
-					secret: antenneSecret,
+					secret: antenneSecret || undefined,
 					enabled: antenneEnabled
 				})
 			);
@@ -345,6 +347,7 @@ export const handleError = handleErrorWith(journal);`
 				<SecretField
 					bind:value={antenneSecret}
 					label={t('antenne.secretLabel')}
+					placeholder={antenneSecretSet ? t('antenne.secretSet') : undefined}
 					onchange={updateAntenneSettings}
 					editable
 					mask="full"

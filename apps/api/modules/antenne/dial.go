@@ -50,6 +50,6 @@ func (s *Service) dialOnce(ctx context.Context) bool {
 
 // wanted reports whether the settings ask for a connection: enabled in the
 // dashboard, or given by the environment, with both a URL and a secret.
-func wanted(settings *PoolSettings, fromEnv bool) bool {
+func wanted(settings *poolConfig, fromEnv bool) bool {
 	return (settings.Enabled || fromEnv) && settings.URL != "" && settings.Secret != ""
 }

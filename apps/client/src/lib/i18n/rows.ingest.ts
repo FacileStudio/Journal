@@ -235,6 +235,12 @@ export const ingest = {
 		'La clave secreta para autenticarse en Antenne',
 		'Der geheime Schlüssel für die Authentifizierung bei Antenne'
 	],
+	'antenne.secretSet': [
+		'A secret is set. Type a new one to replace it.',
+		'Un secret est défini. Saisissez-en un nouveau pour le remplacer.',
+		'Hay un secreto definido. Escribe uno nuevo para reemplazarlo.',
+		'Ein Geheimnis ist gesetzt. Gib ein neues ein, um es zu ersetzen.'
+	],
 	'antenne.secretLabel': ['Antenne Secret', 'Secret Antenne', 'Secreto de Antenne', 'Antenne-Geheimnis'],
 	'antenne.connected': ['Connected', 'Connecté', 'Conectado', 'Verbunden'],
 	'antenne.error': ['Error: {message}', 'Erreur : {message}', 'Error: {message}', 'Fehler: {message}'],

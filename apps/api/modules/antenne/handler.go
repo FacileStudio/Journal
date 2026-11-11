@@ -26,7 +26,7 @@ func (h *handler) getSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := PoolSettingsResponse{
-		Settings:  *settings,
+		Settings:  settings.view(),
 		Connected: h.service.isConnected(),
 		FromEnv:   fromEnv,
 	}
@@ -56,7 +56,7 @@ func (h *handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := PoolSettingsResponse{
-		Settings:  *settings,
+		Settings:  settings.view(),
 		Connected: h.service.isConnected(),
 	}
 	if connectErr != "" {
