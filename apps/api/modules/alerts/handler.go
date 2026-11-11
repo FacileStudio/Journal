@@ -88,7 +88,7 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 	httpjson.WriteJSON(w, http.StatusNoContent, nil)
 }
 
-func mapAlert(record ruleRecord) AlertResponse {
+func mapAlert(record RuleRecord) AlertResponse {
 	var lastFiredAt *string
 	if record.LastFiredAt != nil {
 		formatted := record.LastFiredAt.UTC().Format(time.RFC3339)

@@ -22,6 +22,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/deletions"
 	"github.com/FacileStudio/Journal/apps/api/modules/ingest"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
+	"github.com/FacileStudio/Journal/apps/api/modules/mcp"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
@@ -159,7 +160,17 @@ func run() int {
 
 	go alerts.RunEvaluator(shutdownSignal, db, appLogger, appEnv.WebhookAllowedHosts, antenneService)
 
-	router := buildRouter(db, oidcKit, sessions, users, appEnv, appLogger, antenneService, sso, health.DB(sqlDB))
+	mcpServer, err := newMCPSetup(shutdownSignal, appEnv, sqlDB, identityStore.Identities(), oidcKit, appLogger)
+	if err != nil {
+		appLogger.Error("failed to configure the MCP server", slog.Any("error", err))
+		return 1
+	}
+
+	router, err := buildRouter(db, oidcKit, sessions, users, appEnv, appLogger, antenneService, sso, mcpServer, health.DB(sqlDB))
+	if err != nil {
+		appLogger.Error("failed to build the MCP server", slog.Any("error", err))
+		return 1
+	}
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
@@ -212,7 +223,9 @@ func run() int {
 // because Traefik replaces the incoming X-Forwarded-For instead of extending
 // it, so behind Cloudflare the chain this app sees holds only the edge and the
 // visitor survives nowhere but Cf-Connecting-Ip.
-func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, users *kit.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, sso ssoRoutes, checks ...health.Check) chi.Router {
+//
+// A nil mcpServer leaves /mcp and the confirm page routes unmounted.
+func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, users *kit.Store, appEnv env.Config, appLogger *slog.Logger, antenneService *antenne.Service, sso ssoRoutes, mcpServer *mcpSetup, checks ...health.Check) (chi.Router, error) {
 	ingestService := ingest.NewService(db)
 	logsService := logs.NewService(db)
 	authService := auth.NewService(db)
@@ -220,6 +233,12 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	queriesService := queries.NewService(db)
 	sourceMapsService := sourcemaps.NewService(db)
 	alertsService := alerts.NewService(db)
+	mcpService, err := mcpServer.service(mcp.Deps{
+		Logs: logsService, Stacks: sourceMapsService, Queries: queriesService, Alerts: alertsService, Accounts: users,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	sessionLimiter := perMinute(300, troncmiddleware.RemoteAddrKey64)
 	ingestLimiter := perMinute(600, middleware.KeyByBearerTokenHash)
@@ -241,6 +260,9 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	health.Mount(router, checks...)
 	router.Get("/version", versionHandler)
 	apiref.Mount(router, referenceConfig())
+	if mcpService != nil {
+		mcp.RegisterRoutes(router, mcpService)
+	}
 
 	requireAuth := kit.RequireAuth(sessions, users)
 
@@ -258,6 +280,9 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 			protected.Use(requireAuth)
 			logs.RegisterRoutes(protected, logsService, sourceMapsService)
 			queries.RegisterRoutes(protected, queriesService)
+			if mcpService != nil {
+				mcp.RegisterPendingRoutes(protected, mcpService)
+			}
 			protected.Group(func(admin chi.Router) {
 				admin.Use(middleware.RequireAdmin)
 				apikeys.RegisterRoutes(admin, apiKeysService)
@@ -273,7 +298,7 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 		appLogger.Info("serving client", slog.String("dir", clientDir))
 	}
 
-	return router
+	return router, nil
 }
 
 // ssoRoutes are the routes that exist only with an OIDC issuer: Registre's

@@ -119,7 +119,7 @@ func (h *Handler) histogram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bucketSeconds := pickBucketSeconds(int64(params.Until.Sub(*params.Since) / time.Second))
+	bucketSeconds := BucketSeconds(int64(params.Until.Sub(*params.Since) / time.Second))
 	buckets, err := h.service.Histogram(r.Context(), params, bucketSeconds)
 	if err != nil {
 		httpjson.WriteError(w, err)
@@ -238,7 +238,9 @@ func parseContextSize(raw string) int {
 	return size
 }
 
-func pickBucketSeconds(rangeSeconds int64) int64 {
+// BucketSeconds is the histogram bucket width for a window of rangeSeconds:
+// the smallest that keeps it within 90 buckets.
+func BucketSeconds(rangeSeconds int64) int64 {
 	for _, bucket := range histogramBucketOptions {
 		if rangeSeconds <= bucket*maxHistogramBuckets {
 			return bucket

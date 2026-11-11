@@ -22,7 +22,7 @@ func newAntenneApp(t *testing.T) liveApp {
 	logger := slog.New(slog.DiscardHandler)
 	oidcKit, sessions, users := testKitFor(t, appEnv, sqlHandle(t, db))
 	service := antenne.NewService(db, sqlHandle(t, db), logger)
-	router := buildRouter(db, oidcKit, sessions, users, appEnv, logger, service, ssoRoutes{})
+	router := built(t)(buildRouter(db, oidcKit, sessions, users, appEnv, logger, service, ssoRoutes{}, nil))
 	stored := schemas.AppSetting{ID: 1, AntenneURL: "https://bus.example.test", AntenneSecret: storedBusSecret}
 	if err := db.Create(&stored).Error; err != nil {
 		t.Fatalf("seed the settings row: %v", err)

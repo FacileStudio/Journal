@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	stderrors "errors"
+	"strconv"
 
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 
 	"gorm.io/gorm"
 )
@@ -31,17 +33,29 @@ func NewService(orm *gorm.DB) *Service {
 // clause rather than checking first, so two administrators deleting in the
 // same instant cannot race each other down to zero admins. A zero-affected-rows
 // result then means either a missing account or the last admin, and the
-// follow-up read tells those apart.
+// follow-up read tells those apart. The person's MCP actions waiting on the
+// confirm page go in the same transaction.
 func (s *Service) DeleteAccount(ctx context.Context, userID int64) error {
-	result := s.orm.WithContext(ctx).Exec(
-		`DELETE FROM users
-		 WHERE id = ? AND (NOT is_admin OR EXISTS (
-		     SELECT 1 FROM users other WHERE other.is_admin AND other.id <> users.id))`,
-		userID)
-	if result.Error != nil {
-		return errors.Internal("failed to delete the account", result.Error)
+	var deleted int64
+	err := s.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Exec(
+			`DELETE FROM users
+			 WHERE id = ? AND (NOT is_admin OR EXISTS (
+			     SELECT 1 FROM users other WHERE other.is_admin AND other.id <> users.id))`,
+			userID)
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected
+		if deleted != 1 {
+			return nil
+		}
+		return mcpkit.ErasePending(ctx, tx.Statement.ConnPool, strconv.FormatInt(userID, 10))
+	})
+	if err != nil {
+		return errors.Internal("failed to delete the account", err)
 	}
-	if result.RowsAffected == 1 {
+	if deleted == 1 {
 		return nil
 	}
 

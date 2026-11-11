@@ -22,8 +22,8 @@ func TestPickBucketSeconds(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := pickBucketSeconds(tc.rangeSeconds); got != tc.want {
-				t.Fatalf("pickBucketSeconds(%d) = %d, want %d", tc.rangeSeconds, got, tc.want)
+			if got := BucketSeconds(tc.rangeSeconds); got != tc.want {
+				t.Fatalf("BucketSeconds(%d) = %d, want %d", tc.rangeSeconds, got, tc.want)
 			}
 		})
 	}
