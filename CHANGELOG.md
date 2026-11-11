@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-11
+
+### Fixed
+
+- fix(brand): favicons, touch and manifest icons, the link preview image and `site.webmanifest` come from muse v0.19.2's brand generator, and `app.html` carries its head block: the catalog title "Journal · Central logs for your infrastructure", its description, theme colours and Open Graph and Twitter tags.
+- feat(brand): the sidebar and sign-in screen show the catalog icon `solar:notebook-bold-duotone`, bundled through `registerIcons` so nothing is fetched past the CSP.
+
 ## [0.4.1] - 2026-11-11
 
 ### Fixed
