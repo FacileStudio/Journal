@@ -1,6 +1,9 @@
 package docs
 
-import "github.com/FacileStudio/porte/kit"
+import (
+	"github.com/FacileStudio/Journal/apps/api/modules/mcp"
+	"github.com/FacileStudio/porte/kit"
+)
 
 // Registry inventories every application route the Go binary registers. Paths
 // are written relative to the /api mount, which is the reference's declared
@@ -20,6 +23,7 @@ var Registry = Response{Modules: []Module{
 	sourceMapsModule,
 	antenneModule,
 	deletionsModule,
+	mcp.Documentation,
 }}
 
 // invitationsRoute is porte/kit's own entry for GET /me/invitations, with

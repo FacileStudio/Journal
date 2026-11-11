@@ -27,7 +27,8 @@ table records only key-plus-day counters.
 ## Erasure
 
 Two paths end in the same deletion of the account row, which cascades through every identity
-(with its provider tokens), session, named token and login code.
+(with its provider tokens), session, named token and login code. Both also delete, in the same
+transaction, the person's MCP actions waiting on the confirm page (`mcp_actions`).
 
 - **Self-service.** `DELETE /api/auth/me` (dashboard: Settings → Danger zone) deletes the
   account in one statement whose WHERE clause also enforces the last-administrator rule,

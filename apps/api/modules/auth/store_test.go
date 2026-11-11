@@ -172,3 +172,36 @@ func TestNoUsersColumnIsLeftUnwritten(t *testing.T) {
 		t.Fatalf("unwritten = %v, want none", unwritten)
 	}
 }
+
+// TestEraseAccountDropsPendingMCPActions erases a person with an action
+// waiting on the confirm page: their action goes with the account, and
+// another person's stays.
+func TestEraseAccountDropsPendingMCPActions(t *testing.T) {
+	db := testdb.Migrated(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql handle: %v", err)
+	}
+	store := newStore(t, sqlDB)
+	if err := db.Exec(`INSERT INTO users (id, email, name) VALUES (1, 'gone@facile.studio', 'Gone'), (2, 'kept@facile.studio', 'Kept')`).Error; err != nil {
+		t.Fatalf("seed users: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject) VALUES (1, 'https://sso.facile.studio', 'sub-gone')`).Error; err != nil {
+		t.Fatalf("link the identity: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO mcp_actions (id, user_id, kind, target, digest, expires_at) VALUES
+		('a1', '1', 'delete_alert', '7', 'd', now() + interval '1 day'),
+		('a2', '2', 'delete_alert', '7', 'd', now() + interval '1 day')`).Error; err != nil {
+		t.Fatalf("seed actions: %v", err)
+	}
+	if err := store.EraseAccount(context.Background(), "https://sso.facile.studio", "sub-gone"); err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+	var left []string
+	if err := db.Raw(`SELECT id FROM mcp_actions ORDER BY id`).Scan(&left).Error; err != nil {
+		t.Fatalf("read actions: %v", err)
+	}
+	if len(left) != 1 || left[0] != "a2" {
+		t.Fatalf("want only the other person's action left, got %v", left)
+	}
+}

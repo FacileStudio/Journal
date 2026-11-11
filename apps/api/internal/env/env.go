@@ -1,6 +1,7 @@
 package env
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/FacileStudio/porte"
@@ -27,6 +28,20 @@ type Config struct {
 	// for Journal. It is deliberately not the machine audience either, which
 	// names this app and arms a different path.
 	Porte porte.Config
+
+	// MCPResource is the canonical URI of the remote MCP server,
+	// https://journal.facile.studio/mcp in production, and the RFC 8707
+	// resource Registre binds its tokens to, from MCP_RESOURCE. Empty, or
+	// without OIDC_ISSUER, leaves /mcp unmounted.
+	MCPResource string
+}
+
+// MCPStateKey derives the key that signs MCP confirmation state from the OIDC
+// client secret, which is secret, stable across restarts and set whenever SSO
+// is.
+func (c Config) MCPStateKey() []byte {
+	sum := sha256.Sum256([]byte("journal-mcp-state:" + c.Porte.ClientSecret))
+	return sum[:]
 }
 
 // Load reads and validates the environment, wiring the OIDC config through
@@ -44,6 +59,7 @@ func Load() (Config, error) {
 		Core:                core,
 		IngestToken:         troncenv.String("INGEST_TOKEN", ""),
 		WebhookAllowedHosts: troncenv.List("WEBHOOK_ALLOWED_HOSTS"),
+		MCPResource:         troncenv.String("MCP_RESOURCE", ""),
 	}
 
 	if cfg.RetentionDays, err = troncenv.Int("RETENTION_DAYS", 90); err != nil {

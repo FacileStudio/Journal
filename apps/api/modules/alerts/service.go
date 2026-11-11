@@ -26,7 +26,8 @@ func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }
 
-type ruleRecord struct {
+// RuleRecord is one alert rule with the name of the saved query it watches.
+type RuleRecord struct {
 	ID            int64
 	Name          string
 	SavedQueryID  int64
@@ -41,8 +42,8 @@ type ruleRecord struct {
 	CreatedAt     time.Time
 }
 
-func (s *Service) List(ctx context.Context) ([]ruleRecord, error) {
-	var rows []ruleRecord
+func (s *Service) List(ctx context.Context) ([]RuleRecord, error) {
+	var rows []RuleRecord
 	err := s.orm.WithContext(ctx).Model(&schemas.AlertRule{}).
 		Select("alert_rules.*, saved_queries.name AS query_name").
 		Joins("JOIN saved_queries ON saved_queries.id = alert_rules.saved_query_id").
@@ -54,7 +55,7 @@ func (s *Service) List(ctx context.Context) ([]ruleRecord, error) {
 	return rows, nil
 }
 
-func (s *Service) Create(ctx context.Context, req CreateRequest) (*ruleRecord, error) {
+func (s *Service) Create(ctx context.Context, req CreateRequest) (*RuleRecord, error) {
 	provider := req.Provider
 	if provider == "" {
 		provider = string(schemas.AlertProviderWebhook)
@@ -88,7 +89,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*ruleRecord, e
 	return recordFromRule(rule, savedQuery.Name), nil
 }
 
-func (s *Service) SetEnabled(ctx context.Context, id int64, enabled bool) (*ruleRecord, error) {
+func (s *Service) SetEnabled(ctx context.Context, id int64, enabled bool) (*RuleRecord, error) {
 	var rule schemas.AlertRule
 	if err := s.orm.WithContext(ctx).First(&rule, id).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
@@ -147,8 +148,8 @@ func optionalText(value string) *string {
 	return &value
 }
 
-func recordFromRule(rule schemas.AlertRule, queryName string) *ruleRecord {
-	return &ruleRecord{
+func recordFromRule(rule schemas.AlertRule, queryName string) *RuleRecord {
+	return &RuleRecord{
 		ID:            rule.ID,
 		Name:          rule.Name,
 		SavedQueryID:  rule.SavedQueryID,

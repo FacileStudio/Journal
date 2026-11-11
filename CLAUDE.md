@@ -94,6 +94,7 @@ Journal/
         apikeys/                   # /api/apikeys CRUD — session + admin only
         queries/                   # /api/queries CRUD (saved filter sets) — session-protected
         alerts/                    # /api/alerts CRUD + 60s webhook evaluator — session + admin only
+        mcp/                       # remote MCP server at /mcp (tronc/mcp) + /api/mcp/pending confirm page API — see docs/mcp.md
     collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /api/ingest
     client/
       src/

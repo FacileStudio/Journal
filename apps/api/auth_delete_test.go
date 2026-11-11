@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/FacileStudio/Journal/apps/api/schemas"
@@ -14,6 +15,10 @@ func TestDeleteMeErasesTheAccountAndItsCredentials(t *testing.T) {
 	app := newLiveApp(t)
 	doomed, token := app.signIn(t, "doomed@facile.studio", false)
 	app.signIn(t, "admin@facile.studio", true)
+	if err := app.db.Exec(`INSERT INTO mcp_actions (id, user_id, kind, target, digest, expires_at)
+		VALUES ('doomed-action', ?, 'delete_alert', '1', 'd', now() + interval '1 day')`, strconv.FormatInt(doomed, 10)).Error; err != nil {
+		t.Fatalf("seed a pending action: %v", err)
+	}
 
 	if code := call(t, app.router, http.MethodDelete, "/api/auth/me", token, nil).Code; code != http.StatusNoContent {
 		t.Fatalf("delete = %d", code)
@@ -22,11 +27,12 @@ func TestDeleteMeErasesTheAccountAndItsCredentials(t *testing.T) {
 		t.Fatalf("the token survived the erasure: %d", after.Code)
 	}
 
-	var users, sessionRows int64
+	var users, sessionRows, actions int64
 	app.db.Model(&schemas.User{}).Where("email = ?", "doomed@facile.studio").Count(&users)
 	app.db.Table("porte_sessions").Where("user_id = ?", doomed).Count(&sessionRows)
-	if users != 0 || sessionRows != 0 {
-		t.Fatalf("erasure left rows behind: users=%d sessions=%d", users, sessionRows)
+	app.db.Table("mcp_actions").Where("id = ?", "doomed-action").Count(&actions)
+	if users != 0 || sessionRows != 0 || actions != 0 {
+		t.Fatalf("erasure left rows behind: users=%d sessions=%d mcp_actions=%d", users, sessionRows, actions)
 	}
 }
 

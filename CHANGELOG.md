@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- feat(api): a remote MCP server at `POST /mcp` on tronc/mcp v0.22.1 and porte/mcpauth v0.2.1, mounted when `MCP_RESOURCE` (compose default `https://journal.facile.studio/mcp`) and `OIDC_ISSUER` are set. Eleven tools: search, read, count and list logs and apps; list, save and delete saved queries; list, create, pause and delete alert rules (administrators only, as in the dashboard). Results are bounded (messages, meta and pages cut under about 25,000 tokens) and webhook URLs never leave the server. Deleting a saved query or an alert rule is confirmed through MRTR elicitation or a link to the new `/pending` page. A person's first MCP call creates their account. See `docs/mcp.md`.
+- feat(api): `mcp_actions` table (additive, `CREATE TABLE IF NOT EXISTS`). Erasing an account, through Registre or from Settings, deletes its pending actions in the same transaction.
+- feat(client): the Pending actions page at `/pending` (fr/en/es/de), and the sign-in returns to the page that sent the person to it.
+
+### Changed
+
+- build(api): tronc v0.22.1, go-sdk v1.8.0.
+
 ## [0.3.3] - 2026-11-11
 
 ### Security

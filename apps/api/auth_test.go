@@ -37,7 +37,7 @@ func newLiveApp(t *testing.T) liveApp {
 	db := testdb.Migrated(t)
 	appEnv := env.Config{IngestToken: testIngestToken}
 	oidcKit, sessions, users := testKitFor(t, appEnv, sqlHandle(t, db))
-	router := buildRouter(db, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{})
+	router := built(t)(buildRouter(db, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{}, nil))
 	return liveApp{router: router, db: db, sessions: sessions}
 }
 

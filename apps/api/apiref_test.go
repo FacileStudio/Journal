@@ -58,6 +58,17 @@ func newUserStore(t *testing.T, sqlDB *sql.DB) *kit.Store {
 	return users
 }
 
+// built returns a check that fails the test when building the router failed.
+func built(t *testing.T) func(chi.Router, error) chi.Router {
+	t.Helper()
+	return func(router chi.Router, err error) chi.Router {
+		if err != nil {
+			t.Fatalf("build the router: %v", err)
+		}
+		return router
+	}
+}
+
 // testRouter builds the real router with a nil database. Nothing here serves a
 // request that would touch it: the tests walk the route tree and read the
 // reference, both of which are assembled before any handler runs.
@@ -70,7 +81,7 @@ func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 		sso.erasures = deletions.NewService(nil, registre, nil, nil, slog.New(slog.DiscardHandler))
 		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: portepg.New(nil).Identities()}
 	}
-	return buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso)
+	return built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso, nil))
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

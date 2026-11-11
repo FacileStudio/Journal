@@ -1,6 +1,9 @@
 package schemas
 
-import "gorm.io/gorm"
+import (
+	mcpkit "github.com/FacileStudio/tronc/mcp"
+	"gorm.io/gorm"
+)
 
 // Migrate brings the schema up to date on every boot, including the replica
 // that comes up second, so every statement has to be a no-op the second time.
@@ -52,6 +55,7 @@ func Migrate(db *gorm.DB) error {
 		`CREATE TABLE IF NOT EXISTS app_settings (id int PRIMARY KEY, antenne_url text NOT NULL DEFAULT '', antenne_secret text NOT NULL DEFAULT '', antenne_enabled bool NOT NULL DEFAULT false)`,
 		convertLegacyOutbox,
 		antenneOutbox,
+		mcpkit.PendingSchema,
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {

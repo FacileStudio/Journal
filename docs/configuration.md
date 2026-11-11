@@ -33,6 +33,7 @@ passes `ALLOWED_ORIGINS`.
 | `INGEST_TOKEN` | no | — | Legacy unscoped bearer token for `POST /api/ingest`. Empty disables it, leaving per-app API keys as the only ingest credential |
 | `RETENTION_DAYS` | no | `90` | Delete entries older than N days, hourly. `0` keeps forever. A negative value exits 1 |
 | `WEBHOOK_ALLOWED_HOSTS` | no | — | Comma-separated hostnames alert webhooks may reach past the SSRF guard. Without it, private, loopback, link-local, and metadata addresses are refused |
+| `MCP_RESOURCE` | no | — | Canonical URI of the remote MCP server, `https://journal.facile.studio/mcp` in production (the compose default). Mounts `/mcp` when `OIDC_ISSUER` is also set. See [mcp.md](mcp.md) |
 | `ANTENNE_URL` / `ANTENNE_SECRET` | no | — | Antenne connection used only when the dashboard has saved no Antenne settings. `ANTENNE_INSTANCE` is accepted for `ANTENNE_URL`. A URL without a secret is an error. Compose does not forward them: production is configured from Settings → API |
 
 ### Single sign-on
