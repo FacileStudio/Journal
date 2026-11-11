@@ -246,6 +246,32 @@ export interface UpdateAntenneSettings {
 	enabled: boolean;
 }
 
+/* An action an MCP client asked for and the person confirms on /pending: deleting a saved query
+   or an alert rule, shown as it is now. state is changed once the target was edited since. */
+export type PendingAction = {
+	id: string;
+	kind: 'delete_saved_query' | 'delete_alert';
+	client_id: string;
+	summary: string;
+	created_at: string;
+	expires_at: string;
+	state: 'ready' | 'changed' | 'missing';
+	query?: { id: number; name: string; app?: string; levels?: string[]; q?: string };
+	alert?: {
+		id: number;
+		name: string;
+		saved_query: string;
+		threshold: number;
+		window_minutes: number;
+		provider: string;
+		enabled: boolean;
+	};
+};
+
+export type PendingList = { actions: PendingAction[] };
+
+export type PendingResult = { status: string; url?: string };
+
 export const backend = {
 	baseUrl: backendBaseUrl,
 
@@ -364,6 +390,18 @@ export const backend = {
 
 	deleteAlert(id: number) {
 		return apiFetch<Record<string, never>>(`/alerts/${id}`, { method: 'DELETE' });
+	},
+
+	listPending() {
+		return apiFetch<PendingList>('/mcp/pending');
+	},
+
+	confirmPending(id: string) {
+		return apiFetch<PendingResult>(`/mcp/pending/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+	},
+
+	dismissPending(id: string) {
+		return apiFetch<PendingResult>(`/mcp/pending/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
 	},
 
 	getAntenneSettings() {

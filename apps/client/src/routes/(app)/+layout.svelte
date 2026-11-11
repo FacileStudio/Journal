@@ -6,6 +6,7 @@
 	import { adoptLocale, rememberLocale, session } from '$lib/session.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
+	import { takeReturn } from '$lib/return-path';
 	import { setContext } from 'svelte';
 
 	let { children } = $props();
@@ -53,9 +54,12 @@
 				adoptLocale(resolveLocale(res.user.locale));
 				ready = true;
 				loadInvitations();
+				const back = takeReturn();
+				if (back) void goto(back, { replaceState: true });
 			})
 			.catch(() => {
-				void goto('/login');
+				const next = page.url.pathname === '/' ? '' : `?next=${encodeURIComponent(page.url.pathname + page.url.search)}`;
+				void goto(`/login${next}`);
 			});
 	});
 
