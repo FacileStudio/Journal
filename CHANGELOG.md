@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3] - 2026-11-11
+
+### Security
+
+- build: Go 1.26.11 in the API, the collector and the SDK (`go` directives, `golang:1.26.11-alpine` builders, mise pin). It fixes GO-2026-6848 to GO-2026-6859 in the standard library and toolchain, which douane reported as unscored gaps and which failed the gate.
+
 ## [0.3.2] - 2026-11-11
 
 ### Security
