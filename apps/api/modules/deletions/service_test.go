@@ -36,6 +36,7 @@ type fixture struct {
 	service     *Service
 	gone, other int64
 	issuer      string
+	store       Store
 	deleted     []directory.Deleted
 }
 
@@ -91,7 +92,9 @@ func seed(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("user store: %v", err)
 	}
-	f.service = NewService(f.db, client, users.EraseAccount, portepg.New(sqlDB).EraseIdentity, quietLogger())
+	identities := portepg.New(sqlDB)
+	f.store = Store{EraseAccount: users.EraseAccount, Erase: identities.EraseIdentity, Holds: identities.HoldsIdentity}
+	f.service = NewService(f.db, client, f.store, quietLogger())
 	return f
 }
 
@@ -141,7 +144,8 @@ func TestErasePersonDeletesPersonalDataOnly(t *testing.T) {
 
 // The full receiver: Registre lists the person, Poll erases them through
 // OnPersonDeleted and porte's EraseIdentity, the state is saved in the database
-// and a second Poll, from a fresh receiver that loads that state, is a no-op.
+// and a second Poll, from a fresh receiver that loads that state, leaves the
+// other account alone.
 func TestPollErasesTheListedPersonOnce(t *testing.T) {
 	f := seed(t)
 	f.deleted = []directory.Deleted{{Subject: "sub-gone", DeletedAt: time.Now().Add(-time.Minute)}}
@@ -154,13 +158,38 @@ func TestPollErasesTheListedPersonOnce(t *testing.T) {
 		t.Fatalf("the receiver state was not persisted: %d rows", got)
 	}
 
-	seedPerson(t, f.db, f.issuer, "again@facile.studio", "sub-gone", false)
-	restarted := NewService(f.db, f.service.receiver.Client, f.service.eraseAccount, f.service.receiver.Erase, quietLogger())
+	restarted := NewService(f.db, f.service.receiver.Client, f.store, quietLogger())
 	if err := restarted.receiver.Poll(context.Background()); err != nil {
 		t.Fatalf("second poll: %v", err)
 	}
-	if got := count(t, f.db, `SELECT count(*) FROM users WHERE email = 'again@facile.studio'`); got != 1 {
-		t.Fatal("a handled subject reached the callback twice")
+	f.assertErased(t)
+}
+
+// An account re-created for an erased subject, by a login or a first MCP call
+// racing the erasure, is erased again by the next poll of the same running
+// receiver, and the guard porte/oidc consults refuses that subject meanwhile.
+func TestARecreatedAccountForAnErasedSubjectIsErasedAgain(t *testing.T) {
+	f := seed(t)
+	f.deleted = []directory.Deleted{{Subject: "sub-gone", DeletedAt: time.Now().Add(-time.Minute)}}
+	if err := f.service.receiver.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+
+	erased, err := f.service.Erased(context.Background(), f.issuer, "sub-gone")
+	if err != nil || !erased {
+		t.Fatalf("Erased(sub-gone) = %v, %v; want true: sign-in and provisioning would not be refused", erased, err)
+	}
+	if erased, err := f.service.Erased(context.Background(), f.issuer, "sub-other"); err != nil || erased {
+		t.Fatalf("Erased(sub-other) = %v, %v; want false", erased, err)
+	}
+
+	f.gone = seedPerson(t, f.db, f.issuer, "again@facile.studio", "sub-gone", false)
+	if err := f.service.receiver.Poll(context.Background()); err != nil {
+		t.Fatalf("second poll: %v", err)
+	}
+	f.assertErased(t)
+	if got := count(t, f.db, `SELECT count(*) FROM users WHERE email = 'again@facile.studio'`); got != 0 {
+		t.Fatal("the re-created account survived the next poll")
 	}
 }
 

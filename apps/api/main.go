@@ -118,11 +118,23 @@ func run() int {
 		return 1
 	}
 
+	registre := directory.Client{
+		Issuer:       appEnv.Porte.Issuer,
+		ClientID:     appEnv.Porte.ClientID,
+		ClientSecret: appEnv.Porte.ClientSecret,
+	}
+	erasures := deletions.NewService(db, registre, deletions.Store{
+		EraseAccount: users.EraseAccount,
+		Erase:        identityStore.EraseIdentity,
+		Holds:        identityStore.HoldsIdentity,
+	}, appLogger)
+
 	oidcKit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
 		Users:      users,
 		Identities: identityStore.Identities(),
 		Sessions:   sessions,
 		Codes:      identityStore.LoginCodes(),
+		Erased:     erasures,
 		Logger:     appLogger,
 	})
 	if err != nil {
@@ -143,12 +155,7 @@ func run() int {
 
 	var sso ssoRoutes
 	if oidcKit.Enabled() {
-		registre := directory.Client{
-			Issuer:       appEnv.Porte.Issuer,
-			ClientID:     appEnv.Porte.ClientID,
-			ClientSecret: appEnv.Porte.ClientSecret,
-		}
-		sso.erasures = deletions.NewService(db, registre, users.EraseAccount, identityStore.EraseIdentity, appLogger)
+		sso.erasures = erasures
 		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: identityStore.Identities(), Logger: appLogger}
 		go sso.erasures.Run(shutdownSignal)
 	}
