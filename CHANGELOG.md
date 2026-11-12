@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-12
+
 ### Fixed
 
 - fix(auth): an account re-created for a person Registre erased (a sign-in, a first MCP call or a profile sync racing the erasure) is refused while the subject is in the deletion ledger, and the next poll or push erases any such account again without a restart. porte v0.19.0 (directory v0.5.0): `Deletions.Holds = HoldsIdentity` and `oidc.Deps.Erased`.
