@@ -21,21 +21,36 @@ type Service struct {
 	receiver     *directory.Deletions
 }
 
-// NewService builds the receiver over Journal's tables. eraseAccount deletes
-// the account behind an identity, which is porte/kit's Store.EraseAccount;
-// erase removes porte's own rows for the identity: pg.Store.EraseIdentity.
-func NewService(orm *gorm.DB, client directory.Client, eraseAccount, erase func(context.Context, string, string) error,
-	logger *slog.Logger,
-) *Service {
-	service := &Service{orm: orm, logger: logger, eraseAccount: eraseAccount}
+// Store is what the receiver erases through. EraseAccount deletes the account
+// behind an identity, which is porte/kit's Store.EraseAccount; Erase removes
+// porte's own rows for the identity, pg.Store.EraseIdentity; Holds reports
+// whether a handled subject owns an identity again, pg.Store.HoldsIdentity,
+// so a re-created account is erased again without a restart.
+type Store struct {
+	EraseAccount func(context.Context, string, string) error
+	Erase        func(context.Context, string, string) error
+	Holds        func(context.Context, string, string) (bool, error)
+}
+
+// NewService builds the receiver over Journal's tables.
+func NewService(orm *gorm.DB, client directory.Client, store Store, logger *slog.Logger) *Service {
+	service := &Service{orm: orm, logger: logger, eraseAccount: store.EraseAccount}
 	service.receiver = &directory.Deletions{
 		Client:          client,
 		OnPersonDeleted: service.ErasePerson,
-		Erase:           erase,
+		Erase:           store.Erase,
+		Holds:           store.Holds,
 		State:           state{orm: orm},
 		Logger:          logger,
 	}
 	return service
+}
+
+// Erased reports whether Journal already erased the person behind (provider,
+// subject). porte/oidc asks it before a login, an MCP first call or a profile
+// sync gives that identity an account again: porte.ErasedSubjects.
+func (s *Service) Erased(ctx context.Context, provider, subject string) (bool, error) {
+	return s.receiver.Erased(ctx, provider, subject)
 }
 
 // Run polls until ctx ends. Start it in exactly one replica.
