@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-14
+
+### Fixed
+
+- fix(deploy): drop the swarm-only `update_config` and `restart_policy` from the compose services, so `restart: unless-stopped` applies under plain docker compose.
+
 ## [0.5.5] - 2026-11-13
 
 ### Added
