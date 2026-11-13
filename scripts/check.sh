@@ -76,6 +76,13 @@ for dir in $GO_MODULES; do
       echo "check: JOURNAL_TEST_DATABASE_URL is unset, the database-backed tests were skipped (CI still runs them)" >&2
     fi
 
+    automigrate="$(grep -rn --include='*.go' --exclude='*_test.go' --exclude-dir=vendor -E '\.AutoMigrate\(' . || true)"
+    if [ -n "$automigrate" ]; then
+      echo "AutoMigrate found; schema changes go in apps/api/migrations/ (see docs/development.md):"
+      echo "$automigrate"
+      s=1
+    fi
+
     # Postgres is the only database in this suite, tests included. A test on
     # SQLite builds a different schema from the GORM struct tags and then
     # passes, proving nothing about the Postgres DDL that actually ships — and

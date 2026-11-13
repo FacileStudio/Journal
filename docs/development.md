@@ -92,8 +92,14 @@ inherit Chi, GORM, or the Postgres driver.
 
 API modules follow the same four-file shape as the rest of the Go family —
 `modules/<name>/router.go` exposing `RegisterRoutes`, plus `handler.go`, `service.go`, and
-`types.go`. GORM models live in `apps/api/schemas/`, and `schemas/migrate.go` owns both the
-`AutoMigrate` call and the raw SQL that follows it.
+`types.go`. GORM models live in `apps/api/schemas/` and are the query layer only: the schema
+is the ordered SQL in `apps/api/migrations/`. To change it, add the next numbered file with
+both `-- +goose Up` and `-- +goose Down` (wrap a `DO $$` block in `-- +goose StatementBegin` /
+`StatementEnd`), then update the struct by hand. `TestGORMModelsMatchTheMigratedSchema` fails
+when a struct names a column the migrations do not build, `TestLibrarySchemasAreInTheBaseline`
+fails when porte, tronc/mcp or antenne-client changes a table Journal owns a copy of, and
+`scripts/check.sh` fails on an `.AutoMigrate(` call outside a test file.
+`go run . migrate status` lists what is applied.
 
 The client is Svelte 5 runes only — `$state`, `$props`, `$derived`, `$effect` — with
 TypeScript in strict mode, and every API call goes through `src/lib/backend.ts`.

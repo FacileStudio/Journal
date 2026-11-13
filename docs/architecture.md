@@ -105,7 +105,8 @@ constant time and is unscoped, so every entry must carry its own `app`.
 time. `received_at` is always server time, so clock skew on a shipper is visible rather than
 silently trusted.
 
-`schemas.Migrate` runs GORM `AutoMigrate` and then raw SQL that GORM cannot express:
+The schema is ordered SQL in `apps/api/migrations/`, applied at boot by `tronc/migrate`
+(see `docs/deployment.md`). It holds what GORM could never express:
 
 - `search` as `GENERATED ALWAYS AS (to_tsvector('simple', coalesce(message,'')))` plus a GIN
   index. The `simple` dictionary means no stemming and no stopwords, which keeps matching

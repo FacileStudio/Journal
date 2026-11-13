@@ -3,15 +3,16 @@
 // Postgres is the only database in this suite, tests included: a test on
 // SQLite builds a different schema from the same struct tags and then passes,
 // proving nothing about the DDL that ships — and it cannot run what does ship,
-// which here is a DO block, to_regclass and an ON CONFLICT.
+// which here is a generated tsvector column, to_regclass and an ON CONFLICT.
 package testdb
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/Journal/apps/api/migrations"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -68,10 +69,26 @@ func Open(t *testing.T) *gorm.DB {
 func Migrated(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := Open(t)
-	if err := schemas.Migrate(db); err != nil {
+	if err := Up(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
+}
+
+// Up applies the migrations to db as the binary does at boot, under an
+// advisory lock of the test schema's own. The lock is per database, and every
+// test package migrates a schema of the same database at once, so the boot's
+// single lock would queue them behind each other.
+func Up(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	cfg := migrations.Config(sqlDB, nil)
+	if err := db.Raw(`SELECT hashtext(current_schema())`).Scan(&cfg.LockID).Error; err != nil {
+		return err
+	}
+	return migrations.Up(context.Background(), cfg)
 }
 
 // withSearchPath points a connection string at one schema.

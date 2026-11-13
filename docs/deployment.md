@@ -81,12 +81,28 @@ needs the legacy unscoped token and refuses to start without one.
 
 ## Migrations
 
-There is no migration tool and no separate migration step. `schemas.Migrate` runs at boot,
-before the listener binds: GORM `AutoMigrate` over the six models, then idempotent raw SQL
-for the generated `search` column, the GIN and composite indexes, the partial `request_id`
-index, and the `alert_rules` foreign key. Every statement is `IF NOT EXISTS` or a
-drop-then-add, so a redeploy is safe and a failure exits 1 rather than serving against a
-half-migrated schema.
+The schema is ordered goose SQL in `apps/api/migrations/`, embedded in the binary and applied
+by `tronc/migrate` at boot, before the listener binds, behind a Postgres advisory lock. A
+failed migration exits 1 rather than serving against a half-migrated schema. There is no
+separate migration step.
+
+`00001_baseline.sql` is the schema v0.4.x built with GORM `AutoMigrate` and idempotent SQL,
+as `pg_dump --schema-only` printed it from production on 2026-11-13. A database those
+versions built (Journal's tables, no applied migration) is stamped at version 1 on its first
+boot, so the baseline is recorded without running. A database older than v0.4.0 is refused:
+boot v0.4.3 once, then this release.
+
+The binary answers `migrate status`, `migrate version`, `migrate up` and `migrate baseline <n>`
+without a shell:
+
+```sh
+docker exec journal-api /api migrate status
+```
+
+Rolling back to v0.4.x runs its `AutoMigrate`, which drops the timestamp defaults
+`00002_timestamp_defaults.sql` added while the ledger still records version 2. Before
+deploying v0.5.0 or later again after such a rollback, run
+`DELETE FROM goose_db_version WHERE version_id = 2`.
 
 ## Health and readiness
 

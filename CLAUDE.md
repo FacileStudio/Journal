@@ -85,7 +85,8 @@ Journal/
         authcrypto/                # Argon2id password hashing + session/API token gen/hash, strict Bearer parsing
         authcontext/               # request-scoped ingest key scope (the signed-in identity is porte/kit's)
         middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAdmin
-      schemas/                     # GORM models (log_entry, user, session, api_key, saved_query, alert_rule) + Migrate
+      migrations/                  # ordered goose SQL, embedded and applied at boot by tronc/migrate
+      schemas/                     # GORM models (log_entry, user, api_key, saved_query, alert_rule, ...), query layer only
       modules/
         auth/                      # /api/auth/{config,logout,me} — sessions; the OIDC routes come from porte
         ingest/                    # POST /api/ingest (single + batch, gzip), per-app key or legacy token
@@ -199,9 +200,9 @@ Extra indexes: GIN on `search`, composite `(app, created_at DESC)`, composite
 `(created_at DESC, id DESC)` (keyset cursor + context queries), partial expression btree on
 `(meta->>'request_id') WHERE meta ? 'request_id'` and the same shape on
 `(meta->>'session_id')` — both partial on key presence, so the server never writes a null
-under either key. `schemas.Migrate` runs `AutoMigrate` then
-raw SQL for the generated column + indexes (GORM can't express a generated `tsvector` column
-or a `DESC` composite index).
+under either key. The schema is ordered goose SQL in `apps/api/migrations/`, applied at boot
+by `tronc/migrate`; `00001_baseline.sql` is the production schema v0.4.x built with
+`AutoMigrate`, stamped rather than run on a database that predates migrations.
 
 Table `api_keys`: `id` PK, `app` text, `kind` text (`secret`|`public`, default `secret`),
 `prefix` text (display only), `key_hash` text unique (SHA256 hex of the full token),
@@ -441,7 +442,9 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
 
 - API modules follow the Nuage pattern: each `modules/<name>/` has `router.go` (`RegisterRoutes`),
   `handler.go`, `service.go`, `types.go`.
-- GORM models live in `apps/api/schemas/`; migration in `schemas/migrate.go`.
+- GORM models live in `apps/api/schemas/` and are the query layer only. Schema changes are a
+  new numbered file in `apps/api/migrations/` with Up and Down, plus a hand edit of the struct.
+  `scripts/check.sh` fails on `.AutoMigrate(` outside a test file.
 - Client uses Svelte 5 runes only (`$state`, `$props`, `$derived`, `$effect`), TypeScript strict.
 - All client API calls go through `src/lib/backend.ts`.
 - **muse is the component layer.** Read `muse/CHARTE.md` before writing UI: reuse a primitive

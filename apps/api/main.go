@@ -15,6 +15,7 @@ import (
 	docs "github.com/FacileStudio/Journal/apps/api/internal/documentation"
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
+	"github.com/FacileStudio/Journal/apps/api/migrations"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/modules/antenne"
 	"github.com/FacileStudio/Journal/apps/api/modules/apikeys"
@@ -25,7 +26,6 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/modules/mcp"
 	"github.com/FacileStudio/Journal/apps/api/modules/queries"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
-	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/kit"
@@ -40,6 +40,7 @@ import (
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
+	"github.com/FacileStudio/tronc/migrate"
 	"github.com/FacileStudio/tronc/spa"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
@@ -75,11 +76,6 @@ func run() int {
 		return 1
 	}
 
-	if err := schemas.Migrate(db); err != nil {
-		appLogger.Error("failed to run migrations", slog.Any("error", err))
-		return 1
-	}
-
 	sqlDB, err := db.DB()
 	if err != nil {
 		appLogger.Error("failed to access database handle", slog.Any("error", err))
@@ -90,6 +86,19 @@ func run() int {
 			appLogger.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
+
+	migrationConfig := migrations.Config(sqlDB, appLogger)
+	if handled, err := migrate.Command(context.Background(), os.Args, migrationConfig); handled {
+		if err != nil {
+			appLogger.Error("migrate", slog.Any("error", err))
+			return 1
+		}
+		return 0
+	}
+	if err := migrations.Up(context.Background(), migrationConfig); err != nil {
+		appLogger.Error("failed to run migrations", slog.Any("error", err))
+		return 1
+	}
 
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
