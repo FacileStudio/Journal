@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+### Changed
+
+- build(api): the schema is ordered goose SQL in `apps/api/migrations/`, embedded in the binary and applied at boot by `tronc/migrate` v0.1.1 behind a Postgres advisory lock. GORM `AutoMigrate` and the idempotent SQL that `schemas.Migrate` ran at every boot are gone; the GORM structs stay as the query layer. A failed migration still exits 1 before the listener binds.
+- build(api): `00001_baseline.sql` is production's schema as `pg_dump --schema-only` printed it on 2026-11-13; a database built from it dumps byte-identical to production. A database v0.4.x built (Journal's tables, no applied migration) is stamped at version 1 on its first boot, so the baseline is recorded without running. A database older than v0.4.0 is refused at boot: boot v0.4.3 once, then this release.
+- build(api): every DDL statement of the old boot code is in the baseline: porte's identity, session and login-code tables, the generated `search` column and the `log_entries` indexes, the `api_keys` and `alert_rules` defaults and foreign keys, `app_settings`, `directory_deletion_state`, antenne-client's outbox and tronc/mcp's `mcp_actions`. The one-time row conversions no longer run: the local identity re-key, the pre-porte session carry-over, the password adoption, the avatar `NULL` and non-https clean-ups, the `users.created_at` backfill, the `api_keys.kind` and `alert_rules.provider` backfills, and the pre-v1 outbox conversion. Each matched zero rows in production on 2026-11-13, and each can only apply to a database older than v0.4.0, which this release refuses.
+- test(api): `TestGORMModelsMatchTheMigratedSchema` fails when a struct names a column the migrations do not build, or a type its field cannot hold. `TestLibrarySchemasAreInTheBaseline` fails when porte, tronc/mcp or antenne-client changes a table Journal keeps its own copy of. `scripts/check.sh` fails on an `.AutoMigrate(` call outside a test file. The tests for the retired conversions are gone with them.
+- build(api): goose v3.27.3 raises `segmentio/asm` from v1.1.3 to v1.2.1.
+
+### Added
+
+- `docker exec journal-api /api migrate status` (also `version`, `up` and `baseline <n>`) answers without a shell.
+- `00002_timestamp_defaults.sql` gives `created_at` on `alert_rules`, `api_keys`, `log_entries`, `saved_queries` and `source_maps`, and `log_entries.received_at`, a `now()` default, so a row written outside GORM gets a time instead of `NULL`. It has a Down. Rolling back to v0.4.x drops these defaults again, because its `AutoMigrate` removes a default the struct tags do not declare, while the ledger still records version 2: before deploying this release again after such a rollback, run `DELETE FROM goose_db_version WHERE version_id = 2`.
+
 ## [0.4.3] - 2026-11-12
 
 ### Fixed
