@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-13
+
+### Changed
+
+- chore(deploy): healthchecks run every 30 s with a 1 s start interval, so a deploy cutover stays short while steady `docker exec` load drops.
+
 ## [0.5.0] - 2026-11-13
 
 ### Changed
