@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Icon, Button, EmptyState, Spinner, Table, icons, toast } from '@facile/muse';
+	import { Icon, Button, EmptyState, Spinner, Table, Tooltip, icons, toast } from '@facile/muse';
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
@@ -186,43 +186,46 @@
 						<span class="hidden sm:inline">{formatTime(entry.created_at)}</span>
 					</td>
 					<td class="hidden sm:table-cell whitespace-nowrap">
-						<button
-							type="button"
-							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title={t('table.filterBy', { value: entry.app })}
-							onclick={(event) => {
-								event.stopPropagation();
-								onPivotApp?.(entry.app);
-							}}
-						>
-							{entry.app}
-						</button>
+						<Tooltip text={t('table.filterBy', { value: entry.app })} class="contents">
+							<button
+								type="button"
+								class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
+								onclick={(event) => {
+									event.stopPropagation();
+									onPivotApp?.(entry.app);
+								}}
+							>
+								{entry.app}
+							</button>
+						</Tooltip>
 					</td>
 					<td>
-						<button
-							type="button"
-							class="rounded-fc-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title={t('table.filterBy', { value: entry.level })}
-							onclick={(event) => {
-								event.stopPropagation();
-								onPivotLevel?.(entry.level);
-							}}
-						>
-							<LevelBadge level={entry.level} />
-						</button>
+						<Tooltip text={t('table.filterBy', { value: entry.level })} class="contents">
+							<button
+								type="button"
+								class="rounded-fc-pill focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
+								onclick={(event) => {
+									event.stopPropagation();
+									onPivotLevel?.(entry.level);
+								}}
+							>
+								<LevelBadge level={entry.level} />
+							</button>
+						</Tooltip>
 					</td>
 					<td class="hidden sm:table-cell whitespace-nowrap">
-						<button
-							type="button"
-							class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
-							title={t('table.filterBySource', { value: sourceOf(entry) ?? 'server' })}
-							onclick={(event) => {
-								event.stopPropagation();
-								onPivotSource?.(sourceOf(entry) ?? 'server');
-							}}
-						>
-							{sourceLabel(sourceOf(entry))}
-						</button>
+						<Tooltip text={t('table.filterBySource', { value: sourceOf(entry) ?? 'server' })} class="contents">
+							<button
+								type="button"
+								class="rounded-fc-pill bg-fc-surface px-2 py-0.5 font-fc-mono text-fc-xs text-fc-fg hover:bg-fc-accent hover:text-fc-accent-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fc-ring"
+								onclick={(event) => {
+									event.stopPropagation();
+									onPivotSource?.(sourceOf(entry) ?? 'server');
+								}}
+							>
+								{sourceLabel(sourceOf(entry))}
+							</button>
+						</Tooltip>
 					</td>
 					<!-- The message is the reason anyone opened this page. This column claims
 					     the remaining table width and the preview clamps at two lines with an
