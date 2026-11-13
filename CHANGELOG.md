@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-13
+
+### Changed
+
+- build(client): muse v0.21.0 (was v0.18.0). Icon-only controls in muse components now show a muse tooltip.
+- fix(client): the log table's app, level and source pivot buttons and the session filter chip show their hint in a muse tooltip instead of the native `title`.
+
 ## [0.5.2] - 2026-11-13
 
 ### Changed
