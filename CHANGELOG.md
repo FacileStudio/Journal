@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-13
+
+### Added
+
+- feat(client): `app.html` loads Vision's tracker (`s.js` with `data-mask`) on `journal.facile.studio` only. `kit.csp` allows the loader by its sha256 hash and `https://vision.facile.studio` in `script-src`; the Go security config adds the same origin to the header policy.
+
 ## [0.5.4] - 2026-11-13
 
 ### Changed
