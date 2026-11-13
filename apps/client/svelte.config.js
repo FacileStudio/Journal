@@ -9,7 +9,11 @@ const config = {
 		csp: {
 			mode: 'auto',
 			directives: {
-				'script-src': ['self'],
+				'script-src': [
+					'self',
+					'https://vision.facile.studio',
+					'sha256-Xeng4whxN8ZlXgd5IUoCjxu9AGt/iFyk3tQDEbwHda4='
+				],
 				'style-src': ['self', 'unsafe-inline'],
 				'connect-src': ['self'],
 				'img-src': ['self', 'data:', 'https:'],
