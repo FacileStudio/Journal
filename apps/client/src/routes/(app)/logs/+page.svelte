@@ -12,6 +12,7 @@
 		Select,
 		StatusDot,
 		Tabs,
+		Tooltip,
 		icons,
 		toast
 	} from '@facile/muse';
@@ -506,18 +507,19 @@
 					</button>
 				{/if}
 				{#if sessionId}
-					<button
-						type="button"
-						title={sessionId}
-						class="flex max-w-[16rem] items-center gap-1 rounded-fc-pill bg-fc-surface px-2.5 py-1 font-fc-mono text-fc-xs"
-						onclick={() => {
-							sessionId = '';
-							apply();
-						}}
-					>
-						<span class="truncate">session:{sessionId}</span>
-						<Icon icon={icons.close} size={12} class="block" />
-					</button>
+					<Tooltip text={sessionId} class="contents">
+						<button
+							type="button"
+							class="flex max-w-[16rem] items-center gap-1 rounded-fc-pill bg-fc-surface px-2.5 py-1 font-fc-mono text-fc-xs"
+							onclick={() => {
+								sessionId = '';
+								apply();
+							}}
+						>
+							<span class="truncate">session:{sessionId}</span>
+							<Icon icon={icons.close} size={12} class="block" />
+						</button>
+					</Tooltip>
 				{/if}
 				<Button size="sm" variant="ghost" icon={icons.close} onclick={clearFilters}>
 					{t('logs.clearFilters', { count: activeCount })}
