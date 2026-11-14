@@ -35,13 +35,19 @@
 		rememberReturn(page.url.pathname + page.url.search);
 	}
 
+	/** The server's own words for any other 403, else the fallback text. */
+	function reason(err: unknown, fallback: string): string {
+		const refusal = err as { status?: unknown } | null;
+		return refusal?.status === 403 && err instanceof Error ? err.message : fallback;
+	}
+
 	/** Loads the open actions. */
 	async function load() {
 		loading = true;
 		try {
 			actions = (await backend.listPending()).actions;
 		} catch (err) {
-			if (!refusedSession(err)) toast.danger(t('pending.loadFailed'));
+			if (!refusedSession(err)) toast.danger(reason(err, t('pending.loadFailed')));
 		}
 		loading = false;
 	}
