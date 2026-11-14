@@ -13,7 +13,7 @@ import (
 var (
 	terminal = map[string]bool{"First": true, "Take": true, "Find": true, "Last": true, "Scan": true, "Count": true,
 		"Pluck": true, "Delete": true, "Update": true, "Updates": true, "FirstOrCreate": true}
-	rawTableAllowed = []string{"internal/retention/", "internal/documentation/", "schemas/log_entry.go"}
+	rawTableAllowed = []string{"internal/retention/", "migrations/", "internal/documentation/", "schemas/log_entry.go"}
 )
 
 type scopeGuard struct {
@@ -149,7 +149,8 @@ func parseTree(t *testing.T, fset *token.FileSet) map[string]*ast.File {
 // TestEveryLogQueryIsScoped fails when code reads log_entries without going
 // through internal/logfilter, whose every entry point filters on the caller's
 // workspaces, or writes an entry without its workspace. Retention, the one
-// job that deletes across workspaces by design, is the only raw SQL allowed.
+// job that deletes across workspaces by design, and the migrations, which own
+// the schema, are the only raw SQL allowed.
 func TestEveryLogQueryIsScoped(t *testing.T) {
 	fset := token.NewFileSet()
 	if findings := guard(parseTree(t, fset), fset); len(findings) > 0 {
