@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"net/http"
+
 	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/go-chi/chi/v5"
 )
@@ -12,9 +14,9 @@ func RegisterRoutes(router chi.Router, service *Service) {
 }
 
 // RegisterPendingRoutes mounts the confirm page's API under /mcp/pending on
-// router, which the caller has already put behind the session.
-func RegisterPendingRoutes(router chi.Router, service *Service) {
-	router.Route("/mcp/pending", service.pending().Routes)
+// router, behind auth, the session middleware.
+func RegisterPendingRoutes(router chi.Router, service *Service, auth ...func(http.Handler) http.Handler) {
+	service.pending().Mount(router, auth...)
 }
 
 // pending is the confirm page, or nil on a nil service.

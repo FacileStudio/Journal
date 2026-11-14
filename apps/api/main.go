@@ -290,14 +290,14 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 		ingest.RegisterBrowserRoutes(api, ingestService, middleware.RequireBrowserIngestAuth(apiKeysService), browserKeyCeiling, browserIngestLimiter)
 		sourcemaps.RegisterUploadRoutes(api, sourceMapsService, ingestLimiter, middleware.RequireIngestAuth(appEnv.IngestToken, apiKeysService))
 
+		if mcpService != nil {
+			mcp.RegisterPendingRoutes(api, mcpService, sessionLimiter, requireAuth)
+		}
 		api.Group(func(protected chi.Router) {
 			protected.Use(sessionLimiter)
 			protected.Use(requireAuth)
 			logs.RegisterRoutes(protected, logsService, sourceMapsService)
 			queries.RegisterRoutes(protected, queriesService)
-			if mcpService != nil {
-				mcp.RegisterPendingRoutes(protected, mcpService)
-			}
 			protected.Group(func(admin chi.Router) {
 				admin.Use(middleware.RequireAdmin)
 				apikeys.RegisterRoutes(admin, apiKeysService)

@@ -1,12 +1,12 @@
 package env
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/retention"
 	"github.com/FacileStudio/porte"
 	troncenv "github.com/FacileStudio/tronc/env"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 )
 
 // Config is the process configuration: the tronc core plus Journal's ingest,
@@ -41,8 +41,7 @@ type Config struct {
 // client secret, which is secret, stable across restarts and set whenever SSO
 // is.
 func (c Config) MCPStateKey() []byte {
-	sum := sha256.Sum256([]byte("journal-mcp-state:" + c.Porte.ClientSecret))
-	return sum[:]
+	return mcpkit.StateKey("journal", c.Porte.ClientSecret)
 }
 
 // Load reads and validates the environment, wiring the OIDC config through

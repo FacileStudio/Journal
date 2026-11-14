@@ -4,10 +4,10 @@ go 1.26.11
 
 require (
 	github.com/FacileStudio/antenne-client/go v1.0.0
-	github.com/FacileStudio/porte v0.19.0
+	github.com/FacileStudio/porte v0.20.0
 	github.com/FacileStudio/porte/directory v0.5.0
-	github.com/FacileStudio/porte/mcpauth v0.2.1
-	github.com/FacileStudio/tronc v0.23.0
+	github.com/FacileStudio/porte/mcpauth v0.3.0
+	github.com/FacileStudio/tronc v0.23.1
 	github.com/FacileStudio/tronc/migrate v0.1.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/FacileStudio/porte/forfait v0.1.1 // indirect
+	github.com/FacileStudio/porte/forfait v0.1.3 // indirect
 	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.9 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect

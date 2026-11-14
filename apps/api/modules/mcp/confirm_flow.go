@@ -17,7 +17,7 @@ func (t *toolset) request(ctx context.Context, req *sdk.CallToolRequest, kind st
 	if result != nil {
 		return result, deleteOutput{}, nil
 	}
-	return nil, deleteOutput{Status: outcome.Status, ID: id, ConfirmURL: outcome.ConfirmURL, Message: waitingForConfirm}, nil
+	return nil, deleteOutput{Status: outcome.Status, ID: id, ConfirmURL: outcome.ConfirmURL, Message: outcome.Message}, nil
 }
 
 // resume handles the retry that carries the person's answer to a deletion.
