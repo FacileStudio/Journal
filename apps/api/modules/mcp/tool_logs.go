@@ -30,7 +30,8 @@ type cursor struct {
 
 // search is journal_search_logs.
 func (t *toolset) search(ctx context.Context, req *sdk.CallToolRequest, in searchInput) (*sdk.CallToolResult, searchOutput, error) {
-	if _, err := t.callerOf(ctx, req); err != nil {
+	access, err := t.accessOf(ctx, req, in.WorkspaceID)
+	if err != nil {
 		return nil, searchOutput{}, err
 	}
 	wide, err := mcpkit.Detailed(in.ResponseFormat)
@@ -41,7 +42,7 @@ func (t *toolset) search(ctx context.Context, req *sdk.CallToolRequest, in searc
 	if err != nil {
 		return nil, searchOutput{}, err
 	}
-	records, err := t.Logs.List(ctx, params)
+	records, err := t.Logs.List(ctx, access.Scope, params)
 	if err != nil {
 		return nil, searchOutput{}, mcpkit.Failure(err, "")
 	}
@@ -106,24 +107,25 @@ func next(entry schemas.LogEntry) string {
 
 // read is journal_read_log.
 func (t *toolset) read(ctx context.Context, req *sdk.CallToolRequest, in readInput) (*sdk.CallToolResult, readOutput, error) {
-	if _, err := t.callerOf(ctx, req); err != nil {
+	access, err := t.accessOf(ctx, req, 0)
+	if err != nil {
 		return nil, readOutput{}, err
 	}
-	entry, err := t.Logs.Entry(ctx, in.EntryID)
+	entry, err := t.Logs.Entry(ctx, access.Scope, in.EntryID)
 	if err != nil {
 		return nil, readOutput{}, mcpkit.Failure(err, hintEntry)
 	}
 	out := readOutput{Entry: render(entry, full), ReceivedAt: stamp(entry.ReceivedAt), SessionID: metaText(entry.Meta, "session_id")}
 	before, after := min(max(in.Before, 0), maxNeighbours), min(max(in.After, 0), maxNeighbours)
 	if before+after > 0 {
-		around, err := t.Logs.Context(ctx, entry.ID, before, after)
+		around, err := t.Logs.Context(ctx, access.Scope, entry.ID, before, after)
 		if err != nil {
 			return nil, readOutput{}, mcpkit.Failure(err, hintEntry)
 		}
 		out.Newer, out.Older = neighbours(around, entry.ID)
 	}
 	if in.ResolveStack && t.Stacks != nil {
-		stack := t.Stacks.Resolve(ctx, entry.App, metaText(entry.Meta, "release"), metaText(entry.Meta, "stack"))
+		stack := t.Stacks.Resolve(ctx, entry.WorkspaceID, entry.App, metaText(entry.Meta, "release"), metaText(entry.Meta, "stack"))
 		out.Stack = &stack
 	}
 	return nil, fit(out), nil

@@ -33,16 +33,17 @@ func (t *toolset) describe(ctx context.Context, item mcpkit.PendingItem, a mcpki
 	if err != nil {
 		return out
 	}
+	access, err := t.accessOfUser(ctx, a.UserID)
+	if err != nil {
+		return out
+	}
 	switch a.Kind {
 	case kindDeleteQuery:
-		if q, err := t.savedQuery(ctx, id); err == nil {
+		if q, err := t.savedQuery(ctx, access.Scope, id); err == nil {
 			out.Query = &PendingQuery{ID: q.ID, Name: q.Name, App: q.Params.App, Levels: q.Params.Levels, Q: q.Params.Q}
 		}
 	case kindDeleteAlert:
-		if !t.isAdmin(ctx, a.UserID) {
-			return out
-		}
-		if r, err := t.alertRule(ctx, id); err == nil {
+		if r, err := t.alertRule(ctx, access.Owned(), id); err == nil {
 			out.Alert = &PendingAlert{
 				ID: r.ID, Name: r.Name, SavedQuery: r.QueryName, Threshold: r.Threshold, WindowMinutes: r.WindowMinutes,
 				Provider: string(r.Provider), Enabled: r.Enabled,

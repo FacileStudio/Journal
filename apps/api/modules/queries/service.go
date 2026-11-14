@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"strings"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -23,15 +24,29 @@ func NewService(orm *gorm.DB) *Service {
 	return &Service{orm: orm}
 }
 
-func (s *Service) List(ctx context.Context) ([]schemas.SavedQuery, error) {
+// List returns the saved queries of the workspaces in scope, by name.
+func (s *Service) List(ctx context.Context, scope workspace.Scope) ([]schemas.SavedQuery, error) {
 	var records []schemas.SavedQuery
-	if err := s.orm.WithContext(ctx).Order("name asc").Find(&records).Error; err != nil {
+	if err := scope.Where(s.orm.WithContext(ctx)).Order("name asc, workspace_id asc").Find(&records).Error; err != nil {
 		return nil, errors.Internal("failed to list saved queries", err)
 	}
 	return records, nil
 }
 
-func (s *Service) Create(ctx context.Context, name string, params schemas.SavedQueryParams) (*schemas.SavedQuery, error) {
+// Get returns the saved query id when it belongs to a workspace in scope.
+func (s *Service) Get(ctx context.Context, scope workspace.Scope, id int64) (schemas.SavedQuery, error) {
+	var record schemas.SavedQuery
+	if err := scope.Where(s.orm.WithContext(ctx)).Where("id = ?", id).Take(&record).Error; err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return schemas.SavedQuery{}, errors.NotFound("saved query not found")
+		}
+		return schemas.SavedQuery{}, errors.Internal("failed to load the saved query", err)
+	}
+	return record, nil
+}
+
+// Create stores a saved query in workspaceID. Names are unique per workspace.
+func (s *Service) Create(ctx context.Context, workspaceID int64, name string, params schemas.SavedQueryParams) (*schemas.SavedQuery, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.Invalid("name is required")
@@ -40,7 +55,7 @@ func (s *Service) Create(ctx context.Context, name string, params schemas.SavedQ
 		return nil, err
 	}
 
-	record := schemas.SavedQuery{Name: name, Params: params}
+	record := schemas.SavedQuery{WorkspaceID: workspaceID, Name: name, Params: params}
 	if err := s.orm.WithContext(ctx).Create(&record).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrDuplicatedKey) {
 			return nil, errors.Conflict("a saved query with this name already exists")
@@ -50,7 +65,12 @@ func (s *Service) Create(ctx context.Context, name string, params schemas.SavedQ
 	return &record, nil
 }
 
-func (s *Service) Delete(ctx context.Context, id int64) error {
+// Delete removes the saved query id of a workspace in scope, unless an
+// alert rule still watches it.
+func (s *Service) Delete(ctx context.Context, scope workspace.Scope, id int64) error {
+	if _, err := s.Get(ctx, scope, id); err != nil {
+		return err
+	}
 	var dependents int64
 	if err := s.orm.WithContext(ctx).Model(&schemas.AlertRule{}).Where("saved_query_id = ?", id).Count(&dependents).Error; err != nil {
 		return errors.Internal("failed to check dependent alert rules", err)
@@ -58,7 +78,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	if dependents > 0 {
 		return errors.Conflict("delete dependent alert rules first")
 	}
-	if err := s.orm.WithContext(ctx).Delete(&schemas.SavedQuery{}, id).Error; err != nil {
+	if err := scope.Where(s.orm.WithContext(ctx)).Where("id = ?", id).Delete(&schemas.SavedQuery{}).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrForeignKeyViolated) {
 			return errors.Conflict("delete dependent alert rules first")
 		}

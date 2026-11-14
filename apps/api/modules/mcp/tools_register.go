@@ -7,7 +7,19 @@ import (
 // list is the curated tool set. Log reads are open world: apps and visitors'
 // browsers write the messages and meta. The two deletions are confirmed.
 func (t *toolset) list() []mcpkit.Tool {
-	return append(append(append(t.logReads(), t.queryTools()...), t.alertTools()...), t.sensitive()...)
+	return append(append(append(append(t.workspaceTools(), t.logReads()...), t.queryTools()...), t.alertTools()...), t.sensitive()...)
+}
+
+func (t *toolset) workspaceTools() []mcpkit.Tool {
+	return []mcpkit.Tool{
+		mcpkit.NewTool(mcpkit.ToolSpec{
+			Name: toolWorkspaces, Title: "List workspaces",
+			Description: "List the workspaces you belong to: id, name, your role (owner or member) and whether it is " +
+				"your personal one. Every log entry, saved query and alert rule belongs to one; pass an id as " +
+				"workspace_id to the other tools to look at one workspace only.",
+			Annotations: &mcpkit.Annotations{ReadOnly: true, Idempotent: true},
+		}, t.listWorkspaces),
+	}
 }
 
 // logReads are the four tools over log entries.
@@ -49,14 +61,14 @@ func (t *toolset) queryTools() []mcpkit.Tool {
 	return []mcpkit.Tool{
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolQueries, Title: "List saved queries",
-			Description: "List the saved queries everyone in Journal shares: id, name and filters. Run one by passing " +
+			Description: "List the saved queries of your workspaces: id, workspace_id, name and filters. Run one by passing " +
 				"its filters to journal_search_logs.",
 			Annotations: &mcpkit.Annotations{ReadOnly: true, Idempotent: true},
 		}, t.listQueries),
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolSaveQuery, Title: "Save a query",
-			Description: "Save a named filter (app, levels, q, source, request_id) for everyone in Journal, as the " +
-				"Save button of the log explorer does. Names are unique. An alert rule needs a saved query to watch.",
+			Description: "Save a named filter (app, levels, q, source, request_id) for everyone in a workspace, as the " +
+				"Save button of the log explorer does. Names are unique within a workspace. An alert rule needs a saved query to watch.",
 			Annotations: &mcpkit.Annotations{},
 		}, t.saveQuery),
 	}
@@ -68,21 +80,21 @@ func (t *toolset) alertTools() []mcpkit.Tool {
 	return []mcpkit.Tool{
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolAlerts, Title: "List alert rules",
-			Description: "List the alert rules (administrators only): the saved query each watches, the threshold of " +
+			Description: "List the alert rules of the workspaces you own: the saved query each watches, the threshold of " +
 				"matching entries within window_minutes, where it notifies (Antenne, or a webhook host), whether it is " +
 				"on and when it last fired.",
 			Annotations: &mcpkit.Annotations{ReadOnly: true, Idempotent: true},
 		}, t.listAlerts),
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolCreateAlert, Title: "Create an alert rule",
-			Description: "Create an alert rule (administrators only) that fires when a saved query matches at least " +
+			Description: "Create an alert rule (workspace owners only) that fires when a saved query matches at least " +
 				"threshold entries within window_minutes (1 to 1440). provider antenne notifies through the suite's " +
-				"Antenne bus; webhook posts to webhook_url, which must be a public http or https URL. It starts enabled.",
+				"Antenne bus, for the instance workspace only; webhook posts to webhook_url, which must be a public http or https URL. It starts enabled.",
 			Annotations: &mcpkit.Annotations{OpenWorld: true},
 		}, t.createAlert),
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolSetAlert, Title: "Turn an alert rule on or off",
-			Description: "Enable or disable one alert rule (administrators only). A disabled rule keeps its settings " +
+			Description: "Enable or disable one alert rule (workspace owners only). A disabled rule keeps its settings " +
 				"and stops firing until it is enabled again.",
 			Annotations: &mcpkit.Annotations{Destructive: true, Idempotent: true},
 		}, t.setAlert),
@@ -94,14 +106,14 @@ func (t *toolset) sensitive() []mcpkit.Tool {
 	return []mcpkit.Tool{
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolDeleteQuery, Title: "Delete a saved query",
-			Description: "Delete a saved query for everyone, for good. A query an alert rule watches cannot be deleted " +
+			Description: "Delete a saved query for everyone in its workspace, for good. A query an alert rule watches cannot be deleted " +
 				"until that rule is. The user always confirms: in your client when it can ask, otherwise the result has " +
 				"status pending_confirmation and a confirm_url to give the user. Nothing is deleted before they confirm.",
 			Annotations: &mcpkit.Annotations{Destructive: true, Idempotent: true},
 		}, t.deleteQuery),
 		mcpkit.NewTool(mcpkit.ToolSpec{
 			Name: toolDeleteAlert, Title: "Delete an alert rule",
-			Description: "Delete an alert rule for good (administrators only). The user always confirms: in your client " +
+			Description: "Delete an alert rule for good (workspace owners only). The user always confirms: in your client " +
 				"when it can ask, otherwise the result has status pending_confirmation and a confirm_url to give the " +
 				"user. Nothing is deleted before they confirm. To pause a rule instead, use journal_set_alert_enabled.",
 			Annotations: &mcpkit.Annotations{Destructive: true, Idempotent: true},

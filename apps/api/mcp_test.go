@@ -33,7 +33,7 @@ func TestMCPMountsBesideTheAPI(t *testing.T) {
 		Pending: mcptest.NewPending(),
 	}}
 	oidcKit, sessions, users := testKitFor(t, appEnv, nil)
-	router := built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{}, setup))
+	router := built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{}, setup, tenancy{}))
 
 	for _, probe := range []struct {
 		method, path string

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
@@ -37,7 +38,7 @@ type Handler struct {
 // so the dependency points this way and the two packages do not import each
 // other.
 type StackResolver interface {
-	Resolve(ctx context.Context, app, release, stack string) sourcemaps.Stack
+	Resolve(ctx context.Context, workspaceID int64, app, release, stack string) sourcemaps.Stack
 }
 
 func newHandler(service *Service, stacks StackResolver) *Handler {
@@ -57,7 +58,7 @@ func (h *Handler) stack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := h.service.Entry(r.Context(), id)
+	entry, err := h.service.Entry(r.Context(), workspace.ScopeFrom(r.Context()), id)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -69,7 +70,7 @@ func (h *Handler) stack(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteJSON(w, http.StatusOK, sourcemaps.Stack{Release: release, Frames: []sourcemaps.Frame{}})
 		return
 	}
-	httpjson.WriteJSON(w, http.StatusOK, h.stacks.Resolve(r.Context(), entry.App, release, raw))
+	httpjson.WriteJSON(w, http.StatusOK, h.stacks.Resolve(r.Context(), entry.WorkspaceID, entry.App, release, raw))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +80,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records, err := h.service.List(r.Context(), params)
+	records, err := h.service.List(r.Context(), workspace.ScopeFrom(r.Context()), params)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -120,7 +121,7 @@ func (h *Handler) histogram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bucketSeconds := BucketSeconds(int64(params.Until.Sub(*params.Since) / time.Second))
-	buckets, err := h.service.Histogram(r.Context(), params, bucketSeconds)
+	buckets, err := h.service.Histogram(r.Context(), workspace.ScopeFrom(r.Context()), params, bucketSeconds)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -140,7 +141,7 @@ func (h *Handler) logContext(w http.ResponseWriter, r *http.Request) {
 	before := parseContextSize(q.Get("before"))
 	after := parseContextSize(q.Get("after"))
 
-	records, err := h.service.Context(r.Context(), id, before, after)
+	records, err := h.service.Context(r.Context(), workspace.ScopeFrom(r.Context()), id, before, after)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -155,7 +156,7 @@ func (h *Handler) logContext(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) apps(w http.ResponseWriter, r *http.Request) {
-	apps, err := h.service.Apps(r.Context())
+	apps, err := h.service.Apps(r.Context(), workspace.ScopeFrom(r.Context()))
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -264,12 +265,13 @@ func parseLevels(values []string) []string {
 
 func mapEntry(record schemas.LogEntry) LogResponse {
 	return LogResponse{
-		ID:         record.ID,
-		App:        record.App,
-		Level:      record.Level,
-		Message:    record.Message,
-		Meta:       record.Meta,
-		CreatedAt:  record.CreatedAt.UTC().Format(time.RFC3339),
-		ReceivedAt: record.ReceivedAt.UTC().Format(time.RFC3339),
+		ID:          record.ID,
+		WorkspaceID: record.WorkspaceID,
+		App:         record.App,
+		Level:       record.Level,
+		Message:     record.Message,
+		Meta:        record.Meta,
+		CreatedAt:   record.CreatedAt.UTC().Format(time.RFC3339),
+		ReceivedAt:  record.ReceivedAt.UTC().Format(time.RFC3339),
 	}
 }

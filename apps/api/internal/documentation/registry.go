@@ -15,6 +15,7 @@ import (
 // fails the build when the router grows a route this does not describe.
 var Registry = Response{Modules: []Module{
 	authModule,
+	workspacesModule,
 	ingestModule,
 	logsModule,
 	apiKeysModule,
@@ -40,6 +41,7 @@ var (
 	errInvalidBody = Error{Status: 400, Code: "invalid_argument", Description: "the request body is malformed or fails validation"}
 	errUnauth      = Error{Status: 401, Code: "unauthenticated", Description: "the session token is missing, invalid, or expired"}
 	errNotAdmin    = Error{Status: 403, Code: "permission_denied", Description: "the session belongs to a non-admin user"}
+	errNotOwner    = Error{Status: 403, Code: "permission_denied", Description: "the caller is not an owner of the target workspace"}
 	errSessionRate = Error{Status: 429, Code: "rate_limited", Description: "more than 300 requests per minute from this IP"}
 	errBadID       = Error{Status: 400, Code: "invalid_argument", Description: "id is not an integer"}
 )
@@ -162,7 +164,9 @@ var ingestModule = Module{
 				"**Body size: the 8 MB cap applies to uncompressed bodies too.** Content-Encoding: gzip is accepted, and the two limits are 8 MB on the body as it arrives and 32 MB once decompressed — " +
 				"32 MB is only the decompressed ceiling, never a licence to POST a 20 MB plain JSON batch. A plain body above 8 MB is rejected with 413, so a shipper batching large meta payloads must split them.\n\n" +
 				"Rate limiting is 600/min keyed on the SHA-256 of the bearer token and answers 429 with Retry-After in seconds. " +
-				"Shippers should buffer and retry on 429 and 5xx, and drop on other 4xx. Returns 201; entries are written in batches of 500.",
+				"Shippers should buffer and retry on 429 and 5xx, and drop on other 4xx. Returns 201; entries are written in batches of 500.\n\n" +
+				"Entries land in the key's workspace; the legacy token writes to the instance workspace, where INGEST_ROUTES may send an app name prefix to another workspace. " +
+				"A workspace on a limited plan has a daily entry cap (UTC day): a batch over it is refused whole with 429.",
 			Auth:         "bearer",
 			RequestBody:  `{"app":string,"level":string,"message":string,"ts":string,"meta":object} or {"entries":[…]}`,
 			ResponseBody: `{"ingested":int}`,
@@ -170,7 +174,7 @@ var ingestModule = Module{
 				{Status: 400, Code: "invalid_argument", Description: "unknown level, missing message, unparseable ts, over 1000 entries, or an app the API key is not scoped to"},
 				{Status: 401, Code: "unauthenticated", Description: "no bearer token, or one matching neither an active API key nor INGEST_TOKEN"},
 				{Status: 413, Code: "resource_exhausted", Description: "the body exceeds 8 MB, or 32 MB once decompressed"},
-				{Status: 429, Code: "rate_limited", Description: "more than 600 requests per minute for this token"},
+				{Status: 429, Code: "rate_limited", Description: "more than 600 requests per minute for this token, or the workspace's daily entry cap is reached"},
 			},
 		},
 		{
@@ -243,17 +247,17 @@ var sourceMapsModule = Module{
 			Summary:      "Summarise every release holding maps",
 			Auth:         "bearer",
 			ResponseBody: `{"releases":[{"app":string,"release":string,"files":int,"bytes":int64,"created_at":string}]}`,
-			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
+			Errors:       []Error{errUnauth, errNotOwner, errSessionRate},
 		},
 		{
 			Method:      "DELETE",
 			Path:        "/sourcemaps",
 			Summary:     "Drop one release's maps",
-			Description: "Takes ?app= and ?release=. Also evicts the parsed-map cache, so a rollback stops resolving against the build that was rolled back.",
+			Description: "Takes ?app=, ?release= and ?workspace_id=. Also evicts the parsed-map cache, so a rollback stops resolving against the build that was rolled back.",
 			Auth:        "bearer",
 			Errors: []Error{
-				{Status: 400, Code: "invalid_argument", Description: "app or release is missing"},
-				errUnauth, errNotAdmin, errSessionRate,
+				{Status: 400, Code: "invalid_argument", Description: "app, release or workspace_id is missing"},
+				errUnauth, errNotOwner, errSessionRate,
 			},
 		},
 	},
@@ -347,7 +351,7 @@ var apiKeysModule = Module{
 			Summary:      "List API keys",
 			Auth:         "bearer",
 			ResponseBody: `{"keys":[{"id":int64,"app":string,"kind":string,"prefix":string,"allowed_origins":[string],"daily_quota":int,"used_today":int64,"created_at":string,"revoked_at":string|null}]}`,
-			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
+			Errors:       []Error{errUnauth, errNotOwner, errSessionRate},
 		},
 		{
 			Method:  "POST",
@@ -359,12 +363,12 @@ var apiKeysModule = Module{
 				"A public key requires allowed_origins (1 to 8 exact scheme://host[:port] entries, no wildcards, normalized on save) and a daily_quota of at least 1, " +
 				"and it authenticates POST /ingest/browser only.",
 			Auth:         "bearer",
-			RequestBody:  `{"app":string,"kind":string,"allowed_origins":[string],"daily_quota":int}`,
+			RequestBody:  `{"workspace_id":int64,"app":string,"kind":string,"allowed_origins":[string],"daily_quota":int}`,
 			ResponseBody: `{"key":APIKey,"token":string}`,
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "app does not match ^[a-z0-9][a-z0-9-]{0,63}$"},
 				errUnauth,
-				errNotAdmin,
+				errNotOwner,
 				errSessionRate,
 			},
 		},
@@ -378,7 +382,7 @@ var apiKeysModule = Module{
 			Errors: []Error{
 				errBadID,
 				errUnauth,
-				errNotAdmin,
+				errNotOwner,
 				{Status: 404, Code: "not_found", Description: "no API key with that id"},
 				errSessionRate,
 			},
@@ -405,7 +409,7 @@ var queriesModule = Module{
 			Summary:      "Save a filter set",
 			Description:  "Returns 201. levels must be a subset of debug, info, warn, error.",
 			Auth:         "bearer",
-			RequestBody:  `{"name":string,"params":{"app":string,"levels":[string],"q":string,"source":string,"request_id":string}}`,
+			RequestBody:  `{"workspace_id":int64,"name":string,"params":{"app":string,"levels":[string],"q":string,"source":string,"request_id":string}}`,
 			ResponseBody: `{"query":SavedQuery}`,
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "the name is empty or levels contains an unknown level"},
@@ -441,7 +445,7 @@ var alertsModule = Module{
 			Summary:      "List alert rules",
 			Auth:         "bearer",
 			ResponseBody: `{"alerts":[{"id":int64,"name":string,"saved_query_id":int64,"query_name":string,"threshold":int,"window_minutes":int,"webhook_url":string,"webhook_header":string,"enabled":bool,"last_fired_at":string|null,"created_at":string}]}`,
-			Errors:       []Error{errUnauth, errNotAdmin, errSessionRate},
+			Errors:       []Error{errUnauth, errNotOwner, errSessionRate},
 		},
 		{
 			Method:  "POST",
@@ -456,7 +460,7 @@ var alertsModule = Module{
 			Errors: []Error{
 				errInvalidBody,
 				errUnauth,
-				errNotAdmin,
+				errNotOwner,
 				{Status: 404, Code: "not_found", Description: "no saved query with that saved_query_id"},
 				errSessionRate,
 			},
@@ -473,7 +477,7 @@ var alertsModule = Module{
 			Errors: []Error{
 				{Status: 400, Code: "invalid_argument", Description: "id is not an integer, or enabled is missing"},
 				errUnauth,
-				errNotAdmin,
+				errNotOwner,
 				{Status: 404, Code: "not_found", Description: "no alert rule with that id"},
 				errSessionRate,
 			},
@@ -485,7 +489,7 @@ var alertsModule = Module{
 			Description: "Returns 204, and is idempotent for an unknown id.",
 			Auth:        "bearer",
 			PathParams:  idParam,
-			Errors:      []Error{errBadID, errUnauth, errNotAdmin, errSessionRate},
+			Errors:      []Error{errBadID, errUnauth, errNotOwner, errSessionRate},
 		},
 	},
 }

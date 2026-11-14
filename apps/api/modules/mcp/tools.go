@@ -23,6 +23,7 @@ const (
 	toolCreateAlert = "journal_create_alert"
 	toolSetAlert    = "journal_set_alert_enabled"
 	toolDeleteAlert = "journal_delete_alert"
+	toolWorkspaces  = "journal_list_workspaces"
 	hintEntry       = "Call journal_search_logs for the ids of entries that exist."
 	hintQuery       = "Call journal_list_saved_queries for the ids of saved queries."
 	hintAlert       = "Call journal_list_alerts for the ids of alert rules."
@@ -31,8 +32,6 @@ const (
 
 var (
 	errNoCaller = stderrors.New("this request carries no valid access token. Reconnect Journal")
-	errNotAdmin = stderrors.New("alert rules are for Journal administrators only, and this account is not one. " +
-		"Saved queries and logs stay available")
 )
 
 // toolset holds what the tool handlers share.
@@ -53,29 +52,6 @@ func (t *toolset) callerOf(ctx context.Context, req *sdk.CallToolRequest) (kit.I
 
 // adminOf is callerOf for the alert tools, which middleware.RequireAdmin
 // guards on the REST side.
-func (t *toolset) adminOf(ctx context.Context, req *sdk.CallToolRequest) (kit.Identity, error) {
-	account, err := t.callerOf(ctx, req)
-	if err != nil {
-		return kit.Identity{}, err
-	}
-	if !account.IsAdmin {
-		return kit.Identity{}, errNotAdmin
-	}
-	return account, nil
-}
-
-// isAdmin reports whether the account behind a pending action's user id is
-// still an administrator, for actions confirmed later on the page.
-func (t *toolset) isAdmin(ctx context.Context, userID string) bool {
-	id, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		return false
-	}
-	account, err := t.Accounts.Identity(ctx, id)
-	return err == nil && account.IsAdmin
-}
-
-// target is the pending-action reference of a saved query or an alert rule.
 func target(id int64) string {
 	return strconv.FormatInt(id, 10)
 }

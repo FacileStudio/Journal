@@ -14,7 +14,7 @@ func TestShouldFire(t *testing.T) {
 		return &ts
 	}
 	rule := func(enabled bool, threshold, windowMinutes int, lastFiredAt *time.Time) schemas.AlertRule {
-		return schemas.AlertRule{Enabled: enabled, Threshold: threshold, WindowMinutes: windowMinutes, LastFiredAt: lastFiredAt}
+		return schemas.AlertRule{WorkspaceID: 1, Enabled: enabled, Threshold: threshold, WindowMinutes: windowMinutes, LastFiredAt: lastFiredAt}
 	}
 
 	cases := []struct {

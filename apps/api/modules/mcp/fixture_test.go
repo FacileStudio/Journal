@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/modules/logs"
@@ -91,6 +92,11 @@ func (f *fixture) seed(t *testing.T) {
 		err := f.db.Raw(`INSERT INTO users (email, name, is_admin) VALUES (?, ?, ?) RETURNING id`, sub+"@example.test", sub, admin).Scan(&id).Error
 		must(t, err)
 		f.users[sub] = id
+		role := schemas.RoleMember
+		if admin {
+			role = schemas.RoleOwner
+		}
+		must(t, f.db.Create(&schemas.WorkspaceMember{WorkspaceID: 1, UserID: id, Role: role}).Error)
 	}
 }
 
@@ -110,7 +116,7 @@ func (f *fixture) build(t *testing.T, unlimited bool) *Service {
 		perMinute = 1_000_000
 	}
 	service, err := NewService(Deps{
-		Logs: logs.NewService(f.db), Stacks: sourcemaps.NewService(f.db), Queries: queries.NewService(f.db),
+		Logs: logs.NewService(f.db), Workspaces: workspace.NewService(f.db), Stacks: sourcemaps.NewService(f.db), Queries: queries.NewService(f.db),
 		Alerts: alerts.NewService(f.db), Accounts: users,
 	}, Config{
 		Resource: f.resource, Issuer: f.issuer.URL, Version: "test", StateKey: []byte("state-key"), Verifier: verifier,
@@ -137,7 +143,7 @@ func (f *fixture) connect(t *testing.T, subject string) *sdk.ClientSession {
 // entry stores a log entry age before now.
 func (f *fixture) entry(t testing.TB, app, level, message string, age time.Duration, meta map[string]any) schemas.LogEntry {
 	t.Helper()
-	e := schemas.LogEntry{App: app, Level: level, Message: message, Meta: meta, CreatedAt: time.Now().Add(-age)}
+	e := schemas.LogEntry{WorkspaceID: 1, App: app, Level: level, Message: message, Meta: meta, CreatedAt: time.Now().Add(-age)}
 	must(t, f.db.Create(&e).Error)
 	return e
 }
@@ -145,7 +151,7 @@ func (f *fixture) entry(t testing.TB, app, level, message string, age time.Durat
 // query stores a saved query.
 func (f *fixture) query(t testing.TB, name string) schemas.SavedQuery {
 	t.Helper()
-	q := schemas.SavedQuery{Name: name, Params: schemas.SavedQueryParams{App: "nuage", Levels: []string{"error"}}}
+	q := schemas.SavedQuery{WorkspaceID: 1, Name: name, Params: schemas.SavedQueryParams{App: "nuage", Levels: []string{"error"}}}
 	must(t, f.db.Create(&q).Error)
 	return q
 }
@@ -153,7 +159,7 @@ func (f *fixture) query(t testing.TB, name string) schemas.SavedQuery {
 // alert stores an enabled webhook alert rule on query.
 func (f *fixture) alert(t testing.TB, name string, queryID int64) schemas.AlertRule {
 	t.Helper()
-	r := schemas.AlertRule{
+	r := schemas.AlertRule{WorkspaceID: 1,
 		Name: name, SavedQueryID: queryID, Provider: schemas.AlertProviderWebhook, Threshold: 3, WindowMinutes: 5,
 		WebhookURL: "https://hooks.example.test/services/T0/B0/secret-token", Enabled: true,
 	}

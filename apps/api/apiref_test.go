@@ -81,7 +81,7 @@ func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 		sso.erasures = deletions.NewService(nil, registre, deletions.Store{}, slog.New(slog.DiscardHandler))
 		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: portepg.New(nil).Identities()}
 	}
-	return built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso, nil))
+	return built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso, nil, tenancy{}))
 }
 
 // ssoEnv points the kit at a stub issuer, which is what it takes to see the

@@ -54,12 +54,15 @@ const (
 type Policy struct {
 	Days       int
 	MaxEntries int
+	Tenants    Tenants
 }
 
 // Result counts the entries one Sweep deleted, by the bound that removed them.
 type Result struct {
 	Expired  int64
 	Overflow int64
+	Tenant   int64
+	Purged   int64
 }
 
 // Load reads RETENTION_DAYS and RETENTION_MAX_ENTRIES and refuses a negative
@@ -84,7 +87,7 @@ func Load() (Policy, error) {
 // bounds nothing.
 func Run(ctx context.Context, db *sql.DB, p Policy, logger *slog.Logger) {
 	warn(p, logger)
-	if p.Days == 0 && p.MaxEntries == 0 {
+	if p.Days == 0 && p.MaxEntries == 0 && p.Tenants == nil {
 		return
 	}
 	ticker := time.NewTicker(Interval)
@@ -109,13 +112,18 @@ func sweep(ctx context.Context, db *sql.DB, p Policy, now time.Time, batch int) 
 	var err error
 	if p.Days > 0 {
 		cutoff := now.Add(-time.Duration(p.Days) * 24 * time.Hour)
-		if r.Expired, err = deleteBatches(ctx, db, expireBatch, cutoff, batch); err != nil {
+		if r.Expired, err = deleteBatches(ctx, db, expireBatch, batch, cutoff); err != nil {
 			return r, fmt.Errorf("retention: delete expired entries: %w", err)
 		}
 	}
 	if p.MaxEntries > 0 {
 		if r.Overflow, err = trim(ctx, db, p.MaxEntries, batch); err != nil {
 			return r, fmt.Errorf("retention: trim to the ceiling: %w", err)
+		}
+	}
+	if p.Tenants != nil {
+		if r.Tenant, r.Purged, err = sweepTenants(ctx, db, p.Tenants, now, batch); err != nil {
+			return r, err
 		}
 	}
 	return r, nil
@@ -134,15 +142,16 @@ func trim(ctx context.Context, db *sql.DB, ceiling int, batch int) (int64, error
 	if bound <= 0 {
 		return 0, nil
 	}
-	return deleteBatches(ctx, db, trimBatch, bound, batch)
+	return deleteBatches(ctx, db, trimBatch, batch, bound)
 }
 
-// deleteBatches runs query, a DELETE bounded by bound and a LIMIT of batch,
-// until a batch comes back short, and returns the rows deleted.
-func deleteBatches(ctx context.Context, db *sql.DB, query string, bound any, batch int) (int64, error) {
+// deleteBatches runs query, a DELETE bounded by args and a LIMIT of batch
+// as its last parameter, until a batch comes back short, and returns the rows
+// deleted.
+func deleteBatches(ctx context.Context, db *sql.DB, query string, batch int, args ...any) (int64, error) {
 	var total int64
 	for {
-		res, err := db.ExecContext(ctx, query, bound, batch)
+		res, err := db.ExecContext(ctx, query, append(args, batch)...)
 		if err != nil {
 			return total, err
 		}
@@ -163,6 +172,8 @@ func sweepAndLog(ctx context.Context, db *sql.DB, p Policy, logger *slog.Logger)
 	attrs := []any{
 		slog.Int64("expired", r.Expired),
 		slog.Int64("overflow", r.Overflow),
+		slog.Int64("tenant_expired", r.Tenant),
+		slog.Int64("purged", r.Purged),
 		slog.Int("retention_days", p.Days),
 		slog.Int("max_entries", p.MaxEntries),
 		slog.Duration("took", time.Since(started)),
@@ -170,7 +181,7 @@ func sweepAndLog(ctx context.Context, db *sql.DB, p Policy, logger *slog.Logger)
 	switch {
 	case err != nil && ctx.Err() == nil:
 		logger.Error("retention sweep failed", append(attrs, slog.Any("error", err))...)
-	case err == nil && r.Expired+r.Overflow > 0:
+	case err == nil && r.Expired+r.Overflow+r.Tenant+r.Purged > 0:
 		logger.Info("retention deleted old log entries", attrs...)
 	}
 }

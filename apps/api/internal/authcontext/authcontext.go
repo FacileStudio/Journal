@@ -2,11 +2,16 @@ package authcontext
 
 import "context"
 
-// IngestScope is the per-request ingest context. KeyID, DailyQuota and Origin
-// are set by the browser endpoint only; a secret key leaves them zero and the
-// quota is not consulted.
+// IngestScope is the per-request ingest context. WorkspaceID is the
+// workspace every entry of the request is written to: the key's own, or the
+// instance workspace for the legacy token, which alone may be routed by app
+// name (Routable). KeyID, DailyQuota and Origin are set by the browser
+// endpoint only; a secret key leaves them zero and the key quota is not
+// consulted.
 type IngestScope struct {
-	App string
+	App         string
+	WorkspaceID int64
+	Routable    bool
 
 	KeyID      int64
 	DailyQuota int

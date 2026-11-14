@@ -51,11 +51,11 @@ func TestIngestContractIsFrozen(t *testing.T) {
 func contractKeys(t *testing.T, app liveApp) ingestKeys {
 	t.Helper()
 	service := apikeys.NewService(app.db)
-	_, secret, err := service.Create(context.Background(), apikeys.NewKey{App: "nuage"})
+	_, secret, err := service.Create(context.Background(), apikeys.NewKey{WorkspaceID: 1, App: "nuage"})
 	if err != nil {
 		t.Fatalf("create a server key: %v", err)
 	}
-	_, public, err := service.Create(context.Background(), apikeys.NewKey{
+	_, public, err := service.Create(context.Background(), apikeys.NewKey{WorkspaceID: 1,
 		App: "nuage", Kind: schemas.KeyKindPublic, AllowedOrigins: []string{"https://nuage.facile.studio"}, DailyQuota: 1000,
 	})
 	if err != nil {

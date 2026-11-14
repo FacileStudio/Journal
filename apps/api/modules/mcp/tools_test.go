@@ -107,9 +107,9 @@ func TestCountAndApps(t *testing.T) {
 	}
 }
 
-// TestAlertsAreForAdministrators checks a member reads no alert rule while
-// the administrator does, with the webhook named by its host only.
-func TestAlertsAreForAdministrators(t *testing.T) {
+// TestAlertsAreForWorkspaceOwners checks a member reads no alert rule while
+// the workspace owner does, with the webhook named by its host only.
+func TestAlertsAreForWorkspaceOwners(t *testing.T) {
 	f := newFixture(t)
 	q := f.query(t, "Nuage errors")
 	rule := f.alert(t, "Nuage burst", q.ID)
@@ -120,7 +120,7 @@ func TestAlertsAreForAdministrators(t *testing.T) {
 		toolDeleteAlert: {"alert_id": rule.ID},
 		toolCreateAlert: {"name": "x", "saved_query_id": q.ID, "threshold": 1, "window_minutes": 5},
 	} {
-		if text := refused(t, member, tool, args); !strings.Contains(text, "administrators only") {
+		if text := refused(t, member, tool, args); !strings.Contains(text, "workspace owners only") {
 			t.Fatalf("%s must refuse a member, got %q", tool, text)
 		}
 	}

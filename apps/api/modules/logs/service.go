@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/logfilter"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -31,11 +32,12 @@ type ListParams struct {
 	BeforeID *int64
 }
 
-func (s *Service) filtered(ctx context.Context, params ListParams) *gorm.DB {
-	return logfilter.Apply(s.orm.WithContext(ctx).Model(&schemas.LogEntry{}), params.Params)
+func (s *Service) filtered(ctx context.Context, scope workspace.Scope, params ListParams) *gorm.DB {
+	return logfilter.Apply(s.orm.WithContext(ctx), scope, params.Params)
 }
 
-func (s *Service) List(ctx context.Context, params ListParams) ([]schemas.LogEntry, error) {
+// List returns one page of the entries in scope that match params, newest first.
+func (s *Service) List(ctx context.Context, scope workspace.Scope, params ListParams) ([]schemas.LogEntry, error) {
 	if params.Limit <= 0 {
 		params.Limit = 100
 	}
@@ -43,7 +45,7 @@ func (s *Service) List(ctx context.Context, params ListParams) ([]schemas.LogEnt
 		params.Limit = 1000
 	}
 
-	query := s.filtered(ctx, params)
+	query := s.filtered(ctx, scope, params)
 	if params.BeforeTs != nil && params.BeforeID != nil {
 		query = query.Where("(created_at, id) < (?, ?)", *params.BeforeTs, *params.BeforeID)
 	}
@@ -61,9 +63,11 @@ type histogramRow struct {
 	Count    int64
 }
 
-func (s *Service) Histogram(ctx context.Context, params ListParams, bucketSeconds int64) ([]HistogramBucket, error) {
+// Histogram counts the entries in scope that match params, per level and
+// per bucket of bucketSeconds.
+func (s *Service) Histogram(ctx context.Context, scope workspace.Scope, params ListParams, bucketSeconds int64) ([]HistogramBucket, error) {
 	var rows []histogramRow
-	err := s.filtered(ctx, params).
+	err := s.filtered(ctx, scope, params).
 		Select("to_timestamp(floor(extract(epoch from created_at) / ?) * ?) as bucket_ts, level, count(*) as count", bucketSeconds, bucketSeconds).
 		Group("bucket_ts, level").
 		Order("bucket_ts asc").
@@ -83,11 +87,11 @@ func (s *Service) Histogram(ctx context.Context, params ListParams, bucketSecond
 	return buckets, nil
 }
 
-// Entry returns one entry, for the endpoints that work on a single line
-// rather than a page.
-func (s *Service) Entry(ctx context.Context, id int64) (schemas.LogEntry, error) {
+// Entry returns one entry in scope, for the endpoints that work on a single
+// line rather than a page. An entry of another workspace is not found.
+func (s *Service) Entry(ctx context.Context, scope workspace.Scope, id int64) (schemas.LogEntry, error) {
 	var entry schemas.LogEntry
-	if err := s.orm.WithContext(ctx).First(&entry, id).Error; err != nil {
+	if err := logfilter.Scoped(s.orm.WithContext(ctx), scope).Where("id = ?", id).Take(&entry).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return schemas.LogEntry{}, errors.NotFound("log entry not found")
 		}
@@ -96,17 +100,17 @@ func (s *Service) Entry(ctx context.Context, id int64) (schemas.LogEntry, error)
 	return entry, nil
 }
 
-func (s *Service) Context(ctx context.Context, id int64, before, after int) ([]schemas.LogEntry, error) {
-	var anchor schemas.LogEntry
-	if err := s.orm.WithContext(ctx).First(&anchor, id).Error; err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.NotFound("log entry not found")
-		}
-		return nil, errors.Internal("failed to load log entry", err)
+// Context returns the entry id in scope with up to before older and after
+// newer entries of the same workspace around it.
+func (s *Service) Context(ctx context.Context, scope workspace.Scope, id int64, before, after int) ([]schemas.LogEntry, error) {
+	anchor, err := s.Entry(ctx, scope, id)
+	if err != nil {
+		return nil, err
 	}
+	own := workspace.Of(anchor.WorkspaceID)
 
 	var older []schemas.LogEntry
-	if err := s.orm.WithContext(ctx).Model(&schemas.LogEntry{}).
+	if err := logfilter.Scoped(s.orm.WithContext(ctx), own).
 		Where("(created_at, id) < (?, ?)", anchor.CreatedAt, anchor.ID).
 		Order("created_at desc, id desc").
 		Limit(before).
@@ -115,7 +119,7 @@ func (s *Service) Context(ctx context.Context, id int64, before, after int) ([]s
 	}
 
 	var newer []schemas.LogEntry
-	if err := s.orm.WithContext(ctx).Model(&schemas.LogEntry{}).
+	if err := logfilter.Scoped(s.orm.WithContext(ctx), own).
 		Where("(created_at, id) > (?, ?)", anchor.CreatedAt, anchor.ID).
 		Order("created_at asc, id asc").
 		Limit(after).
@@ -133,16 +137,19 @@ func (s *Service) Context(ctx context.Context, id int64, before, after int) ([]s
 }
 
 type appRow struct {
-	Name     string
-	Count    int64
-	LastSeen time.Time
+	WorkspaceID int64
+	Name        string
+	Count       int64
+	LastSeen    time.Time
 }
 
-func (s *Service) Apps(ctx context.Context) ([]AppSummary, error) {
+// Apps summarises every app that logged in scope: its entry count and when
+// it last logged, per workspace.
+func (s *Service) Apps(ctx context.Context, scope workspace.Scope) ([]AppSummary, error) {
 	var rows []appRow
-	if err := s.orm.WithContext(ctx).Model(&schemas.LogEntry{}).
-		Select("app as name, count(*) as count, max(created_at) as last_seen").
-		Group("app").
+	if err := logfilter.Scoped(s.orm.WithContext(ctx), scope).
+		Select("workspace_id, app as name, count(*) as count, max(created_at) as last_seen").
+		Group("workspace_id, app").
 		Order("last_seen desc").
 		Scan(&rows).Error; err != nil {
 		return nil, errors.Internal("failed to list apps", err)
@@ -151,9 +158,10 @@ func (s *Service) Apps(ctx context.Context) ([]AppSummary, error) {
 	apps := make([]AppSummary, 0, len(rows))
 	for _, row := range rows {
 		apps = append(apps, AppSummary{
-			Name:     row.Name,
-			Count:    row.Count,
-			LastSeen: row.LastSeen.UTC().Format(time.RFC3339),
+			WorkspaceID: row.WorkspaceID,
+			Name:        row.Name,
+			Count:       row.Count,
+			LastSeen:    row.LastSeen.UTC().Format(time.RFC3339),
 		})
 	}
 	return apps, nil

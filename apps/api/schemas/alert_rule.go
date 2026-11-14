@@ -16,6 +16,7 @@ const (
 // and its destination to hit when the count crosses it.
 type AlertRule struct {
 	ID            int64             `json:"id" gorm:"column:id;primaryKey"`
+	WorkspaceID   int64             `json:"workspace_id" gorm:"column:workspace_id;not null"`
 	Name          string            `json:"name" gorm:"column:name;not null"`
 	SavedQueryID  int64             `json:"saved_query_id" gorm:"column:saved_query_id;not null"`
 	Provider      AlertProviderType `json:"provider" gorm:"column:provider;type:text;not null;default:'webhook'"`

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/retention"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/porte"
 	troncenv "github.com/FacileStudio/tronc/env"
 	mcpkit "github.com/FacileStudio/tronc/mcp"
@@ -14,6 +15,7 @@ import (
 type Config struct {
 	troncenv.Core
 	IngestToken         string
+	IngestRoutes        []workspace.Route
 	Retention           retention.Policy
 	WebhookAllowedHosts []string
 
@@ -62,6 +64,9 @@ func Load() (Config, error) {
 		MCPResource:         troncenv.String("MCP_RESOURCE", ""),
 	}
 
+	if cfg.IngestRoutes, err = workspace.ParseRoutes(troncenv.String("INGEST_ROUTES", "")); err != nil {
+		return Config{}, err
+	}
 	if cfg.Retention, err = retention.Load(); err != nil {
 		return Config{}, err
 	}

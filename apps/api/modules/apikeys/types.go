@@ -2,6 +2,7 @@ package apikeys
 
 // CreateRequest is the body of an API key creation.
 type CreateRequest struct {
+	WorkspaceID    int64    `json:"workspace_id,omitempty"`
 	App            string   `json:"app"`
 	Kind           string   `json:"kind"`
 	AllowedOrigins []string `json:"allowed_origins"`
@@ -11,6 +12,7 @@ type CreateRequest struct {
 // KeyResponse describes one key for the client, without the secret.
 type KeyResponse struct {
 	ID             int64    `json:"id"`
+	WorkspaceID    int64    `json:"workspace_id"`
 	App            string   `json:"app"`
 	Kind           string   `json:"kind"`
 	Prefix         string   `json:"prefix"`

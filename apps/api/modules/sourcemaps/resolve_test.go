@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 )
 
 func TestParseFrameAcrossBrowsers(t *testing.T) {
@@ -95,7 +96,7 @@ func TestResolveWithoutMapsStillReturnsFrames(t *testing.T) {
 	service := NewService(nil)
 	stack := "    at fn (https://host/a/b.js:1:2)\n    at other (https://host/a/c.js:3:4)"
 
-	out := service.Resolve(context.Background(), "sablier", "", stack)
+	out := service.Resolve(context.Background(), 1, "sablier", "", stack)
 
 	if len(out.Frames) != 2 {
 		t.Fatalf("got %d frames, want 2", len(out.Frames))
@@ -110,7 +111,7 @@ func TestResolveWithoutMapsStillReturnsFrames(t *testing.T) {
 
 func TestResolveIgnoresBlankStack(t *testing.T) {
 	service := NewService(nil)
-	if out := service.Resolve(context.Background(), "app", "v1", "   \n  "); len(out.Frames) != 0 {
+	if out := service.Resolve(context.Background(), 1, "app", "v1", "   \n  "); len(out.Frames) != 0 {
 		t.Fatalf("got %d frames for a blank stack, want 0", len(out.Frames))
 	}
 }
@@ -125,7 +126,7 @@ func TestResolveCapsFrameCount(t *testing.T) {
 		stack += line
 	}
 
-	if out := service.Resolve(context.Background(), "app", "", stack); len(out.Frames) != maxFrames {
+	if out := service.Resolve(context.Background(), 1, "app", "", stack); len(out.Frames) != maxFrames {
 		t.Fatalf("got %d frames, want the cap of %d", len(out.Frames), maxFrames)
 	}
 }
@@ -144,7 +145,7 @@ func TestResolveAgainstARealMap(t *testing.T) {
 		t.Fatalf("read the fixture: %v", err)
 	}
 
-	stored, err := service.Store(context.Background(), "sablier", "v1", "cart.js", string(content))
+	stored, err := service.Store(context.Background(), 1, "sablier", "v1", "cart.js", string(content))
 	if err != nil {
 		t.Fatalf("Store: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestResolveAgainstARealMap(t *testing.T) {
 	}
 
 	stack := "    at n (https://sablier.facile.studio/_app/immutable/chunks/cart.js:1:21)"
-	out := service.Resolve(context.Background(), "sablier", "v1", stack)
+	out := service.Resolve(context.Background(), 1, "sablier", "v1", stack)
 
 	if out.Resolved != 1 {
 		t.Fatalf("Resolved = %d, want 1: %+v", out.Resolved, out.Frames)
@@ -183,10 +184,10 @@ func TestStoreIsIdempotent(t *testing.T) {
 		t.Fatalf("read the fixture: %v", err)
 	}
 
-	if _, err := service.Store(context.Background(), "sablier", "v1", "cart.js", string(content)); err != nil {
+	if _, err := service.Store(context.Background(), 1, "sablier", "v1", "cart.js", string(content)); err != nil {
 		t.Fatalf("first Store: %v", err)
 	}
-	stored, err := service.Store(context.Background(), "sablier", "v1", "cart.js", string(content))
+	stored, err := service.Store(context.Background(), 1, "sablier", "v1", "cart.js", string(content))
 	if err != nil {
 		t.Fatalf("second Store: %v", err)
 	}
@@ -194,7 +195,7 @@ func TestStoreIsIdempotent(t *testing.T) {
 		t.Error("a re-upload reported a new row")
 	}
 
-	files, err := service.Files(context.Background(), "sablier", "v1")
+	files, err := service.Files(context.Background(), 1, "sablier", "v1")
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
@@ -207,7 +208,7 @@ func TestStoreIsIdempotent(t *testing.T) {
 // present and silently resolve nothing — the worst of both.
 func TestStoreRejectsGarbage(t *testing.T) {
 	service := NewService(testdb.Migrated(t))
-	if _, err := service.Store(context.Background(), "app", "v1", "a.js", "not a source map"); err == nil {
+	if _, err := service.Store(context.Background(), 1, "app", "v1", "a.js", "not a source map"); err == nil {
 		t.Fatal("garbage was accepted as a source map")
 	}
 }
@@ -219,19 +220,19 @@ func TestDeleteEvictsTheCache(t *testing.T) {
 	service := NewService(db)
 	content, _ := os.ReadFile(filepath.Join("testdata", "cart.js.map"))
 	ctx := context.Background()
-	if _, err := service.Store(ctx, "sablier", "v1", "cart.js", string(content)); err != nil {
+	if _, err := service.Store(ctx, 1, "sablier", "v1", "cart.js", string(content)); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
 
 	stack := "    at n (https://host/cart.js:1:21)"
-	if out := service.Resolve(ctx, "sablier", "v1", stack); out.Resolved != 1 {
+	if out := service.Resolve(ctx, 1, "sablier", "v1", stack); out.Resolved != 1 {
 		t.Fatalf("the fixture did not resolve before deletion: %+v", out)
 	}
 
-	if _, err := service.Delete(ctx, "sablier", "v1"); err != nil {
+	if _, err := service.Delete(ctx, workspace.Of(1), 1, "sablier", "v1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if out := service.Resolve(ctx, "sablier", "v1", stack); out.Resolved != 0 {
+	if out := service.Resolve(ctx, 1, "sablier", "v1", stack); out.Resolved != 0 {
 		t.Fatal("a deleted release still resolves from cache")
 	}
 }

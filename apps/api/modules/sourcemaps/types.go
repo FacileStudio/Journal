@@ -23,11 +23,12 @@ type ListResponse struct {
 
 // ReleaseSummary is one release's worth of maps, for the dashboard.
 type ReleaseSummary struct {
-	App       string `json:"app"`
-	Release   string `json:"release"`
-	Files     int    `json:"files"`
-	Bytes     int64  `json:"bytes"`
-	CreatedAt string `json:"created_at"`
+	WorkspaceID int64  `json:"workspace_id"`
+	App         string `json:"app"`
+	Release     string `json:"release"`
+	Files       int    `json:"files"`
+	Bytes       int64  `json:"bytes"`
+	CreatedAt   string `json:"created_at"`
 }
 
 // ReleasesResponse lists every release with stored maps, for the dashboard.

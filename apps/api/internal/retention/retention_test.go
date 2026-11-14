@@ -68,8 +68,8 @@ func open(t *testing.T) *sql.DB {
 
 func insert(t *testing.T, db *sql.DB, at time.Time) {
 	t.Helper()
-	if _, err := db.Exec(`INSERT INTO log_entries (app, level, message, created_at, received_at)
-		VALUES ('test', 'info', 'line', $1, now())`, at); err != nil {
+	if _, err := db.Exec(`INSERT INTO log_entries (workspace_id, app, level, message, created_at, received_at)
+		VALUES (1, 'test', 'info', 'line', $1, now())`, at); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 }

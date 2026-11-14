@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
@@ -19,11 +20,12 @@ var (
 )
 
 // listAlerts is journal_list_alerts.
-func (t *toolset) listAlerts(ctx context.Context, req *sdk.CallToolRequest, _ alertsInput) (*sdk.CallToolResult, alertsOutput, error) {
-	if _, err := t.adminOf(ctx, req); err != nil {
+func (t *toolset) listAlerts(ctx context.Context, req *sdk.CallToolRequest, in alertsInput) (*sdk.CallToolResult, alertsOutput, error) {
+	access, err := t.ownerOf(ctx, req, in.WorkspaceID)
+	if err != nil {
 		return nil, alertsOutput{}, err
 	}
-	rules, err := t.Alerts.List(ctx)
+	rules, err := t.Alerts.List(ctx, access.Owned())
 	if err != nil {
 		return nil, alertsOutput{}, mcpkit.Failure(err, "")
 	}
@@ -36,7 +38,8 @@ func (t *toolset) listAlerts(ctx context.Context, req *sdk.CallToolRequest, _ al
 
 // createAlert is journal_create_alert.
 func (t *toolset) createAlert(ctx context.Context, req *sdk.CallToolRequest, in createAlertInput) (*sdk.CallToolResult, alertOutput, error) {
-	if _, err := t.adminOf(ctx, req); err != nil {
+	access, err := t.ownerOf(ctx, req, 0)
+	if err != nil {
 		return nil, alertOutput{}, err
 	}
 	provider := in.Provider
@@ -46,7 +49,7 @@ func (t *toolset) createAlert(ctx context.Context, req *sdk.CallToolRequest, in 
 	if provider != string(schemas.AlertProviderAntenne) && provider != string(schemas.AlertProviderWebhook) {
 		return nil, alertOutput{}, errProvider
 	}
-	rule, err := t.Alerts.Create(ctx, alerts.CreateRequest{
+	rule, err := t.Alerts.Create(ctx, access.Owned(), alerts.CreateRequest{
 		Name: in.Name, SavedQueryID: in.SavedQueryID, Provider: provider, Threshold: in.Threshold,
 		WindowMinutes: in.WindowMinutes, WebhookURL: in.WebhookURL,
 	})
@@ -58,10 +61,11 @@ func (t *toolset) createAlert(ctx context.Context, req *sdk.CallToolRequest, in 
 
 // setAlert is journal_set_alert_enabled.
 func (t *toolset) setAlert(ctx context.Context, req *sdk.CallToolRequest, in setAlertInput) (*sdk.CallToolResult, alertOutput, error) {
-	if _, err := t.adminOf(ctx, req); err != nil {
+	access, err := t.ownerOf(ctx, req, 0)
+	if err != nil {
 		return nil, alertOutput{}, err
 	}
-	rule, err := t.Alerts.SetEnabled(ctx, in.AlertID, in.Enabled)
+	rule, err := t.Alerts.SetEnabled(ctx, access.Owned(), in.AlertID, in.Enabled)
 	if err != nil {
 		return nil, alertOutput{}, mcpkit.Failure(err, hintAlert)
 	}
@@ -77,10 +81,11 @@ func (t *toolset) deleteAlert(ctx context.Context, req *sdk.CallToolRequest, in 
 	if mcpkit.Retrying(req) {
 		return t.resume(ctx, req, kindDeleteAlert, "alert rule")
 	}
-	if _, err := t.adminOf(ctx, req); err != nil {
+	access, err := t.ownerOf(ctx, req, 0)
+	if err != nil {
 		return nil, deleteOutput{}, err
 	}
-	rule, err := t.alertRule(ctx, in.AlertID)
+	rule, err := t.alertRule(ctx, access.Owned(), in.AlertID)
 	if err != nil {
 		return nil, deleteOutput{}, mcpkit.Failure(err, hintAlert)
 	}
@@ -89,8 +94,8 @@ func (t *toolset) deleteAlert(ctx context.Context, req *sdk.CallToolRequest, in 
 }
 
 // alertRule finds one alert rule by id.
-func (t *toolset) alertRule(ctx context.Context, id int64) (alerts.RuleRecord, error) {
-	rules, err := t.Alerts.List(ctx)
+func (t *toolset) alertRule(ctx context.Context, owned workspace.Scope, id int64) (alerts.RuleRecord, error) {
+	rules, err := t.Alerts.List(ctx, owned)
 	if err != nil {
 		return alerts.RuleRecord{}, err
 	}
@@ -105,7 +110,7 @@ func (t *toolset) alertRule(ctx context.Context, id int64) (alerts.RuleRecord, e
 // alertView renders an alert rule, naming a webhook by its host only.
 func alertView(r alerts.RuleRecord) alertOut {
 	out := alertOut{
-		ID: r.ID, Name: r.Name, SavedQueryID: r.SavedQueryID, SavedQuery: r.QueryName, Threshold: r.Threshold,
+		ID: r.ID, WorkspaceID: r.WorkspaceID, Name: r.Name, SavedQueryID: r.SavedQueryID, SavedQuery: r.QueryName, Threshold: r.Threshold,
 		WindowMinutes: r.WindowMinutes, Provider: string(r.Provider), Enabled: r.Enabled, CreatedAt: stamp(r.CreatedAt),
 	}
 	if r.Provider == schemas.AlertProviderWebhook {

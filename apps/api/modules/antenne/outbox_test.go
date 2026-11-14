@@ -23,14 +23,14 @@ func newTestService(t *testing.T, enabled bool) (*Service, *gorm.DB, schemas.Ale
 		t.Fatalf("sql handle: %v", err)
 	}
 	setting := schemas.AppSetting{ID: 1, AntenneURL: "https://antenne.test", AntenneSecret: "s", AntenneEnabled: enabled}
-	query := schemas.SavedQuery{Name: "errors"}
+	query := schemas.SavedQuery{WorkspaceID: 1, Name: "errors"}
 	if err := orm.Create(&setting).Error; err != nil {
 		t.Fatalf("seed settings: %v", err)
 	}
 	if err := orm.Create(&query).Error; err != nil {
 		t.Fatalf("seed query: %v", err)
 	}
-	rule := schemas.AlertRule{Name: "spike", SavedQueryID: query.ID, Provider: schemas.AlertProviderAntenne,
+	rule := schemas.AlertRule{WorkspaceID: 1, Name: "spike", SavedQueryID: query.ID, Provider: schemas.AlertProviderAntenne,
 		Threshold: 1, WindowMinutes: 5, Enabled: true}
 	if err := orm.Create(&rule).Error; err != nil {
 		t.Fatalf("seed rule: %v", err)
@@ -108,7 +108,7 @@ func assertFired(t *testing.T, orm *gorm.DB, ruleID int64, want bool) {
 // The alert.fired envelope keeps the keys Journal put on the wire before
 // antenne-client v1, so Antenne's consumers see no change.
 func TestAlertEventKeepsItsWireShape(t *testing.T) {
-	rule := schemas.AlertRule{ID: 3, Name: "spike", SavedQueryID: 9, Threshold: 5, WindowMinutes: 15}
+	rule := schemas.AlertRule{WorkspaceID: 1, ID: 3, Name: "spike", SavedQueryID: 9, Threshold: 5, WindowMinutes: 15}
 	firedAt := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	body, err := json.Marshal(alertEvent(rule, 42, firedAt))
 	if err != nil {

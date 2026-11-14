@@ -20,6 +20,7 @@ type UpdateRequest struct {
 // AlertResponse describes one alert for the client.
 type AlertResponse struct {
 	ID            int64   `json:"id"`
+	WorkspaceID   int64   `json:"workspace_id"`
 	Name          string  `json:"name"`
 	SavedQueryID  int64   `json:"saved_query_id"`
 	Provider      string  `json:"provider"` // webhook or antenne

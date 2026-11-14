@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
 
@@ -21,7 +22,7 @@ func newHandler(service *Service) *Handler {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	records, err := h.service.List(r.Context())
+	records, err := h.service.List(r.Context(), workspace.FromContext(r.Context()).Owned())
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -41,7 +42,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, err := h.service.Create(r.Context(), req)
+	record, err := h.service.Create(r.Context(), workspace.FromContext(r.Context()).Owned(), req)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -66,7 +67,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, err := h.service.SetEnabled(r.Context(), id, *req.Enabled)
+	record, err := h.service.SetEnabled(r.Context(), workspace.FromContext(r.Context()).Owned(), id, *req.Enabled)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -81,7 +82,7 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(r.Context(), workspace.FromContext(r.Context()).Owned(), id); err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}
@@ -96,6 +97,7 @@ func mapAlert(record RuleRecord) AlertResponse {
 	}
 	return AlertResponse{
 		ID:            record.ID,
+		WorkspaceID:   record.WorkspaceID,
 		Name:          record.Name,
 		SavedQueryID:  record.SavedQueryID,
 		QueryName:     record.QueryName,

@@ -37,7 +37,7 @@ func newLiveApp(t *testing.T) liveApp {
 	db := testdb.Migrated(t)
 	appEnv := env.Config{IngestToken: testIngestToken}
 	oidcKit, sessions, users := testKitFor(t, appEnv, sqlHandle(t, db))
-	router := built(t)(buildRouter(db, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{}, nil))
+	router := built(t)(buildRouter(db, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, ssoRoutes{}, nil, tenancy{}))
 	return liveApp{router: router, db: db, sessions: sessions}
 }
 
@@ -77,7 +77,8 @@ func call(t *testing.T, router chi.Router, method, path, token string, body any)
 }
 
 // A session porte issued authenticates, Journal hydrates the profile porte does
-// not carry, RequireAdmin reads is_admin out of it, and porte's logout revokes
+// not carry, RequireAdmin reads is_admin out of it for the instance settings,
+// and porte's logout revokes
 // the session.
 func TestSessionRunsThroughPorteEndToEnd(t *testing.T) {
 	app := newLiveApp(t)
@@ -88,9 +89,9 @@ func TestSessionRunsThroughPorteEndToEnd(t *testing.T) {
 		t.Fatalf("me = %d", code)
 	}
 	if code := call(t, app.router, http.MethodGet, "/api/apikeys", admin, nil).Code; code != http.StatusOK {
-		t.Fatalf("an admin was refused an admin route: %d", code)
+		t.Fatalf("an account was refused its own keys: %d", code)
 	}
-	if code := call(t, app.router, http.MethodGet, "/api/apikeys", member, nil).Code; code != http.StatusForbidden {
+	if code := call(t, app.router, http.MethodGet, "/api/settings/antenne", member, nil).Code; code != http.StatusForbidden {
 		t.Fatalf("a non-admin reached an admin route: %d", code)
 	}
 	if code := call(t, app.router, http.MethodPost, "/api/auth/logout", admin, nil).Code; code != http.StatusOK {
@@ -119,7 +120,7 @@ func TestPasswordRoutesAreGone(t *testing.T) {
 // credential.
 func TestIngestNeedsATokenAndNoSession(t *testing.T) {
 	app := newLiveApp(t)
-	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{App: "nuage"})
+	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{WorkspaceID: 1, App: "nuage"})
 	if err != nil {
 		t.Fatalf("create a key: %v", err)
 	}
@@ -248,7 +249,7 @@ func claims(subject, email, name string, verified bool) porte.Claims {
 
 func TestBrowserIngestStaysReadableCrossOrigin(t *testing.T) {
 	app := newLiveApp(t)
-	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{
+	_, key, err := apikeys.NewService(app.db).Create(context.Background(), apikeys.NewKey{WorkspaceID: 1,
 		App: "nuage", Kind: schemas.KeyKindPublic, AllowedOrigins: []string{"https://nuage.facile.studio"}, DailyQuota: 1000,
 	})
 	if err != nil {

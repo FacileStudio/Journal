@@ -108,11 +108,12 @@ func (h *Handler) browser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		entries = append(entries, schemas.LogEntry{
-			App:       scope.App,
-			Level:     level,
-			Message:   capMessage(event.Message),
-			Meta:      browserMeta(event, req, scope, r),
-			CreatedAt: createdAt,
+			WorkspaceID: scope.WorkspaceID,
+			App:         scope.App,
+			Level:       level,
+			Message:     capMessage(event.Message),
+			Meta:        browserMeta(event, req, scope, r),
+			CreatedAt:   createdAt,
 		})
 	}
 

@@ -48,7 +48,7 @@ var (
 func render(e schemas.LogEntry, s shape) entryOut {
 	message, cut := mcpkit.Clip(e.Message, s.messageBytes)
 	out := entryOut{
-		ID: e.ID, App: e.App, Level: e.Level, Message: message, MessageTruncated: cut,
+		ID: e.ID, WorkspaceID: e.WorkspaceID, App: e.App, Level: e.Level, Message: message, MessageTruncated: cut,
 		CreatedAt: stamp(e.CreatedAt), RequestID: metaText(e.Meta, "request_id"), Source: metaText(e.Meta, "source"),
 	}
 	if !s.meta || len(e.Meta) == 0 {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -29,6 +30,7 @@ func NewService(orm *gorm.DB) *Service {
 // RuleRecord is one alert rule with the name of the saved query it watches.
 type RuleRecord struct {
 	ID            int64
+	WorkspaceID   int64
 	Name          string
 	SavedQueryID  int64
 	QueryName     string
@@ -42,9 +44,9 @@ type RuleRecord struct {
 	CreatedAt     time.Time
 }
 
-func (s *Service) List(ctx context.Context) ([]RuleRecord, error) {
+func (s *Service) List(ctx context.Context, scope workspace.Scope) ([]RuleRecord, error) {
 	var rows []RuleRecord
-	err := s.orm.WithContext(ctx).Model(&schemas.AlertRule{}).
+	err := scope.Where(s.orm.WithContext(ctx).Model(&schemas.AlertRule{}), "alert_rules.workspace_id").
 		Select("alert_rules.*, saved_queries.name AS query_name").
 		Joins("JOIN saved_queries ON saved_queries.id = alert_rules.saved_query_id").
 		Order("alert_rules.created_at desc, alert_rules.id desc").
@@ -55,7 +57,7 @@ func (s *Service) List(ctx context.Context) ([]RuleRecord, error) {
 	return rows, nil
 }
 
-func (s *Service) Create(ctx context.Context, req CreateRequest) (*RuleRecord, error) {
+func (s *Service) Create(ctx context.Context, owned workspace.Scope, req CreateRequest) (*RuleRecord, error) {
 	provider := req.Provider
 	if provider == "" {
 		provider = string(schemas.AlertProviderWebhook)
@@ -65,14 +67,19 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*RuleRecord, e
 	}
 
 	var savedQuery schemas.SavedQuery
-	if err := s.orm.WithContext(ctx).First(&savedQuery, req.SavedQueryID).Error; err != nil {
+	if err := owned.Where(s.orm.WithContext(ctx)).Where("id = ?", req.SavedQueryID).Take(&savedQuery).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.NotFound("saved query not found")
 		}
 		return nil, errors.Internal("failed to load saved query", err)
 	}
 
+	if schemas.AlertProviderType(provider) == schemas.AlertProviderAntenne && savedQuery.WorkspaceID != schemas.InstanceWorkspaceID {
+		return nil, errors.Invalid("the antenne provider is for the instance workspace only; use a webhook")
+	}
+
 	rule := schemas.AlertRule{
+		WorkspaceID:   savedQuery.WorkspaceID,
 		Name:          strings.TrimSpace(req.Name),
 		SavedQueryID:  savedQuery.ID,
 		Provider:      schemas.AlertProviderType(provider),
@@ -89,9 +96,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*RuleRecord, e
 	return recordFromRule(rule, savedQuery.Name), nil
 }
 
-func (s *Service) SetEnabled(ctx context.Context, id int64, enabled bool) (*RuleRecord, error) {
+func (s *Service) SetEnabled(ctx context.Context, scope workspace.Scope, id int64, enabled bool) (*RuleRecord, error) {
 	var rule schemas.AlertRule
-	if err := s.orm.WithContext(ctx).First(&rule, id).Error; err != nil {
+	if err := scope.Where(s.orm.WithContext(ctx)).Where("id = ?", id).Take(&rule).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.NotFound("alert rule not found")
 		}
@@ -110,9 +117,13 @@ func (s *Service) SetEnabled(ctx context.Context, id int64, enabled bool) (*Rule
 	return recordFromRule(rule, savedQuery.Name), nil
 }
 
-func (s *Service) Delete(ctx context.Context, id int64) error {
-	if err := s.orm.WithContext(ctx).Delete(&schemas.AlertRule{}, id).Error; err != nil {
-		return errors.Internal("failed to delete alert rule", err)
+func (s *Service) Delete(ctx context.Context, scope workspace.Scope, id int64) error {
+	result := scope.Where(s.orm.WithContext(ctx)).Where("id = ?", id).Delete(&schemas.AlertRule{})
+	if result.Error != nil {
+		return errors.Internal("failed to delete alert rule", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("alert rule not found")
 	}
 	return nil
 }
@@ -151,6 +162,7 @@ func optionalText(value string) *string {
 func recordFromRule(rule schemas.AlertRule, queryName string) *RuleRecord {
 	return &RuleRecord{
 		ID:            rule.ID,
+		WorkspaceID:   rule.WorkspaceID,
 		Name:          rule.Name,
 		SavedQueryID:  rule.SavedQueryID,
 		QueryName:     queryName,

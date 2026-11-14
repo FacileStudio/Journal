@@ -3,6 +3,9 @@ package logfilter
 import (
 	"time"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
+	"github.com/FacileStudio/Journal/apps/api/schemas"
+
 	"gorm.io/gorm"
 )
 
@@ -38,9 +41,17 @@ type Params struct {
 	Until *time.Time
 }
 
-// Apply narrows a log query to the filters in params, in a fixed order:
-// app, levels, full-text, source, request id, session id, then the time window.
-func Apply(query *gorm.DB, params Params) *gorm.DB {
+// Scoped is the only way into log_entries for a read: a query on the table
+// already narrowed to the workspaces in scope. An empty scope matches nothing.
+func Scoped(db *gorm.DB, scope workspace.Scope) *gorm.DB {
+	return scope.Where(db.Model(&schemas.LogEntry{}))
+}
+
+// Apply is Scoped narrowed to the filters in params, in a fixed order:
+// workspaces, app, levels, full-text, source, request id, session id, then
+// the time window.
+func Apply(db *gorm.DB, scope workspace.Scope, params Params) *gorm.DB {
+	query := Scoped(db, scope)
 	if params.App != "" {
 		query = query.Where("app = ?", params.App)
 	}

@@ -12,7 +12,7 @@ import (
 
 func quotaKey(t *testing.T, service *Service, quota int) int64 {
 	t.Helper()
-	key := schemas.APIKey{App: "shop", Kind: schemas.KeyKindPublic, Prefix: "journal_pub_shop_a", KeyHash: "hash", DailyQuota: quota}
+	key := schemas.APIKey{WorkspaceID: 1, App: "shop", Kind: schemas.KeyKindPublic, Prefix: "journal_pub_shop_a", KeyHash: "hash", DailyQuota: quota}
 	if err := service.orm.Create(&key).Error; err != nil {
 		t.Fatalf("create key: %v", err)
 	}

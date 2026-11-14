@@ -98,8 +98,8 @@ func TestConfirmPageRefusesOtherSessions(t *testing.T) {
 }
 
 // TestEditedOrDemotedNeverDeletes checks an alert rule edited after the
-// request is kept, and that a person who lost administrator rights can no
-// longer confirm a rule's deletion.
+// request is kept, and that a person who is no longer an owner of the
+// rule's workspace can no longer confirm a rule's deletion.
 func TestEditedOrDemotedNeverDeletes(t *testing.T) {
 	f := newFixture(t)
 	q := f.query(t, "Watched")
@@ -111,9 +111,9 @@ func TestEditedOrDemotedNeverDeletes(t *testing.T) {
 	}
 	kept := f.alert(t, "Kept", q.ID)
 	id = pendingDelete(t, f, adminSub, toolDeleteAlert, map[string]any{"alert_id": kept.ID})
-	must(t, f.db.Exec(`UPDATE users SET is_admin = false WHERE id = ?`, f.users[adminSub]).Error)
+	must(t, f.db.Exec(`UPDATE workspace_members SET role = 'member' WHERE user_id = ?`, f.users[adminSub]).Error)
 	got := onPage(f, adminSub, "confirm", id)
-	if got.Code != http.StatusPreconditionFailed || !strings.Contains(got.Body.String(), `"code":"failed_precondition","message":"only a Journal administrator can delete an alert rule"`) || f.count(&schemas.AlertRule{}, kept.ID) != 1 {
+	if got.Code != http.StatusPreconditionFailed || !strings.Contains(got.Body.String(), `"code":"failed_precondition","message":"only an owner of its workspace can delete an alert rule"`) || f.count(&schemas.AlertRule{}, kept.ID) != 1 {
 		t.Fatalf("a demoted person must get the admin refusal and keep the rule, got %d %s", got.Code, got.Body)
 	}
 	if list := onPage(f, adminSub, "", ""); strings.Contains(list.Body.String(), `"alert":`) {

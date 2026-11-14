@@ -5,6 +5,7 @@ import "github.com/FacileStudio/Journal/apps/api/modules/sourcemaps"
 // entryOut is one log entry as a tool returns it.
 type entryOut struct {
 	ID               int64          `json:"id"`
+	WorkspaceID      int64          `json:"workspace_id"`
 	App              string         `json:"app"`
 	Level            string         `json:"level"`
 	Message          string         `json:"message"`
@@ -54,9 +55,10 @@ type countOutput struct {
 
 // appOut is one app that has logged.
 type appOut struct {
-	Name     string `json:"name"`
-	Entries  int64  `json:"entries"`
-	LastSeen string `json:"last_seen"`
+	WorkspaceID int64  `json:"workspace_id"`
+	Name        string `json:"name"`
+	Entries     int64  `json:"entries"`
+	LastSeen    string `json:"last_seen"`
 }
 
 // appsOutput is journal_list_apps's result.
@@ -66,14 +68,15 @@ type appsOutput struct {
 
 // queryOut is one saved query.
 type queryOut struct {
-	ID        int64    `json:"id"`
-	Name      string   `json:"name"`
-	App       string   `json:"app,omitempty"`
-	Levels    []string `json:"levels,omitempty"`
-	Q         string   `json:"q,omitempty"`
-	Source    string   `json:"source,omitempty"`
-	RequestID string   `json:"request_id,omitempty"`
-	CreatedAt string   `json:"created_at"`
+	ID          int64    `json:"id"`
+	WorkspaceID int64    `json:"workspace_id"`
+	Name        string   `json:"name"`
+	App         string   `json:"app,omitempty"`
+	Levels      []string `json:"levels,omitempty"`
+	Q           string   `json:"q,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	RequestID   string   `json:"request_id,omitempty"`
+	CreatedAt   string   `json:"created_at"`
 }
 
 // queriesOutput is journal_list_saved_queries's result.
@@ -91,6 +94,7 @@ type queryOutput struct {
 // a chat or incident webhook is a credential.
 type alertOut struct {
 	ID            int64  `json:"id"`
+	WorkspaceID   int64  `json:"workspace_id"`
 	Name          string `json:"name"`
 	SavedQueryID  int64  `json:"saved_query_id"`
 	SavedQuery    string `json:"saved_query"`
@@ -120,4 +124,15 @@ type deleteOutput struct {
 	ID         int64  `json:"id,omitempty"`
 	ConfirmURL string `json:"confirm_url,omitempty"`
 	Message    string `json:"message,omitempty"`
+}
+
+type workspaceOut struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	Personal bool   `json:"personal"`
+}
+
+type workspacesOutput struct {
+	Workspaces []workspaceOut `json:"workspaces"`
 }

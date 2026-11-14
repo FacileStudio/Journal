@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
@@ -22,12 +23,13 @@ func newHandler(service *Service) *Handler {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	records, err := h.service.List(r.Context())
+	owned := workspace.FromContext(r.Context()).Owned()
+	records, err := h.service.List(r.Context(), owned)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}
-	usage, err := h.service.UsageToday(r.Context())
+	usage, err := h.service.UsageToday(r.Context(), owned)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -49,7 +51,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, token, err := h.service.Create(r.Context(), NewKey(req))
+	target, err := workspace.FromContext(r.Context()).Target(req.WorkspaceID, true)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	key, token, err := h.service.Create(r.Context(), NewKey{
+		WorkspaceID: target, App: req.App, Kind: req.Kind, AllowedOrigins: req.AllowedOrigins, DailyQuota: req.DailyQuota,
+	})
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -64,7 +73,7 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Revoke(r.Context(), id); err != nil {
+	if err := h.service.Revoke(r.Context(), workspace.FromContext(r.Context()).Owned(), id); err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}
@@ -87,6 +96,7 @@ func mapKey(key schemas.APIKey) KeyResponse {
 	}
 	return KeyResponse{
 		ID:             key.ID,
+		WorkspaceID:    key.WorkspaceID,
 		App:            key.App,
 		Kind:           kind,
 		Prefix:         key.Prefix,

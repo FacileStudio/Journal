@@ -65,7 +65,7 @@ var (
 // It never fails: a stack with no release, no uploaded map or an unparseable
 // line still comes back frame by frame with Raw set. A half-resolved trace is
 // useful and a refusal is not.
-func (s *Service) Resolve(ctx context.Context, app, release, stack string) Stack {
+func (s *Service) Resolve(ctx context.Context, workspaceID int64, app, release, stack string) Stack {
 	out := Stack{Release: release, Frames: []Frame{}}
 	if strings.TrimSpace(stack) == "" {
 		return out
@@ -81,7 +81,7 @@ func (s *Service) Resolve(ctx context.Context, app, release, stack string) Stack
 
 		frame := parseFrame(line)
 		if release != "" && frame.File != "" {
-			s.apply(ctx, app, release, &frame)
+			s.apply(ctx, workspaceID, app, release, &frame)
 			if frame.Resolved {
 				out.Resolved++
 			}
@@ -91,8 +91,8 @@ func (s *Service) Resolve(ctx context.Context, app, release, stack string) Stack
 	return out
 }
 
-func (s *Service) apply(ctx context.Context, app, release string, frame *Frame) {
-	consumer := s.consumerFor(ctx, app, release, frame.File)
+func (s *Service) apply(ctx context.Context, workspaceID int64, app, release string, frame *Frame) {
+	consumer := s.consumerFor(ctx, workspaceID, app, release, frame.File)
 	if consumer == nil {
 		return
 	}

@@ -17,6 +17,7 @@ import (
 var models = []any{
 	&schemas.LogEntry{}, &schemas.User{}, &schemas.APIKey{}, &schemas.APIKeyUsage{},
 	&schemas.SavedQuery{}, &schemas.AlertRule{}, &schemas.SourceMap{}, &schemas.AppSetting{},
+	&schemas.Workspace{}, &schemas.WorkspaceMember{},
 }
 
 var timeType = reflect.TypeFor[time.Time]()

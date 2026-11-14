@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/tronc/errors"
 	mcpkit "github.com/FacileStudio/tronc/mcp"
@@ -20,7 +21,7 @@ const (
 
 var (
 	errTarget     = errors.NotFound("this action names no saved query or alert rule")
-	errAdminGone  = errors.Failed("only a Journal administrator can delete an alert rule")
+	errAdminGone  = errors.Failed("only an owner of its workspace can delete an alert rule")
 	errStillWatch = errors.Failed("an alert rule now watches this saved query, so it cannot be deleted")
 )
 
@@ -46,7 +47,11 @@ func (t *toolset) queryPrint(ctx context.Context, a mcpkit.Action) (string, erro
 	if err != nil {
 		return "", err
 	}
-	query, err := t.savedQuery(ctx, id)
+	access, err := t.accessOfUser(ctx, a.UserID)
+	if err != nil {
+		return "", err
+	}
+	query, err := t.savedQuery(ctx, access.Scope, id)
 	if err != nil {
 		return "", err
 	}
@@ -57,14 +62,11 @@ func (t *toolset) queryPrint(ctx context.Context, a mcpkit.Action) (string, erro
 // alertPrint digests the alert rule an action targets, as it is now. A
 // person who lost administrator rights since asking cannot confirm.
 func (t *toolset) alertPrint(ctx context.Context, a mcpkit.Action) (string, error) {
-	if !t.isAdmin(ctx, a.UserID) {
-		return "", errAdminGone
-	}
 	id, err := idOf(a)
 	if err != nil {
 		return "", err
 	}
-	rule, err := t.alertRule(ctx, id)
+	rule, err := t.ownedRule(ctx, a.UserID, id)
 	if err != nil {
 		return "", err
 	}
@@ -86,20 +88,41 @@ func (t *toolset) runDeleteQuery(ctx context.Context, a mcpkit.Action) error {
 	if err != nil {
 		return err
 	}
-	if n, err := t.watchers(ctx, id); err != nil || n > 0 {
+	access, err := t.accessOfUser(ctx, a.UserID)
+	if err != nil {
+		return err
+	}
+	query, err := t.savedQuery(ctx, access.Scope, id)
+	if err != nil {
+		return err
+	}
+	if n, err := t.watchers(ctx, query); err != nil || n > 0 {
 		return errStillWatch
 	}
-	return t.Queries.Delete(ctx, id)
+	return t.Queries.Delete(ctx, access.Scope, id)
 }
 
 // runDeleteAlert deletes the targeted alert rule.
 func (t *toolset) runDeleteAlert(ctx context.Context, a mcpkit.Action) error {
-	if !t.isAdmin(ctx, a.UserID) {
-		return errAdminGone
-	}
 	id, err := idOf(a)
 	if err != nil {
 		return err
 	}
-	return t.Alerts.Delete(ctx, id)
+	rule, err := t.ownedRule(ctx, a.UserID, id)
+	if err != nil {
+		return err
+	}
+	return t.Alerts.Delete(ctx, workspace.Of(rule.WorkspaceID), id)
+}
+
+// ownedRule loads the alert rule id when userID still owns its workspace.
+func (t *toolset) ownedRule(ctx context.Context, userID string, id int64) (alerts.RuleRecord, error) {
+	access, err := t.accessOfUser(ctx, userID)
+	if err != nil {
+		return alerts.RuleRecord{}, err
+	}
+	if access.Owned().Empty() {
+		return alerts.RuleRecord{}, errAdminGone
+	}
+	return t.alertRule(ctx, access.Owned(), id)
 }

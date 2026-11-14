@@ -15,13 +15,14 @@ import "time"
 // one-datastore property, rides along with whatever backs up the database, and
 // avoids giving the API a writable volume it otherwise does not need.
 type SourceMap struct {
-	ID        int64     `json:"id" gorm:"column:id;primaryKey"`
-	App       string    `json:"app" gorm:"column:app;not null;index:idx_source_maps_lookup,unique,priority:1"`
-	Release   string    `json:"release" gorm:"column:release;not null;index:idx_source_maps_lookup,unique,priority:2"`
-	File      string    `json:"file" gorm:"column:file;not null;index:idx_source_maps_lookup,unique,priority:3"`
-	Content   string    `json:"-" gorm:"column:content;type:text;not null"`
-	Bytes     int       `json:"bytes" gorm:"column:bytes;not null;default:0"`
-	CreatedAt time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
+	ID          int64     `json:"id" gorm:"column:id;primaryKey"`
+	WorkspaceID int64     `json:"workspace_id" gorm:"column:workspace_id;not null;index:idx_source_maps_workspace_lookup,unique,priority:1"`
+	App         string    `json:"app" gorm:"column:app;not null;index:idx_source_maps_workspace_lookup,unique,priority:2"`
+	Release     string    `json:"release" gorm:"column:release;not null;index:idx_source_maps_workspace_lookup,unique,priority:3"`
+	File        string    `json:"file" gorm:"column:file;not null;index:idx_source_maps_workspace_lookup,unique,priority:4"`
+	Content     string    `json:"-" gorm:"column:content;type:text;not null"`
+	Bytes       int       `json:"bytes" gorm:"column:bytes;not null;default:0"`
+	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at;autoCreateTime"`
 }
 
 func (SourceMap) TableName() string { return "source_maps" }

@@ -74,14 +74,14 @@ func assertVersions(t *testing.T, db *gorm.DB, want ...int64) {
 // version through every migration in order, and that a second run is a no-op.
 func TestUpBuildsAnEmptyDatabase(t *testing.T) {
 	db := testdb.Migrated(t)
-	assertVersions(t, db, 1, 2)
+	assertVersions(t, db, 1, 2, 3, 4, 5)
 	if got := columnDefault(t, db, "log_entries", "received_at"); got != "now()" {
 		t.Fatalf("log_entries.received_at default %q, want now()", got)
 	}
 	if err := testdb.Up(db); err != nil {
 		t.Fatalf("a second run is not a no-op: %v", err)
 	}
-	assertVersions(t, db, 1, 2)
+	assertVersions(t, db, 1, 2, 3, 4, 5)
 }
 
 // TestUpStampsADatabaseBuiltByAutoMigrate rebuilds production's shape, the
@@ -116,7 +116,7 @@ func assertStampsLegacy(t *testing.T, ledger string) {
 	if err := testdb.Up(db); err != nil {
 		t.Fatalf("up on a legacy database: %v", err)
 	}
-	assertVersions(t, db, 1, 2)
+	assertVersions(t, db, 1, 2, 3, 4, 5)
 	if got := columnDefault(t, db, "log_entries", "received_at"); got != "now()" {
 		t.Fatalf("log_entries.received_at default %q, want now()", got)
 	}

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strconv"
 	"testing"
 	"time"
 
@@ -35,32 +34,10 @@ type fixture struct {
 	db          *gorm.DB
 	service     *Service
 	gone, other int64
+	personal    int64
 	issuer      string
 	store       Store
 	deleted     []directory.Deleted
-}
-
-func seedPerson(t *testing.T, db *gorm.DB, issuer, email, subject string, admin bool) int64 {
-	t.Helper()
-	user := schemas.User{Email: email, Name: email, IsAdmin: admin}
-	if err := db.Create(&user).Error; err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
-	tag := strconv.FormatInt(user.ID, 10)
-	statements := []struct {
-		sql  string
-		args []any
-	}{
-		{`INSERT INTO porte_identities (user_id, provider, subject, refresh_token) VALUES (?, ?, ?, 'refresh')`, []any{user.ID, issuer, subject}},
-		{`INSERT INTO porte_sessions (token_hash, user_id, label) VALUES (?, ?, 'cli')`, []any{"hash-" + tag, user.ID}},
-		{`INSERT INTO porte_login_codes (code_hash, user_id, expires_at) VALUES (?, ?, now() + interval '1 hour')`, []any{"code-" + tag, user.ID}},
-	}
-	for _, statement := range statements {
-		if err := db.Exec(statement.sql, statement.args...).Error; err != nil {
-			t.Fatalf("seed credentials: %v", err)
-		}
-	}
-	return user.ID
 }
 
 func seed(t *testing.T) *fixture {
@@ -77,10 +54,11 @@ func seed(t *testing.T) *fixture {
 	f.issuer = registre.URL
 	f.gone = seedPerson(t, f.db, f.issuer, "gone@facile.studio", "sub-gone", false)
 	f.other = seedPerson(t, f.db, f.issuer, "other@facile.studio", "sub-other", true)
-	if err := f.db.Create(&schemas.APIKey{App: "nuage", Kind: schemas.KeyKindSecret, Prefix: "p", KeyHash: "h"}).Error; err != nil {
+	f.personal = seedPersonalWorkspace(t, f.db, f.gone, f.other)
+	if err := f.db.Create(&schemas.APIKey{WorkspaceID: 1, App: "nuage", Kind: schemas.KeyKindSecret, Prefix: "p", KeyHash: "h"}).Error; err != nil {
 		t.Fatalf("seed key: %v", err)
 	}
-	if err := f.db.Create(&schemas.LogEntry{App: "nuage", Level: "info", Message: "upload by gone@facile.studio"}).Error; err != nil {
+	if err := f.db.Create(&schemas.LogEntry{WorkspaceID: 1, App: "nuage", Level: "info", Message: "upload by gone@facile.studio"}).Error; err != nil {
 		t.Fatalf("seed log: %v", err)
 	}
 	sqlDB, err := f.db.DB()
@@ -105,6 +83,8 @@ func (f *fixture) assertErased(t *testing.T) {
 		`SELECT count(*) FROM porte_identities WHERE user_id = ?`:  0,
 		`SELECT count(*) FROM porte_sessions WHERE user_id = ?`:    0,
 		`SELECT count(*) FROM porte_login_codes WHERE user_id = ?`: 0,
+		`SELECT count(*) FROM workspace_members WHERE user_id = ?`: 0,
+		`SELECT count(*) FROM workspaces WHERE personal_of = ?`:    0,
 	}
 	for query, want := range checks {
 		if got := count(t, f.db, query, f.gone); got != want {
@@ -122,7 +102,13 @@ func (f *fixture) assertErased(t *testing.T) {
 		}
 	}
 	if got := count(t, f.db, `SELECT count(*) FROM api_keys`); got != 1 {
-		t.Errorf("an instance-owned ingest key was removed: %d", got)
+		t.Errorf("want only the instance-owned ingest key left, got %d keys", got)
+	}
+	if got := count(t, f.db, `SELECT count(*) FROM workspace_purges WHERE workspace_id = ?`, f.personal); got != 1 {
+		t.Errorf("the erased personal workspace was not queued for its log purge: %d", got)
+	}
+	if got := count(t, f.db, `SELECT count(*) FROM workspace_members WHERE user_id = ? AND workspace_id = 1`, f.other); got != 1 {
+		t.Errorf("another person's membership was touched: %d", got)
 	}
 }
 
@@ -234,7 +220,7 @@ func TestErasureCoversEveryTableThatReferencesAUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list the foreign keys: %v", err)
 	}
-	want := []string{"porte_identities", "porte_login_codes", "porte_sessions"}
+	want := []string{"porte_identities", "porte_login_codes", "porte_sessions", "workspace_members", "workspaces"}
 	if !slices.Equal(tables, want) {
 		t.Fatalf("tables referencing users = %v, want %v: erase the new one and assert it", tables, want)
 	}

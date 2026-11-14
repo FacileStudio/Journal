@@ -62,10 +62,11 @@ func RequireBrowserIngestAuth(keys BrowserKeyVerifier) func(http.Handler) http.H
 			header.Set("Access-Control-Allow-Origin", origin)
 
 			scoped := authcontext.WithIngestScope(request.Context(), authcontext.IngestScope{
-				App:        key.App,
-				KeyID:      key.ID,
-				DailyQuota: key.DailyQuota,
-				Origin:     origin,
+				App:         key.App,
+				WorkspaceID: key.WorkspaceID,
+				KeyID:       key.ID,
+				DailyQuota:  key.DailyQuota,
+				Origin:      origin,
 			})
 			next.ServeHTTP(w, request.WithContext(scoped))
 		})

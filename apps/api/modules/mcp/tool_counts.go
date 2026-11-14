@@ -11,7 +11,8 @@ import (
 
 // count is journal_count_logs.
 func (t *toolset) count(ctx context.Context, req *sdk.CallToolRequest, in countInput) (*sdk.CallToolResult, countOutput, error) {
-	if _, err := t.callerOf(ctx, req); err != nil {
+	access, err := t.accessOf(ctx, req, in.WorkspaceID)
+	if err != nil {
 		return nil, countOutput{}, err
 	}
 	filter, err := filterOf(in.filterInput, time.Now())
@@ -22,7 +23,7 @@ func (t *toolset) count(ctx context.Context, req *sdk.CallToolRequest, in countI
 		return nil, countOutput{}, errCountWindow
 	}
 	width := logs.BucketSeconds(int64(filter.Until.Sub(*filter.Since) / time.Second))
-	buckets, err := t.Logs.Histogram(ctx, logs.ListParams{Params: filter}, width)
+	buckets, err := t.Logs.Histogram(ctx, access.Scope, logs.ListParams{Params: filter}, width)
 	if err != nil {
 		return nil, countOutput{}, mcpkit.Failure(err, "")
 	}
@@ -42,16 +43,17 @@ func (t *toolset) count(ctx context.Context, req *sdk.CallToolRequest, in countI
 
 // apps is journal_list_apps.
 func (t *toolset) apps(ctx context.Context, req *sdk.CallToolRequest, _ appsInput) (*sdk.CallToolResult, appsOutput, error) {
-	if _, err := t.callerOf(ctx, req); err != nil {
+	access, err := t.accessOf(ctx, req, 0)
+	if err != nil {
 		return nil, appsOutput{}, err
 	}
-	summaries, err := t.Logs.Apps(ctx)
+	summaries, err := t.Logs.Apps(ctx, access.Scope)
 	if err != nil {
 		return nil, appsOutput{}, mcpkit.Failure(err, "")
 	}
 	out := appsOutput{Apps: make([]appOut, len(summaries))}
 	for i, s := range summaries {
-		out.Apps[i] = appOut{Name: s.Name, Entries: s.Count, LastSeen: s.LastSeen}
+		out.Apps[i] = appOut{WorkspaceID: s.WorkspaceID, Name: s.Name, Entries: s.Count, LastSeen: s.LastSeen}
 	}
 	return nil, out, nil
 }

@@ -2,9 +2,11 @@ package sourcemaps
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/FacileStudio/Journal/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/tronc/errors"
 	"github.com/FacileStudio/tronc/httpjson"
 )
@@ -26,16 +28,16 @@ func newHandler(service *Service) *Handler { return &Handler{service: service} }
 // The legacy INGEST_TOKEN is unscoped, and an unscoped credential must not be
 // able to write maps for an app it cannot name: it would let one shipper's
 // token overwrite another app's resolution. Uploading needs a per-app key.
-func scopedApp(r *http.Request) (string, error) {
+func scopedApp(r *http.Request) (authcontext.IngestScope, error) {
 	scope, _ := authcontext.IngestScopeFrom(r.Context())
-	if scope.App == "" {
-		return "", errors.Forbidden("uploading source maps needs a per-app API key, not the shared ingest token")
+	if scope.App == "" || scope.WorkspaceID == 0 {
+		return authcontext.IngestScope{}, errors.Forbidden("uploading source maps needs a per-app API key, not the shared ingest token")
 	}
-	return scope.App, nil
+	return scope, nil
 }
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
-	app, err := scopedApp(r)
+	key, err := scopedApp(r)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -51,7 +53,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stored, err := h.service.Store(r.Context(), app, req.Release, req.File, req.Map)
+	stored, err := h.service.Store(r.Context(), key.WorkspaceID, key.App, req.Release, req.File, req.Map)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -60,7 +62,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	app, err := scopedApp(r)
+	key, err := scopedApp(r)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -72,7 +74,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files, err := h.service.Files(r.Context(), app, release)
+	files, err := h.service.Files(r.Context(), key.WorkspaceID, key.App, release)
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -81,7 +83,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) releases(w http.ResponseWriter, r *http.Request) {
-	releases, err := h.service.Releases(r.Context())
+	releases, err := h.service.Releases(r.Context(), workspace.FromContext(r.Context()).Owned())
 	if err != nil {
 		httpjson.WriteError(w, err)
 		return
@@ -92,12 +94,13 @@ func (h *Handler) releases(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 	app := strings.TrimSpace(r.URL.Query().Get("app"))
 	release := strings.TrimSpace(r.URL.Query().Get("release"))
-	if app == "" || release == "" {
-		httpjson.WriteError(w, errors.Invalid("app and release are required"))
+	workspaceID, err := strconv.ParseInt(r.URL.Query().Get("workspace_id"), 10, 64)
+	if app == "" || release == "" || err != nil {
+		httpjson.WriteError(w, errors.Invalid("app, release and workspace_id are required"))
 		return
 	}
 
-	if _, err := h.service.Delete(r.Context(), app, release); err != nil {
+	if _, err := h.service.Delete(r.Context(), workspace.FromContext(r.Context()).Owned(), workspaceID, app, release); err != nil {
 		httpjson.WriteError(w, err)
 		return
 	}

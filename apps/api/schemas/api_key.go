@@ -18,11 +18,12 @@ const (
 // APIKey is one ingest credential: a server secret or a browser public key
 // with an origin allowlist.
 type APIKey struct {
-	ID      int64  `json:"id" gorm:"column:id;primaryKey"`
-	App     string `json:"app" gorm:"column:app;not null"`
-	Kind    string `json:"kind" gorm:"column:kind;not null;default:secret"`
-	Prefix  string `json:"prefix" gorm:"column:prefix;not null"`
-	KeyHash string `json:"-" gorm:"column:key_hash;uniqueIndex;not null"`
+	ID          int64  `json:"id" gorm:"column:id;primaryKey"`
+	WorkspaceID int64  `json:"workspace_id" gorm:"column:workspace_id;not null"`
+	App         string `json:"app" gorm:"column:app;not null"`
+	Kind        string `json:"kind" gorm:"column:kind;not null;default:secret"`
+	Prefix      string `json:"prefix" gorm:"column:prefix;not null"`
+	KeyHash     string `json:"-" gorm:"column:key_hash;uniqueIndex;not null"`
 
 	// AllowedOrigins is the exact-match origin allowlist a public key is
 	// checked against, and it is empty on a secret key. An empty list on a

@@ -95,11 +95,12 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 			createdAt = clampTimestamp(parsed.UTC(), now)
 		}
 		entries = append(entries, schemas.LogEntry{
-			App:       app,
-			Level:     level,
-			Message:   capMessage(entry.Message),
-			Meta:      scrubServerMeta(entry.Meta),
-			CreatedAt: createdAt,
+			WorkspaceID: h.service.Place(scope, app),
+			App:         app,
+			Level:       level,
+			Message:     capMessage(entry.Message),
+			Meta:        scrubServerMeta(entry.Meta),
+			CreatedAt:   createdAt,
 		})
 	}
 
