@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The MCP confirm page accepts only the person's own browser session (porte v0.20.0 `mcpauth.RequireOwnSession`). A bearer, CLI or delegated session gets a 403 and the page asks the person to sign in again in the browser. Everyone signs in once after this release before confirming.
+- `journal_set_alert_enabled` is annotated destructive: pausing a rule silences its alert.
+- The MCP state key comes from tronc `mcp.StateKey` (byte-identical), the confirm page API mounts through `PendingPage.Mount`, and the waiting text is tronc's standard one.
+- build(deps): porte v0.20.0, porte/mcpauth v0.3.0, porte/forfait v0.1.3.
+
 ## [0.7.0] - 2026-11-14
 
 ### Added
