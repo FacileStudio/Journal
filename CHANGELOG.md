@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-14
+
 ### Changed
 
 - The MCP confirm page accepts only the person's own browser session (porte v0.20.0 `mcpauth.RequireOwnSession`). A bearer, CLI or delegated session gets a 403 `permission_denied` and the page asks the person to sign in again in the browser. Everyone signs in once after this release before confirming.
