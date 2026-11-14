@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Alert, Button, EmptyState, Spinner, Table, icons } from '@facile/muse';
 	import { backend, type AppSummary } from '$lib/backend';
 	import { formatCount, formatDate, formatRelative } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SpaceFilter from '$lib/components/SpaceFilter.svelte';
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -14,20 +17,29 @@
 
 	const sorted = $derived([...apps].sort((a, b) => b.count - a.count));
 
-	onMount(async () => {
+	async function load() {
 		try {
 			apps = (await backend.listApps()).apps;
+			error = '';
 		} catch (err) {
 			error = err instanceof Error ? err.message : t('apps.loadFailed');
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(load);
+
+	$effect(() => {
+		if (spaces.version) untrack(() => void load());
 	});
 </script>
 
 <svelte:head><title>{t('apps.title')} — Journal</title></svelte:head>
 
-<PageHeader title={t('apps.title')} description={t('apps.description')} />
+<PageHeader title={t('apps.title')} description={t('apps.description')}>
+	{#snippet actions()}<SpaceFilter />{/snippet}
+</PageHeader>
 
 {#if error}
 	<Alert tone="danger" title={t('apps.loadFailed')}>{error}</Alert>
@@ -54,9 +66,9 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each sorted as app (app.name)}
+			{#each sorted as app (`${app.workspace_id}:${app.name}`)}
 				<tr>
-					<td class="font-fc-mono text-fc-xs">{app.name}</td>
+					<td class="font-fc-mono text-fc-xs"><span class="inline-flex items-center gap-2">{app.name}<SpaceTag id={app.workspace_id} /></span></td>
 					<td class="tabular-nums">{formatCount(app.count)}</td>
 					<td class="whitespace-nowrap text-fc-fg-muted" title={formatDate(app.last_seen)}>
 						{formatRelative(app.last_seen)}

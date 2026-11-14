@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import {
@@ -33,6 +33,8 @@
 	import LogTable from '$lib/components/LogTable.svelte';
 	import LogContextDrawer from '$lib/components/LogContextDrawer.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SpaceFilter from '$lib/components/SpaceFilter.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -53,6 +55,12 @@
 	] as const;
 
 	let apps = $state<AppSummary[]>([]);
+	const appNames = $derived.by(() => {
+		const totals = new Map<string, number>();
+		for (const app of apps) totals.set(app.name, (totals.get(app.name) ?? 0) + app.count);
+		return [...totals].map(([name, count]) => ({ name, count }));
+	});
+	let saveSpace = $state('');
 	let savedQueries = $state<SavedQuery[]>([]);
 	let entries = $state<LogEntry[]>([]);
 	let hist = $state<Histogram | null>(null);
@@ -256,6 +264,15 @@
 	onDestroy(() => clearTimeout(searchTimer));
 
 	$effect(() => {
+		if (!spaces.version) return;
+		untrack(() => {
+			void loadApps();
+			void loadSavedQueries();
+			apply();
+		});
+	});
+
+	$effect(() => {
 		if (!liveTail || tailPaused) return;
 		const timer = setInterval(() => void poll(), POLL_MS);
 		return () => clearInterval(timer);
@@ -342,7 +359,7 @@
 			if (query.trim()) params.q = query.trim();
 			if (source) params.source = source;
 			if (requestId) params.request_id = requestId;
-			await backend.createQuery(name, params);
+			await backend.createQuery(name, params, saveSpace ? Number(saveSpace) : spaces.target);
 			await loadSavedQueries();
 			saveOpen = false;
 			saveName = '';
@@ -387,7 +404,11 @@
 			/>
 			{t('logs.liveTail')}
 		</Button>
-		<Button size="sm" variant="secondary" icon={icons.plus} onclick={() => (saveOpen = true)}>
+		<SpaceFilter />
+		<Button size="sm" variant="secondary" icon={icons.plus} onclick={() => {
+			saveSpace = String(spaces.target ?? spaces.all[0]?.id ?? '');
+			saveOpen = true;
+		}}>
 			{t('logs.saveFilters')}
 		</Button>
 	{/snippet}
@@ -413,7 +434,7 @@
 					aria-label={t('logs.filterApp')}
 				>
 					<option value="">{t('logs.allApps')}</option>
-					{#each apps as app (app.name)}
+					{#each appNames as app (app.name)}
 						<option value={app.name}>{app.name} ({app.count})</option>
 					{/each}
 				</Select>
@@ -567,6 +588,16 @@
 		<span class="text-fc-sm text-fc-fg-muted">{t('common.name')}</span>
 		<Input bind:value={saveName} placeholder={t('logs.saveNamePlaceholder')} />
 	</label>
+	{#if spaces.all.length > 1}
+		<label class="flex flex-col gap-1">
+			<span class="text-fc-sm text-fc-fg-muted">{t('spaces.target')}</span>
+			<Select bind:value={saveSpace}>
+				{#each spaces.all as workspace (workspace.id)}
+					<option value={String(workspace.id)}>{workspace.name}</option>
+				{/each}
+			</Select>
+		</label>
+	{/if}
 	{#snippet footer()}
 		<div class="flex justify-end gap-2">
 			<Button variant="ghost" onclick={() => (saveOpen = false)}>{t('common.cancel')}</Button>

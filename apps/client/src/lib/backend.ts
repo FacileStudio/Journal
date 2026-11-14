@@ -7,6 +7,28 @@ const backendBaseUrl = '/api';
    routes call it quiet, because a 401 there is the answer the caller asked for. */
 const apiFetch = createApi({ base: backendBaseUrl, onUnauthorized: redirectToLogin });
 
+let readScope: number[] = [];
+
+/** Sets the workspaces every list read narrows to; an empty list reads them all. */
+export function setReadScope(ids: number[]) {
+	readScope = ids;
+}
+
+function scoped(path: string, qs = new URLSearchParams()) {
+	if (readScope.length) qs.set('workspace', readScope.join(','));
+	return qs.size ? `${path}?${qs}` : path;
+}
+
+export type WorkspaceRole = 'owner' | 'member';
+
+export type Workspace = {
+	id: number;
+	name: string;
+	role: WorkspaceRole;
+	personal: boolean;
+	plan_exempt: boolean;
+};
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type AuthUser = {
@@ -40,6 +62,7 @@ export const ssoLoginUrl = `${backendBaseUrl}/auth/oidc`;
 
 export type LogEntry = {
 	id: number;
+	workspace_id: number;
 	app: string;
 	level: LogLevel;
 	message: string;
@@ -59,6 +82,7 @@ export type ListLogsResponse = {
 };
 
 export type AppSummary = {
+	workspace_id: number;
 	name: string;
 	count: number;
 	last_seen: string;
@@ -140,6 +164,7 @@ export type ApiKeyKind = 'secret' | 'public';
 
 export type ApiKey = {
 	id: number;
+	workspace_id: number;
 	app: string;
 	kind: ApiKeyKind;
 	prefix: string;
@@ -152,6 +177,7 @@ export type ApiKey = {
 };
 
 export type NewApiKey = {
+	workspace_id?: number;
 	app: string;
 	kind: ApiKeyKind;
 	allowed_origins?: string[];
@@ -177,6 +203,7 @@ export type SavedQueryParams = {
 
 export type SavedQuery = {
 	id: number;
+	workspace_id: number;
 	name: string;
 	params: SavedQueryParams;
 	created_at: string;
@@ -194,6 +221,7 @@ export type AlertProvider = 'webhook' | 'antenne';
 
 export type AlertRule = {
 	id: number;
+	workspace_id: number;
 	name: string;
 	saved_query_id: number;
 	query_name: string;
@@ -310,8 +338,7 @@ export const backend = {
 			qs.set('before_ts', params.before.ts);
 			qs.set('before_id', String(params.before.id));
 		}
-		const query = qs.size ? `?${qs}` : '';
-		return apiFetch<ListLogsResponse>(`/logs${query}`);
+		return apiFetch<ListLogsResponse>(scoped('/logs', qs));
 	},
 
 	histogram(params: HistogramParams = {}) {
@@ -324,8 +351,7 @@ export const backend = {
 		if (params.session_id) qs.set('session_id', params.session_id);
 		if (params.since) qs.set('since', params.since);
 		if (params.until) qs.set('until', params.until);
-		const query = qs.size ? `?${qs}` : '';
-		return apiFetch<HistogramResponse>(`/logs/histogram${query}`);
+		return apiFetch<HistogramResponse>(scoped('/logs/histogram', qs));
 	},
 
 	logStack(id: number) {
@@ -336,12 +362,16 @@ export const backend = {
 		return apiFetch<LogContextResponse>(`/logs/${id}/context?before=${before}&after=${after}`);
 	},
 
+	listWorkspaces() {
+		return apiFetch<{ workspaces: Workspace[] }>('/workspaces');
+	},
+
 	listApps() {
-		return apiFetch<ListAppsResponse>('/apps');
+		return apiFetch<ListAppsResponse>(scoped('/apps'));
 	},
 
 	listApiKeys() {
-		return apiFetch<ListApiKeysResponse>('/apikeys');
+		return apiFetch<ListApiKeysResponse>(scoped('/apikeys'));
 	},
 
 	createApiKey(key: NewApiKey) {
@@ -356,13 +386,13 @@ export const backend = {
 	},
 
 	listQueries() {
-		return apiFetch<ListSavedQueriesResponse>('/queries');
+		return apiFetch<ListSavedQueriesResponse>(scoped('/queries'));
 	},
 
-	createQuery(name: string, params: SavedQueryParams) {
+	createQuery(name: string, params: SavedQueryParams, workspaceId?: number) {
 		return apiFetch<SavedQueryResponse>('/queries', {
 			method: 'POST',
-			body: JSON.stringify({ name, params })
+			body: JSON.stringify({ workspace_id: workspaceId, name, params })
 		});
 	},
 
@@ -371,7 +401,7 @@ export const backend = {
 	},
 
 	listAlerts() {
-		return apiFetch<ListAlertsResponse>('/alerts');
+		return apiFetch<ListAlertsResponse>(scoped('/alerts'));
 	},
 
 	createAlert(params: CreateAlertParams) {

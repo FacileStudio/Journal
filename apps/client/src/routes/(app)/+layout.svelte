@@ -8,6 +8,7 @@
 	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { takeReturn } from '$lib/return-path';
+	import { spaces } from '$lib/workspaces.svelte';
 	import Landing from '$lib/components/landing/Landing.svelte';
 	import { setContext } from 'svelte';
 
@@ -22,12 +23,12 @@
 	let collapsed = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
 
-	const links: { key: Key; href: string; icon: string; adminOnly?: boolean }[] = [
+	const links: { key: Key; href: string; icon: string; ownerOnly?: boolean }[] = [
 		{ key: 'nav.overview', href: '/', icon: icons.dashboard },
 		{ key: 'nav.logs', href: '/logs', icon: icons.history },
 		{ key: 'nav.apps', href: '/apps', icon: icons.server },
 		{ key: 'nav.queries', href: '/queries', icon: icons.filter },
-		{ key: 'nav.alerts', href: '/alerts', icon: icons.notification, adminOnly: true }
+		{ key: 'nav.alerts', href: '/alerts', icon: icons.notification, ownerOnly: true }
 	];
 
 	async function logout() {
@@ -52,9 +53,10 @@
 	$effect(() => {
 		backend
 			.me()
-			.then((res) => {
+			.then(async (res) => {
 				user = res.user;
 				adoptLocale(resolveLocale(res.user.locale));
+				await spaces.load().catch(() => undefined);
 				ready = true;
 				loadInvitations();
 				const back = takeReturn();
@@ -92,7 +94,7 @@
 
 	const navPages = $derived(
 		links
-			.filter((link) => !link.adminOnly || user?.is_admin)
+			.filter((link) => !link.ownerOnly || spaces.owned.length > 0)
 			.map((link) => ({ label: t(link.key), href: link.href, icon: link.icon, active: isActive(link.href) }))
 	);
 	const onSettings = $derived(page.url.pathname.startsWith('/settings'));

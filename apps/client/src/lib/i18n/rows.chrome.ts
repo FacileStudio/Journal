@@ -54,10 +54,10 @@ export const chrome = {
 	],
 	'overview.title': ['Overview', 'Aperçu', 'Resumen', 'Übersicht'],
 	'overview.description': [
-		'What every app in the suite has been saying for the last 24 hours.',
-		'Ce que chaque application de la suite a journalisé ces dernières 24 heures.',
-		'Lo que cada aplicación de la suite ha registrado en las últimas 24 horas.',
-		'Was jede App der Suite in den letzten 24 Stunden protokolliert hat.'
+		'What the apps in your spaces have logged over the last 24 hours.',
+		'Ce que les applications de vos espaces ont journalisé ces dernières 24 heures.',
+		'Lo que las aplicaciones de sus espacios han registrado en las últimas 24 horas.',
+		'Was die Apps in Ihren Bereichen in den letzten 24 Stunden protokolliert haben.'
 	],
 	'overview.openLogs': ['Open logs', 'Ouvrir les journaux', 'Abrir los registros', 'Logs öffnen'],
 	'overview.stat.entries': ['Entries', 'Entrées', 'Entradas', 'Einträge'],

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, onMount } from 'svelte';
+	import { getContext, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
 		Alert,
@@ -20,6 +20,9 @@
 	import { backend, type AlertRule, type AuthUser, type SavedQuery, type AntenneSettings } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SpaceFilter from '$lib/components/SpaceFilter.svelte';
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -44,6 +47,8 @@
 	let webhookHeader = $state('');
 	let webhookSecret = $state('');
 	let provider = $state<'webhook' | 'antenne'>('webhook');
+	const watchable = $derived(queries.filter((saved) => spaces.owned.some((w) => w.id === saved.workspace_id)));
+	const antenneAllowed = $derived(watchable.find((saved) => String(saved.id) === savedQueryId)?.workspace_id === 1);
 
 	function isHttpUrl(value: string): boolean {
 		try {
@@ -160,11 +165,15 @@
 	}
 
 	onMount(() => {
-		if (!auth?.user?.is_admin) {
+		if (spaces.owned.length === 0) {
 			void goto('/');
 			return;
 		}
 		void load();
+	});
+
+	$effect(() => {
+		if (spaces.version) untrack(() => void load());
 	});
 </script>
 
@@ -175,10 +184,11 @@
 	description={t('alerts.description')}
 >
 	{#snippet actions()}
+		<SpaceFilter />
 		<Button
 			size="sm"
 			icon={icons.plus}
-			disabled={queries.length === 0}
+			disabled={watchable.length === 0}
 			onclick={() => {
 				reset();
 				open = true;
@@ -193,7 +203,7 @@
 	<Alert tone="danger" title={t('alerts.loadFailed')}>{error}</Alert>
 {:else if loading}
 	<div class="flex justify-center py-16"><Spinner /></div>
-{:else if queries.length === 0}
+{:else if watchable.length === 0}
 	<EmptyState
 		icon={icons.filter}
 		title={t('alerts.saveQueryFirst')}
@@ -224,7 +234,7 @@
 		<tbody>
 			{#each alerts as rule (rule.id)}
 				<tr>
-					<td class="font-medium">{rule.name}</td>
+					<td class="font-medium"><span class="inline-flex items-center gap-2">{rule.name}<SpaceTag id={rule.workspace_id} /></span></td>
 					<td class="text-fc-fg-muted">
 						<span class="font-fc-mono text-fc-xs">{rule.query_name}</span>
 						· {t('alerts.conditionValue', { threshold: rule.threshold, minutes: rule.window_minutes })}
@@ -281,8 +291,8 @@
 		<Field label={t('alerts.savedQuery')} helper={t('alerts.savedQueryHint')}>
 			<Select bind:value={savedQueryId}>
 				<option value="" disabled>{t('alerts.pickQuery')}</option>
-				{#each queries as saved (saved.id)}
-					<option value={String(saved.id)}>{saved.name}</option>
+				{#each watchable as saved (saved.id)}
+					<option value={String(saved.id)}>{spaces.multi ? `${saved.name} · ${spaces.name(saved.workspace_id)}` : saved.name}</option>
 				{/each}
 			</Select>
 		</Field>
@@ -290,7 +300,7 @@
 		<Field label={t('alerts.target')}>
 			<Select bind:value={provider}>
 				<option value="webhook">{t('alerts.webhook')}</option>
-				<option value="antenne">{t('alerts.antenneGlobal')}</option>
+				{#if antenneAllowed}<option value="antenne">{t('alerts.antenneGlobal')}</option>{/if}
 			</Select>
 		</Field>
 

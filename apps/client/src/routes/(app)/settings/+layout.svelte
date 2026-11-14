@@ -1,26 +1,23 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
 	import { page } from '$app/state';
 	import { SettingsLayout, icons } from '@facile/muse';
-	import type { AuthUser } from '$lib/backend';
 	import { useT, type Key } from '$lib/i18n';
+	import { spaces } from '$lib/workspaces.svelte';
 
 	const t = useT();
 
 	let { children } = $props();
 
-	const auth = getContext<{ user: AuthUser | null }>('auth');
-
-	const sections: { id: string; key: Key; icon: string; adminOnly?: boolean }[] = [
+	const sections: { id: string; key: Key; icon: string; ownerOnly?: boolean }[] = [
 		{ id: 'profile', key: 'settings.profile', icon: icons.userCircle },
 		{ id: 'preferences', key: 'settings.preferences', icon: icons.palette },
-		{ id: 'api', key: 'settings.api', icon: icons.key, adminOnly: true },
+		{ id: 'api', key: 'settings.api', icon: icons.key, ownerOnly: true },
 		{ id: 'advanced', key: 'settings.advanced', icon: icons.settings }
 	];
 
 	const items = $derived(
 		sections
-			.filter((section) => !section.adminOnly || auth?.user?.is_admin)
+			.filter((section) => !section.ownerOnly || spaces.owned.length > 0)
 			.map((section) => ({
 				id: section.id,
 				label: t(section.key),

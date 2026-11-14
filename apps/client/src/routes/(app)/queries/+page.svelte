@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Alert, Button, ConfirmModal, EmptyState, Spinner, Table, icons, toast } from '@facile/muse';
 	import { backend, type SavedQuery } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SpaceFilter from '$lib/components/SpaceFilter.svelte';
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -57,6 +60,10 @@
 	}
 
 	onMount(load);
+
+	$effect(() => {
+		if (spaces.version) untrack(() => void load());
+	});
 </script>
 
 <svelte:head><title>{t('queries.title')} — Journal</title></svelte:head>
@@ -66,6 +73,7 @@
 	description={t('queries.description')}
 >
 	{#snippet actions()}
+		<SpaceFilter />
 		<Button size="sm" variant="secondary" href="/logs" icon={icons.plus}>{t('queries.saveNew')}</Button>
 	{/snippet}
 </PageHeader>
@@ -96,7 +104,7 @@
 			{#each queries as saved (saved.id)}
 				<tr>
 					<td class="font-medium">
-						<a class="hover:underline" href={href(saved)}>{saved.name}</a>
+						<span class="inline-flex items-center gap-2"><a class="hover:underline" href={href(saved)}>{saved.name}</a><SpaceTag id={saved.workspace_id} /></span>
 					</td>
 					<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{summary(saved)}</td>
 					<td class="whitespace-nowrap text-fc-fg-muted">{formatDate(saved.created_at)}</td>

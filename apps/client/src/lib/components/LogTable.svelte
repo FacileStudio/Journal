@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
 	import { Icon, Button, EmptyState, Spinner, Table, Tooltip, icons, toast } from '@facile/muse';
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
@@ -198,6 +199,7 @@
 								{entry.app}
 							</button>
 						</Tooltip>
+						<SpaceTag id={entry.workspace_id} />
 					</td>
 					<td>
 						<Tooltip text={t('table.filterBy', { value: entry.level })} class="contents">

@@ -3,10 +3,10 @@ import type { Row } from './rows';
 export const explorer = {
 	'logs.title': ['Logs', 'Journaux', 'Registros', 'Logs'],
 	'logs.description': [
-		'Every entry shipped to this instance, newest first.',
-		'Chaque entrée envoyée à cette instance, la plus récente en premier.',
-		'Cada entrada enviada a esta instancia, la más reciente primero.',
-		'Jeder an diese Instanz gesendete Eintrag, neueste zuerst.'
+		'Every entry shipped to your spaces, newest first.',
+		'Chaque entrée envoyée à vos espaces, la plus récente en premier.',
+		'Cada entrada enviada a sus espacios, la más reciente primero.',
+		'Jeder an Ihre Bereiche gesendete Eintrag, neueste zuerst.'
 	],
 	'logs.resume': ['Resume', 'Reprendre', 'Reanudar', 'Fortsetzen'],
 	'logs.pause': ['Pause', 'Pause', 'Pausa', 'Pause'],

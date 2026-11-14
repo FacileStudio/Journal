@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Button, Card, DonutChart, EmptyState, Sparkline, StatCard, Table, icons } from '@facile/muse';
 	import { backend, type AppSummary, type LogEntry } from '$lib/backend';
@@ -9,6 +9,9 @@
 	import LogHistogram from '$lib/components/LogHistogram.svelte';
 	import LogTable from '$lib/components/LogTable.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SpaceFilter from '$lib/components/SpaceFilter.svelte';
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 	import { useT } from '$lib/i18n';
 
 	const t = useT();
@@ -47,7 +50,7 @@
 		void goto(`/logs?${params}`);
 	}
 
-	onMount(async () => {
+	async function load() {
 		const since = new Date(Date.now() - WINDOW_MS).toISOString();
 		const [histRes, appsRes, errorsRes] = await Promise.allSettled([
 			backend.histogram({ since }),
@@ -58,16 +61,33 @@
 		if (appsRes.status === 'fulfilled') apps = appsRes.value.apps;
 		if (errorsRes.status === 'fulfilled') recentErrors = errorsRes.value.entries;
 		loading = false;
+	}
+
+	onMount(load);
+
+	$effect(() => {
+		if (spaces.version) untrack(() => void load());
 	});
+
+	const empty = $derived(!loading && apps.length === 0);
 </script>
 
 <svelte:head><title>{t('overview.title')} — Journal</title></svelte:head>
 
 <PageHeader title={t('overview.title')} description={t('overview.description')}>
 	{#snippet actions()}
+		<SpaceFilter />
 		<Button size="sm" variant="secondary" href="/logs" icon={icons.history}>{t('overview.openLogs')}</Button>
 	{/snippet}
 </PageHeader>
+
+{#if empty}
+	<EmptyState icon={icons.key} title={t('spaces.emptyTitle')} description={t('spaces.emptyHint')}>
+		{#if spaces.owned.length > 0}
+			<Button href="/settings/api" icon={icons.key}>{t('spaces.createKey')}</Button>
+		{/if}
+	</EmptyState>
+{/if}
 
 <section class="flex flex-col gap-4">
 	<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -121,10 +141,10 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each topApps as app (app.name)}
+					{#each topApps as app (`${app.workspace_id}:${app.name}`)}
 						<tr>
 							<td class="whitespace-nowrap font-fc-mono text-fc-xs">
-								<a class="hover:underline" href="/logs?app={encodeURIComponent(app.name)}">{app.name}</a>
+								<span class="inline-flex items-center gap-2"><a class="hover:underline" href="/logs?app={encodeURIComponent(app.name)}">{app.name}</a><SpaceTag id={app.workspace_id} /></span>
 							</td>
 							<td class="tabular-nums">{formatCount(app.count)}</td>
 							<td class="whitespace-nowrap text-fc-fg-muted">{formatRelative(app.last_seen)}</td>

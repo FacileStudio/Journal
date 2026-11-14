@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, onMount } from 'svelte';
+	import { getContext, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
 		Alert,
@@ -9,6 +9,7 @@
 		Drawer,
 		EmptyState,
 		Field,
+		Select,
 		Input,
 		OptionCards,
 		SecretField,
@@ -25,6 +26,8 @@
 	import { backend, type AntenneSettingsResponse, type ApiKey, type ApiKeyKind, type AuthUser } from '$lib/backend';
 	import { formatDate } from '$lib/format';
 	import { useT } from '$lib/i18n';
+	import SpaceTag from '$lib/components/SpaceTag.svelte';
+	import { spaces } from '$lib/workspaces.svelte';
 
 	const t = useT();
 
@@ -47,6 +50,7 @@
 
 	let open = $state(false);
 	let appName = $state('');
+	let keySpace = $state('');
 	let kind = $state<ApiKeyKind>('secret');
 	let originsText = $state('');
 	let quota = $state(String(DEFAULT_QUOTA));
@@ -112,10 +116,10 @@ export const handleError = handleErrorWith(journal);`
 		try {
 			const [keysRes, antenneRes] = await Promise.all([
 				backend.listApiKeys(),
-				backend.getAntenneSettings()
+				auth?.user?.is_admin ? backend.getAntenneSettings() : Promise.resolve(null)
 			]);
 			keys = keysRes.keys;
-			applyAntenne(antenneRes);
+			if (antenneRes) applyAntenne(antenneRes);
 			error = '';
 		} catch (err) {
 			error = err instanceof Error ? err.message : t('keys.loadSettingsFailed');
@@ -146,6 +150,7 @@ export const handleError = handleErrorWith(journal);`
 	/* Reopening must never resurrect the previous token — it is shown exactly once. */
 	function reset() {
 		appName = '';
+		keySpace = String(spaces.owned.find((w) => w.id === spaces.target)?.id ?? spaces.owned[0]?.id ?? '');
 		kind = 'secret';
 		originsText = '';
 		quota = String(DEFAULT_QUOTA);
@@ -162,6 +167,7 @@ export const handleError = handleErrorWith(journal);`
 		createError = '';
 		try {
 			const res = await backend.createApiKey({
+				workspace_id: keySpace ? Number(keySpace) : undefined,
 				app: appName.trim(),
 				kind,
 				allowed_origins: kind === 'public' ? origins : undefined,
@@ -191,11 +197,15 @@ export const handleError = handleErrorWith(journal);`
 	}
 
 	onMount(() => {
-		if (!auth?.user?.is_admin) {
+		if (spaces.owned.length === 0) {
 			void goto('/settings');
 			return;
 		}
 		void load();
+	});
+
+	$effect(() => {
+		if (spaces.version) untrack(() => void load());
 	});
 </script>
 
@@ -264,7 +274,7 @@ export const handleError = handleErrorWith(journal);`
 					{#each keys as key (key.id)}
 						<!-- Revoked keys stay listed: the audit trail has to keep naming them. -->
 						<tr class={key.revoked_at ? 'opacity-55' : ''}>
-							<td class="font-fc-mono text-fc-xs">{key.app}</td>
+							<td class="font-fc-mono text-fc-xs"><span class="inline-flex items-center gap-2">{key.app}<SpaceTag id={key.workspace_id} /></span></td>
 							<td>
 								<Badge tone={key.kind === 'public' ? 'warning' : 'neutral'}>
 									{key.kind === 'public' ? t('keys.public') : t('keys.secret')}
@@ -308,6 +318,7 @@ export const handleError = handleErrorWith(journal);`
 		{/if}
 	</SettingsSection>
 
+	{#if auth?.user?.is_admin}
 	<SettingsSection title={t('antenne.title')} description={t('antenne.hint')}>
 		{#if error}
 			<Alert tone="danger" title={t('antenne.loadFailed')}>{error}</Alert>
@@ -373,6 +384,7 @@ export const handleError = handleErrorWith(journal);`
 			</SettingsRow>
 		{/if}
 	</SettingsSection>
+	{/if}
 </div>
 
 <Drawer
@@ -408,6 +420,12 @@ export const handleError = handleErrorWith(journal);`
 		<div class="flex flex-col gap-4">
 			{#if createError}
 				<Alert tone="danger" title={t('keys.createErrorTitle')}>{createError}</Alert>
+			{/if}
+
+			{#if spaces.owned.length > 1}
+				<Field label={t('spaces.target')}>
+					<Select bind:value={keySpace} options={spaces.owned.map((w) => ({ value: String(w.id), label: w.name }))} />
+				</Field>
 			{/if}
 
 			<OptionCards
