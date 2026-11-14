@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-14
+
+### Added
+
+- The landing shows three animated demo cards under the hero: search across every app, an alert firing on an error spike, and stack frames resolved through source maps.
+
+### Changed
+
+- build(deps): @facile/mise-en-scene v0.2.2.
+
 ## [0.8.2] - 2026-11-14
 
 ### Fixed
