@@ -56,7 +56,34 @@ func Up(ctx context.Context, cfg migrate.Config) error {
 			return err
 		}
 	}
+	if err := dropInvalidIndex(ctx, cfg.DB, workspaceIndex); err != nil {
+		return err
+	}
 	return migrate.Run(ctx, cfg)
+}
+
+// workspaceIndex is the index 00005 builds concurrently.
+const workspaceIndex = "idx_log_entries_workspace_created_at_id"
+
+// dropInvalidIndex drops name when a concurrent build of it was interrupted.
+// Such a build leaves an INVALID index behind, and the migration's CREATE
+// INDEX CONCURRENTLY IF NOT EXISTS would then record success without a usable
+// index. Dropping it first lets the next boot build it again.
+func dropInvalidIndex(ctx context.Context, db *sql.DB, name string) error {
+	var invalid bool
+	err := db.QueryRowContext(ctx,
+		`SELECT coalesce((SELECT NOT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)), false)`, name,
+	).Scan(&invalid)
+	if err != nil {
+		return fmt.Errorf("migrations: inspect %s: %w", name, err)
+	}
+	if !invalid {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, `DROP INDEX `+name); err != nil {
+		return fmt.Errorf("migrations: drop the invalid %s: %w", name, err)
+	}
+	return nil
 }
 
 // builtByAutoMigrate reports whether the current schema holds Journal's users

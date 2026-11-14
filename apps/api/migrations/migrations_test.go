@@ -243,3 +243,22 @@ func TestLibrarySchemasAreInTheBaseline(t *testing.T) {
 		})
 	}
 }
+
+// TestUpRebuildsAnIndexAnInterruptedBuildLeftInvalid marks the concurrent
+// index invalid, as a boot killed during 00005 leaves it, and checks the next
+// Up drops it before migrating, so the index is never recorded while unusable.
+func TestUpRebuildsAnIndexAnInterruptedBuildLeftInvalid(t *testing.T) {
+	db := testdb.Migrated(t)
+	if err := db.Exec(`UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass('idx_log_entries_workspace_created_at_id')`).Error; err != nil {
+		t.Skipf("the test role cannot mark an index invalid: %v", err)
+	}
+	exec(t, db, `DELETE FROM goose_db_version WHERE version_id = 5`)
+	if err := testdb.Up(db); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+	var valid bool
+	if err := db.Raw(`SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass('idx_log_entries_workspace_created_at_id')`).Scan(&valid).Error; err != nil || !valid {
+		t.Fatalf("the index is still invalid after Up: %v", err)
+	}
+	assertVersions(t, db, 1, 2, 3, 4, 5)
+}
