@@ -79,6 +79,8 @@
 				<p class="mx-auto mt-3 max-w-md text-fc-sm text-fc-fg-muted">{t('landing.download.intro')}</p>
 			</div>
 			<DownloadSection
+				mode="device"
+				allHref="/downloads"
 				commands={cliCommands(t)}
 				releasesHref={CLI_RELEASES_URL}
 				checksumsHref={CLI_CHECKSUMS_URL}

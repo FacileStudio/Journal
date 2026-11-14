@@ -7,7 +7,7 @@
       "dependencies": {
         "@facile/client": "github:FacileStudio/facile-client#v0.1.0",
         "@facile/mise-en-scene": "github:FacileStudio/mise-en-scene#v0.2.1",
-        "@facile/muse": "github:FacileStudio/muse#v0.22.1",
+        "@facile/muse": "github:FacileStudio/muse#v0.23.0",
       },
       "devDependencies": {
         "@sveltejs/adapter-static": "^3.0.0",
@@ -87,7 +87,7 @@
 
     "@facile/mise-en-scene": ["@facile/mise-en-scene@github:FacileStudio/mise-en-scene#29d936d", { "peerDependencies": { "svelte": "^5.29.0" } }, "FacileStudio-mise-en-scene-29d936d", "sha512-ZWvqtesVLNlH4i+oEBHh/obcLTDhdK+JFtnQYnwxrfEERCG2F111AxzEJ9syJkp2NFztic+oz/o4Y6pSh/KCtA=="],
 
-    "@facile/muse": ["@facile/muse@github:FacileStudio/muse#2c4a17e", { "dependencies": { "gsap": "^3.13.0", "tailwind-merge": "^3.5.0" }, "peerDependencies": { "svelte": "^5.0.0", "tailwindcss": "^4.0.0" } }, "FacileStudio-muse-2c4a17e", "sha512-bphgSE6YX8nt7VDzRj0g+4bTlb90lYzlOojjrm9ZvZnAMS3VbLoyMatiIFE4Veuvrendc+ehjg3IHTXMy4/1xw=="],
+    "@facile/muse": ["@facile/muse@github:FacileStudio/muse#709a22d", { "dependencies": { "gsap": "^3.13.0", "tailwind-merge": "^3.5.0" }, "peerDependencies": { "svelte": "^5.0.0", "tailwindcss": "^4.0.0" } }, "FacileStudio-muse-709a22d", "sha512-YXi7YAF8R1qfUBmx3nWKfeKXo+utYj4dXmqA3IHdrX9Fvp49avnKZ5vTdfl51i1IbnBiy/SydMxzgUH2vo0drQ=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
