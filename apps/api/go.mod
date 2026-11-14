@@ -7,7 +7,7 @@ require (
 	github.com/FacileStudio/porte v0.20.0
 	github.com/FacileStudio/porte/directory v0.5.0
 	github.com/FacileStudio/porte/mcpauth v0.3.0
-	github.com/FacileStudio/tronc v0.23.0
+	github.com/FacileStudio/tronc v0.23.1
 	github.com/FacileStudio/tronc/migrate v0.1.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
