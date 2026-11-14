@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-14
+
+### Fixed
+
+- The response CSP allows `connect-src` to `https://api-ardoise.facile.studio`, which the landing's pricing block fetches. The report-only policy logged a violation on every landing load.
+
 ## [0.12.1] - 2026-11-14
 
 ### Fixed
