@@ -84,7 +84,7 @@ func (t *toolset) alertTools() []mcpkit.Tool {
 			Name: toolSetAlert, Title: "Turn an alert rule on or off",
 			Description: "Enable or disable one alert rule (administrators only). A disabled rule keeps its settings " +
 				"and stops firing until it is enabled again.",
-			Annotations: &mcpkit.Annotations{Idempotent: true},
+			Annotations: &mcpkit.Annotations{Destructive: true, Idempotent: true},
 		}, t.setAlert),
 	}
 }

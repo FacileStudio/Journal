@@ -41,7 +41,7 @@ A tool call sees exactly what the same person sees in the dashboard:
 | `journal_delete_saved_query` | Delete a saved query; always confirmed | destructive |
 | `journal_list_alerts` | Alert rules, a webhook named by its host only (admin) | read-only |
 | `journal_create_alert` | Add an alert rule on a saved query, Antenne by default (admin) | write, open world |
-| `journal_set_alert_enabled` | Pause or resume an alert rule (admin) | write, idempotent |
+| `journal_set_alert_enabled` | Pause or resume an alert rule (admin) | destructive (pausing silences the alert), idempotent |
 | `journal_delete_alert` | Delete an alert rule; always confirmed (admin) | destructive |
 
 `since` and `until` take an RFC 3339 time or a duration back from now (`15m`, `6h`, `7d`).
@@ -74,8 +74,10 @@ Deleting a saved query or an alert rule never runs on the model's word alone:
 
 Either way the action runs once. A target edited after the question is not deleted and the
 action closes. A saved query that an alert rule watches cannot be deleted. A person who lost
-administrator rights cannot confirm an alert rule's deletion. A delegated (Bulle) token cannot
-use the confirm page. Every write call and confirmation event is logged without arguments, with
+administrator rights cannot confirm an alert rule's deletion. Only the person's own browser
+session confirms (porte `mcpauth.RequireOwnSession`): a bearer, a delegated (Bulle) token, a CLI
+session or a session minted before porte v0.20.0 gets a 403, and the page asks the person to sign
+in again in the browser. Every write call and confirmation event is logged without arguments, with
 the client id. Erasing an account, through Registre or from Settings, deletes its pending
 actions in the same transaction.
 

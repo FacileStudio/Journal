@@ -25,16 +25,24 @@ func pendingDelete(t *testing.T, f *fixture, subject, tool string, args map[stri
 	return actionID(out.ConfirmURL)
 }
 
-// onPage calls a confirm page route as subject's own session, or as a
-// delegated token when actor is set. An empty route lists the actions.
+// onPage calls a confirm page route as subject's own browser session, or as
+// a delegated token when actor is set. An empty route lists the actions.
 func onPage(f *fixture, subject, route, id, actor string) *httptest.ResponseRecorder {
+	return onPageAs(f, porte.Identity{UserID: f.users[subject], SessionID: 1, BrowserSession: true, Actor: actor}, route, id, "")
+}
+
+// onPageAs calls a confirm page route as identity, with an Authorization
+// header when bearer is set.
+func onPageAs(f *fixture, identity porte.Identity, route, id, bearer string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	if route != "" {
 		req = httptest.NewRequest(http.MethodPost, "/"+id+"/"+route, nil)
 	}
-	userID := f.users[subject]
-	ctx := kit.WithIdentity(req.Context(), kit.Identity{UserID: userID})
-	ctx = porte.WithIdentity(ctx, porte.Identity{UserID: userID, Actor: actor})
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	ctx := kit.WithIdentity(req.Context(), kit.Identity{UserID: identity.UserID})
+	ctx = porte.WithIdentity(ctx, identity)
 	router := chi.NewRouter()
 	f.service.page.Routes(router)
 	recorder := httptest.NewRecorder()
@@ -43,14 +51,22 @@ func onPage(f *fixture, subject, route, id, actor string) *httptest.ResponseReco
 }
 
 // TestConfirmPageDeletesQueryOnce checks the person confirms in Journal, the
-// query goes once, a second confirmation finds nothing, an agent cannot
-// confirm its own request and another person does not see it.
+// query goes once, a second confirmation finds nothing, only the person's own
+// browser session confirms and another person does not see it.
 func TestConfirmPageDeletesQueryOnce(t *testing.T) {
 	f := newFixture(t)
 	q := f.query(t, "To delete")
 	id := pendingDelete(t, f, memberSub, toolDeleteQuery, map[string]any{"query_id": q.ID})
 	if got := onPage(f, memberSub, "confirm", id, "bulle"); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
 		t.Fatalf("a delegated token must not confirm, got %d", got.Code)
+	}
+	cli := porte.Identity{UserID: f.users[memberSub], SessionID: 1}
+	if got := onPageAs(f, cli, "confirm", id, ""); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
+		t.Fatalf("a session no browser login minted must not confirm, got %d", got.Code)
+	}
+	browser := porte.Identity{UserID: f.users[memberSub], SessionID: 1, BrowserSession: true}
+	if got := onPageAs(f, browser, "confirm", id, "token"); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
+		t.Fatalf("a request carrying a bearer must not confirm, got %d", got.Code)
 	}
 	if other := onPage(f, adminSub, "", "", ""); strings.Contains(other.Body.String(), id) {
 		t.Fatalf("another person must not see the action, got %s", other.Body)
