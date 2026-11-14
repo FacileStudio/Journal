@@ -15,6 +15,7 @@ type config struct {
 	journalToken     string
 	dockerSock       string
 	discoverInterval time.Duration
+	minLevels        map[string]string
 }
 
 func loadConfig() config {
@@ -23,6 +24,7 @@ func loadConfig() config {
 		journalToken:     envOr("JOURNAL_TOKEN", os.Getenv("INGEST_TOKEN")),
 		dockerSock:       envOr("DOCKER_SOCK", "/var/run/docker.sock"),
 		discoverInterval: 30 * time.Second,
+		minLevels:        parseMinLevels(os.Getenv("COLLECT_MIN_LEVEL")),
 	}
 	if raw := os.Getenv("DISCOVER_INTERVAL"); raw != "" {
 		if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
@@ -64,10 +66,11 @@ func main() {
 		"journal_url", cfg.journalURL,
 		"docker_sock", cfg.dockerSock,
 		"discover_interval", cfg.discoverInterval.String(),
+		"min_levels", cfg.minLevels,
 		"hostname", hostname,
 	)
 
-	runDiscovery(ctx, docker, ship, hostname, cfg.discoverInterval, log)
+	runDiscovery(ctx, docker, ship, cfg.minLevels, hostname, cfg.discoverInterval, log)
 	<-shipDone
 
 	flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

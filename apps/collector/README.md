@@ -5,8 +5,11 @@ the Docker Engine API (`/var/run/docker.sock`) and ships the lines to Journal's 
 so apps that only `console.log` get centralized logs with zero code change.
 
 Go stdlib only — no Docker SDK. Handles both multiplexed (non-TTY) and raw (TTY) log streams,
-parses per-line Docker timestamps, detects levels from JSON log lines (`level`/`lvl`/`severity`),
-and falls back to stdout → `info`, stderr → `error`. Entries carry
+parses per-line Docker timestamps and detects levels from JSON log lines
+(`level`/`lvl`/`severity`), logfmt (`level=`), a leading Postgres token (`LOG:`, `NOTICE:`,
+`WARNING:`, `ERROR:`, `FATAL:`, `PANIC:`, optionally after a timestamp and `[pid]`) and a leading
+bracketed level (`[ERROR]`). A line with no recognizable level becomes `info` on stdout and
+`warn` on stderr, because many programs write ordinary output to stderr. Entries carry
 `meta.container_id` (12 chars) and `meta.stream`.
 
 ## Token: legacy `INGEST_TOKEN` required
@@ -42,6 +45,7 @@ In production, set `COMPOSE_PROFILES=collector` in the deploy environment.
 | `JOURNAL_TOKEN` | Legacy unscoped ingest token (required) | — |
 | `DOCKER_SOCK` | Docker Engine socket path | `/var/run/docker.sock` |
 | `DISCOVER_INTERVAL` | Container discovery interval, seconds | `30` |
+| `COLLECT_MIN_LEVEL` | Per-app minimum level, `app=level,app=level`. Lines below it are dropped before shipping. Levels: `debug`, `info`, `warn`, `error`. An `app` key matches the exact app name, or any app name that starts with `<key>-` (so `labparasite-apppupille` covers `labparasite-apppupille-6bypjx-api-1`). Invalid pairs are ignored. | unset (ship everything) |
 
 ## Caveats
 

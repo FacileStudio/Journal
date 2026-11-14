@@ -11,6 +11,7 @@ import (
 type tailer struct {
 	docker *dockerClient
 	ship   *shipper
+	mins   map[string]string
 	log    *slog.Logger
 	id     string
 	app    string
@@ -74,7 +75,11 @@ func (t *tailer) handleLine(stream byte, raw []byte) {
 	if !ts.IsZero() {
 		t.lastTS = ts
 	}
-	t.ship.add(mapLine(t.app, t.id, stream, ts, message))
+	e := mapLine(t.app, t.id, stream, ts, message)
+	if belowMinLevel(t.mins, e.App, e.Level) {
+		return
+	}
+	t.ship.add(e)
 }
 
 func sinceParam(t time.Time) string {

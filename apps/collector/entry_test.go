@@ -14,17 +14,29 @@ func TestDetectLevel(t *testing.T) {
 		want    string
 	}{
 		{"plain stdout", "hello world", streamStdout, "info"},
-		{"plain stderr", "something broke", streamStderr, "error"},
+		{"plain stderr", "something broke", streamStderr, "warn"},
+		{"postgres LOG on stderr", "2026-11-14 10:00:00.123 UTC [1] LOG:  checkpoint complete", streamStderr, "info"},
+		{"postgres bare LOG", "LOG:  database system is ready", streamStderr, "info"},
+		{"postgres ERROR", "ERROR:  relation \"x\" does not exist", streamStderr, "error"},
+		{"postgres FATAL", "2026-11-14 10:00:00 UTC [4] FATAL:  terminating connection", streamStderr, "error"},
+		{"postgres PANIC", "PANIC:  could not write", streamStdout, "error"},
+		{"postgres WARNING", "WARNING:  no privileges", streamStderr, "warn"},
+		{"postgres NOTICE", "NOTICE:  table skipped", streamStderr, "info"},
+		{"logfmt level", `ts=1 level=error msg="boom"`, streamStdout, "error"},
+		{"logfmt quoted warn", `level="warn" msg=x`, streamStderr, "warn"},
+		{"bracketed ERROR", "[ERROR] connection refused", streamStdout, "error"},
+		{"bracketed with time", "2026-11-14T10:00:00Z [warn] slow query", streamStdout, "warn"},
+		{"word error mid line stays plain", "no error here: ok", streamStdout, "info"},
 		{"json level error on stdout", `{"level":"error","msg":"boom"}`, streamStdout, "error"},
 		{"json level warn", `{"level":"warn"}`, streamStdout, "warn"},
 		{"json warning normalized", `{"level":"WARNING"}`, streamStdout, "warn"},
 		{"json lvl field", `{"lvl":"debug"}`, streamStderr, "debug"},
 		{"json severity field", `{"severity":"fatal"}`, streamStdout, "error"},
 		{"json unknown level", `{"level":"verbose"}`, streamStdout, "info"},
-		{"json numeric level ignored", `{"level":30}`, streamStderr, "error"},
-		{"json without level stderr", `{"msg":"no level"}`, streamStderr, "error"},
+		{"json numeric level ignored", `{"level":30}`, streamStderr, "warn"},
+		{"json without level stderr", `{"msg":"no level"}`, streamStderr, "warn"},
 		{"json without level stdout", `{"msg":"no level"}`, streamStdout, "info"},
-		{"invalid json stderr", `{not json`, streamStderr, "error"},
+		{"invalid json stderr", `{not json`, streamStderr, "warn"},
 		{"json with leading space", `  {"level":"debug"}`, streamStdout, "debug"},
 		{"trace maps to debug", `{"level":"trace"}`, streamStdout, "debug"},
 		{"err maps to error", `{"level":"err"}`, streamStdout, "error"},
@@ -68,7 +80,7 @@ func TestMapLine(t *testing.T) {
 	if e.App != "nuage" {
 		t.Fatalf("app = %q", e.App)
 	}
-	if e.Level != "error" {
+	if e.Level != "warn" {
 		t.Fatalf("level = %q", e.Level)
 	}
 	if e.Message != "disk full" {
@@ -129,5 +141,32 @@ func TestAppName(t *testing.T) {
 	anonymous := containerSummary{ID: "0123456789abcdef", Labels: map[string]string{}}
 	if got := appName(anonymous); got != "0123456789ab" {
 		t.Fatalf("appName = %q", got)
+	}
+}
+
+func TestCollectMinLevel(t *testing.T) {
+	mins := parseMinLevels("labparasite-apppupille=warn, journal-api=warn,bad=loud,=info,noeq")
+	if len(mins) != 2 {
+		t.Fatalf("mins = %v", mins)
+	}
+	cases := []struct {
+		app, level string
+		drop       bool
+	}{
+		{"journal-api", "info", true},
+		{"journal-api", "warn", false},
+		{"journal-api", "error", false},
+		{"labparasite-apppupille-6bypjx-api-1", "info", true},
+		{"labparasite-apppupille-6bypjx-api-1", "error", false},
+		{"labparasite-apppupillex", "info", false},
+		{"sablier", "debug", false},
+	}
+	for _, tc := range cases {
+		if got := belowMinLevel(mins, tc.app, tc.level); got != tc.drop {
+			t.Fatalf("belowMinLevel(%s, %s) = %v, want %v", tc.app, tc.level, got, tc.drop)
+		}
+	}
+	if belowMinLevel(parseMinLevels(""), "x", "debug") {
+		t.Fatal("empty config dropped a line")
 	}
 }

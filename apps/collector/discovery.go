@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func runDiscovery(ctx context.Context, docker *dockerClient, ship *shipper, selfHost string, interval time.Duration, log *slog.Logger) {
+func runDiscovery(ctx context.Context, docker *dockerClient, ship *shipper, minLevels map[string]string, selfHost string, interval time.Duration, log *slog.Logger) {
 	tails := map[string]context.CancelFunc{}
 	var wg sync.WaitGroup
 
@@ -46,6 +46,7 @@ func runDiscovery(ctx context.Context, docker *dockerClient, ship *shipper, self
 			t := &tailer{
 				docker: docker,
 				ship:   ship,
+				mins:   minLevels,
 				log:    log,
 				id:     c.ID,
 				app:    app,
