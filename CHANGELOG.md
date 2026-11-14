@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
 ### Added
 
 - feat(api): `RETENTION_MAX_ENTRIES` (default 10,000,000, `0` turns it off) caps `log_entries`: above it the hourly retention job deletes the oldest received entries first, so one chatty producer cannot fill the disk inside the 90-day window. Production took in about 800,000 entries a day on 2026-11-14, which a 90-day window alone would let grow to about 80 GB. The bound keeps `id > max(id) - N`, one primary-key lookup per hour. The compose file forwards the variable.
