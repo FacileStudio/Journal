@@ -96,10 +96,10 @@ func parseMinLevels(raw string) map[string]string {
 func belowMinLevel(mins map[string]string, app, level string) bool {
 	min, ok := mins[app]
 	if !ok {
+		longest := 0
 		for key, value := range mins {
-			if strings.HasPrefix(app, key+"-") {
-				min, ok = value, true
-				break
+			if strings.HasPrefix(app, key+"-") && len(key) > longest {
+				min, ok, longest = value, true, len(key)
 			}
 		}
 	}
