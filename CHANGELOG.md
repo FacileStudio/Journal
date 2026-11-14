@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-14
+
+### Fixed
+
+- The landing feature list is a two-column split (heading on one side, four features with icons on the other) instead of a second card grid right after the demo cards.
+
 ## [0.9.0] - 2026-11-14
 
 ### Added
