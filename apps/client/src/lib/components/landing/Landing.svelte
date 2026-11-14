@@ -132,6 +132,9 @@
 			recommended="pro"
 			suiteHref={SUITE_PRICING}
 			suiteNote={t('landing.pricing.suite')}
+			ctaHref={OPEN_TO_NEW_ACCOUNTS ? undefined : SUITE_PRICING}
+			freeLabel={OPEN_TO_NEW_ACCOUNTS ? undefined : t('landing.hero.offers')}
+			freeHref={OPEN_TO_NEW_ACCOUNTS ? undefined : SUITE_PRICING}
 		/>
 
 		<div id="developers" class="{width} scroll-mt-20 py-12">
