@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
+### Changed
+
+- The landing leads with the outcome ("Tous vos logs, au même endroit", find why it crashed in one search) in English, French, Spanish and German, with a new title, meta description and footer line.
+- While Journal is still closed to new accounts (`OPEN_TO_NEW_ACCOUNTS = false` in `LandingActions.svelte`), the main button is "Voir les offres" and sign-in comes second, with a line saying Journal opens to every Facile account soon. Flipping the flag shows the "Créer un compte gratuit" and sign-in pair.
+- The demos name generic apps (api, web, worker) instead of suite apps, the phone-sized hero demo keeps each row's app tag, and the window shows a space filter.
+- New sections: the "your own space" feature, Antenne under "works with the rest of the suite", the plans with the free plan's 10,000 entries a day kept 7 days, and a developer block with the CLI, API, MCP, source and the self-hosting page. The CLI download section moved into that block; `/downloads` is unchanged.
+- muse v0.24.0. The client CSP allows `https://api-ardoise.facile.studio` so the plans load.
+
 ## [0.10.0] - 2026-11-14
 
 ### Added
