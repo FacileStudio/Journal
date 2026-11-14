@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-11-14
+
+### Fixed
+
+- While `OPEN_TO_NEW_ACCOUNTS` is false, every plan button on the landing links to the Suite plans (https://suite.facile.studio/#tarifs) and the free plan's button reads "Voir les offres" instead of "Commencer gratuitement", so no button leads to a sign-up that refuses new accounts. Open again, the buttons go back to muse's sign-up defaults.
+
 ## [0.11.1] - 2026-11-14
 
 ### Fixed
