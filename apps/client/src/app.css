@@ -1,5 +1,5 @@
 /*
- * muse is the design system. `tokens.css` imports tailwind itself and carries the Goga
+ * muse is the design system. `tokens.css` imports tailwind itself and carries the Magnetik
  * @font-face rules, the fc-* theme, dark mode, `color-scheme` and the base layer — so this
  * file never imports tailwind a second time and never redeclares a colour.
  */

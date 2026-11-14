@@ -27,7 +27,8 @@
 	},
 	"dependencies": {
 		"@facile/client": "github:FacileStudio/facile-client#v0.1.0",
-		"@facile/muse": "github:FacileStudio/muse#v0.21.0"
+		"@facile/muse": "github:FacileStudio/muse#v0.22.1",
+		"@facile/mise-en-scene": "github:FacileStudio/mise-en-scene#v0.2.1"
 	},
 	"overrides": {
 		"cookie": "^0.7.2",
