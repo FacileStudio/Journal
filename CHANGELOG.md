@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-14
+
+### Added
+
+- feat(client): signed-out visitors at `/` get a landing page (muse `LandingHeader` and `LandingFooter`, four feature blocks, sign in with Facile) with a mise-en-scene demo: a terminal follows `journal tail` while the dashboard filters down to errors. Signed-in users still land on the overview, and every other route still redirects to `/login`.
+- feat(client): a public `/downloads` page lists the journal CLI install commands (install script, `facile install journal`, Homebrew cask) with its releases and checksums. The landing shows only the visitor's option through `DownloadSection mode="device"`.
+
+### Changed
+
+- build(client): muse v0.23.0 (was v0.21.0), which brings the Magnetik typeface, and `@facile/mise-en-scene` v0.2.1.
+
 ## [0.6.0] - 2026-11-14
 
 ### Added
