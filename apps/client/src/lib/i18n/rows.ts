@@ -4,10 +4,11 @@ import { settings } from './rows.settings';
 import { ingest } from './rows.ingest';
 import { pending } from './rows.pending';
 import { landing } from './rows.landing';
+import { landingBlocks } from './rows.landingBlocks';
 import { spaces } from './rows.spaces';
 
 export type Row = readonly [en: string, fr: string, es: string, de: string];
 
-export const rows = { ...chrome, ...explorer, ...settings, ...ingest, ...pending, ...landing, ...spaces } as const satisfies Record<string, Row>;
+export const rows = { ...chrome, ...explorer, ...settings, ...ingest, ...pending, ...landing, ...landingBlocks, ...spaces } as const satisfies Record<string, Row>;
 
 export type Key = keyof typeof rows;

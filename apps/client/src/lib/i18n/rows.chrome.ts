@@ -2,10 +2,10 @@ import type { Row } from './rows';
 
 export const chrome = {
 	'app.tagline': [
-		'Centralized logging for every app in the Facile Suite.',
-		'La journalisation centralisée de toutes les applications de la suite Facile.',
-		'Registro centralizado para todas las aplicaciones de la suite Facile.',
-		'Zentrales Logging für alle Apps der Facile-Suite.'
+		'All your app logs, in one place.',
+		'Tous les logs de vos apps, au même endroit.',
+		'Todos los logs de tus apps, en un solo lugar.',
+		'Alle Logs Ihrer Apps an einem Ort.'
 	],
 	'app.titleSuffix': ['Journal', 'Journal', 'Journal', 'Journal'],
 	'login.title': ['Log in', 'Connexion', 'Iniciar sesión', 'Anmelden'],

@@ -60,13 +60,13 @@
 				</div>
 				<div class="flex items-center gap-3 rounded-fc-md bg-fc-component px-3 py-2.5">
 					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-						<span class="font-fc-mono text-fc-xs font-bold text-fc-fg">nuage-upload</span>
+						<span class="font-fc-mono text-fc-xs font-bold text-fc-fg">worker-upload</span>
 						<span class="truncate text-[10px] text-fc-fg-muted">
 							<span class="font-fc-mono">level:error</span>
 							· {t('alerts.conditionValue', { threshold: 20, minutes: 5 })}
 						</span>
 					</div>
-					<Switch checked aria-label="nuage-upload" />
+					<Switch checked aria-label="worker-upload" />
 				</div>
 				<div class="flex items-center justify-between gap-2 px-1 text-[10px] text-fc-fg-muted">
 					<span>{t('alerts.lastFired')}</span>

@@ -1,26 +1,59 @@
 <script lang="ts">
-	import { Button, DownloadSection, Icon, LandingFooter, LandingHeader, SignInWithFacile, TextElevate, icons } from '@facile/muse';
+	import {
+		FeatureSplit,
+		ForDevelopers,
+		LANDING_HEADING,
+		LandingFooter,
+		LandingHeader,
+		PricingPlans,
+		SignInWithFacile,
+		TextElevate,
+		WorksWith,
+		icons,
+		type DeveloperRow,
+		type FeatureItem,
+		type WorksWithApp
+	} from '@facile/muse';
 	import { ssoLoginUrl } from '$lib/backend';
-	import { CLI_CHECKSUMS_URL, CLI_RELEASES_URL, cliCommands } from '$lib/cli';
 	import { JOURNAL_ICON } from '$lib/icons';
 	import { useT } from '$lib/i18n';
 	import AlertTile from './AlertTile.svelte';
+	import LandingActions, { OPEN_TO_NEW_ACCOUNTS, SUITE_PRICING } from './LandingActions.svelte';
 	import LogDemo from './LogDemo.svelte';
 	import SearchTile from './SearchTile.svelte';
 	import StackTile from './StackTile.svelte';
 
 	const t = useT();
 
-	const features = $derived([
-		{ icon: icons.server, title: t('landing.features.collect.title'), body: t('landing.features.collect.body') },
-		{ icon: icons.search, title: t('landing.features.search.title'), body: t('landing.features.search.body') },
-		{ icon: icons.history, title: t('landing.features.tail.title'), body: t('landing.features.tail.body') },
-		{ icon: icons.notification, title: t('landing.features.alerts.title'), body: t('landing.features.alerts.body') }
+	const REPO = 'https://github.com/FacileStudio/Journal';
+	const width = 'mx-auto w-full max-w-5xl px-4 sm:px-6';
+
+	const features: FeatureItem[] = $derived([
+		{ icon: icons.server, title: t('landing.features.collect.title'), text: t('landing.features.collect.body') },
+		{ icon: icons.search, title: t('landing.features.search.title'), text: t('landing.features.search.body') },
+		{ icon: icons.history, title: t('landing.features.tail.title'), text: t('landing.features.tail.body') },
+		{ icon: icons.shield, title: t('landing.features.spaces.title'), text: t('landing.features.spaces.body') }
+	]);
+
+	const apps: WorksWithApp[] = $derived([{ name: 'Antenne', icon: icons.notification, line: t('landing.with.antenne') }]);
+
+	const notes = $derived(
+		OPEN_TO_NEW_ACCOUNTS
+			? { solo: t('landing.pricing.free'), '*': t('landing.pricing.included') }
+			: { solo: t('landing.pricing.freeSoon'), '*': t('landing.pricing.soon') }
+	);
+
+	const developers: DeveloperRow[] = $derived([
+		{ kind: 'cli', text: t('landing.dev.cli'), href: '/downloads', command: 'brew install --cask FacileStudio/tap/journal' },
+		{ kind: 'api', text: t('landing.dev.api'), href: `${REPO}/blob/main/docs/api.md` },
+		{ kind: 'mcp', text: t('landing.dev.mcp'), href: `${REPO}/blob/main/docs/mcp.md` },
+		{ kind: 'source', text: t('landing.dev.source'), href: REPO }
 	]);
 
 	const links = $derived([
 		{ href: '#features', label: t('landing.nav.features') },
-		{ href: '#download', label: t('landing.nav.download') }
+		{ href: '#pricing', label: t('landing.nav.pricing') },
+		{ href: '#developers', label: t('landing.nav.developers') }
 	]);
 
 	const columns = $derived([
@@ -29,7 +62,7 @@
 			links: [
 				{ href: '#features', label: t('landing.nav.features') },
 				{ href: '/downloads', label: t('landing.footer.downloads') },
-				{ href: 'https://github.com/FacileStudio/Journal/tree/main/docs', label: t('landing.footer.docs'), external: true }
+				{ href: `${REPO}/tree/main/docs`, label: t('landing.footer.docs'), external: true }
 			]
 		}
 	]);
@@ -52,10 +85,12 @@
 				<TextElevate text={t('landing.hero.title')} delay={0.1} />
 			</h1>
 			<p class="mx-auto mt-6 max-w-xl text-fc-md text-fc-fg-muted">{t('landing.hero.body')}</p>
-			<div class="mt-10 flex flex-wrap items-center justify-center gap-3">
-				<SignInWithFacile href={ssoLoginUrl} />
-				<Button variant="secondary" href="#download" icon={icons.code}>{t('landing.hero.cli')}</Button>
+			<div class="mt-10">
+				<LandingActions />
 			</div>
+			{#if !OPEN_TO_NEW_ACCOUNTS}
+				<p class="mt-4 text-fc-sm text-fc-fg-muted">{t('landing.hero.soon')}</p>
+			{/if}
 		</section>
 
 		<section class="mx-auto max-w-5xl px-4 pb-8 sm:px-6">
@@ -63,9 +98,7 @@
 		</section>
 
 		<section class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20">
-			<h2 class="mb-10 text-center font-fc-title text-2xl font-bold tracking-tight text-fc-fg sm:text-3xl">
-				{t('landing.cards.title')}
-			</h2>
+			<h2 class="mb-10 text-center {LANDING_HEADING}">{t('landing.cards.title')}</h2>
 			<div class="grid gap-6 md:grid-cols-3">
 				<SearchTile />
 				<AlertTile />
@@ -73,46 +106,37 @@
 			</div>
 		</section>
 
-		<section id="features" class="mx-auto grid max-w-5xl scroll-mt-20 gap-10 px-4 py-16 sm:px-6 md:grid-cols-[2fr_3fr] md:items-center md:gap-16">
-			<div>
-				<h2 class="font-fc-title text-fc-2xl font-bold tracking-tight">{t('landing.features.heading')}</h2>
-				<p class="mt-3 max-w-sm text-fc-sm text-fc-fg-muted">{t('landing.features.intro')}</p>
-			</div>
-			<ul class="flex flex-col gap-8">
-				{#each features as feature (feature.title)}
-					<li class="flex gap-4">
-						<div class="flex size-10 shrink-0 items-center justify-center rounded-fc-md bg-fc-component">
-							<Icon icon={feature.icon} size={20} class="block shrink-0" />
-						</div>
-						<div class="min-w-0">
-							<h3 class="text-fc-md font-bold">{feature.title}</h3>
-							<p class="mt-1 text-fc-sm text-fc-fg-muted">{feature.body}</p>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		</section>
+		<FeatureSplit
+			id="features"
+			class="{width} scroll-mt-20 py-12"
+			title={t('landing.features.heading')}
+			description={t('landing.features.intro')}
+			{features}
+		/>
 
-		<section id="download" class="mx-auto flex max-w-5xl scroll-mt-20 flex-col gap-8 px-4 py-20 sm:px-6">
-			<div class="text-center">
-				<h2 class="font-fc-title text-fc-2xl font-bold tracking-tight">{t('landing.download.heading')}</h2>
-				<p class="mx-auto mt-3 max-w-md text-fc-sm text-fc-fg-muted">{t('landing.download.intro')}</p>
-			</div>
-			<DownloadSection
-				mode="device"
-				allHref="/downloads"
-				commands={cliCommands(t)}
-				releasesHref={CLI_RELEASES_URL}
-				checksumsHref={CLI_CHECKSUMS_URL}
-				headingLevel={3}
-			/>
-		</section>
+		<WorksWith class="{width} py-12" {apps} description={t('landing.with.line')} />
+
+		<PricingPlans
+			id="pricing"
+			class="{width} scroll-mt-20 py-12"
+			title={t('landing.pricing.title')}
+			headingClass={LANDING_HEADING}
+			highlightOnly
+			{notes}
+			recommended="pro"
+			suiteHref={SUITE_PRICING}
+			suiteNote={t('landing.pricing.suite')}
+		/>
+
+		<div id="developers" class="{width} scroll-mt-20 py-12">
+			<ForDevelopers rows={developers} description={t('landing.dev.line')} selfHostHref="https://suite.facile.studio/auto-hebergement" />
+		</div>
 
 		<section class="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6">
-			<h2 class="font-fc-title text-fc-2xl font-bold tracking-tight">{t('landing.cta.title')}</h2>
-			<p class="mt-4 text-fc-sm text-fc-fg-muted">{t('landing.cta.body')}</p>
-			<div class="mt-8 flex justify-center">
-				<SignInWithFacile href={ssoLoginUrl} />
+			<h2 class={LANDING_HEADING}>{t('landing.cta.title')}</h2>
+			<p class="mt-4 text-fc-sm text-fc-fg-muted">{t(OPEN_TO_NEW_ACCOUNTS ? 'landing.cta.open' : 'landing.hero.soon')}</p>
+			<div class="mt-8">
+				<LandingActions />
 			</div>
 		</section>
 	</main>

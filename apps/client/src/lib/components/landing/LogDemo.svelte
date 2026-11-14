@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import { Icon } from '@facile/muse';
-	import { Bar, Caret, Cursor, Stage, Terminal, Window, cursorAt, grow, type Act } from '@facile/mise-en-scene';
+	import { Bar, Cursor, Stage, Window, cursorAt, grow, type Act } from '@facile/mise-en-scene';
 	import LevelBadge from '$lib/components/LevelBadge.svelte';
 	import { JOURNAL_ICON } from '$lib/icons';
 	import { useT } from '$lib/i18n';
+	import LogTail from './LogTail.svelte';
 	import { COMMAND, FILTERS, INCOMING, ROWS, TAIL, shown, type Filter, type TailLine } from './demo';
 
 	const t = useT();
@@ -89,7 +89,10 @@
 			style={compact ? 'top:12px;left:12px;width:334px;height:360px' : 'top:24px;left:48px;width:680px;height:420px'}
 		>
 			<div class="ld-body">
-				<div class="ld-search">{t('landing.demo.search')}</div>
+				<div class="ld-top">
+					<div class="ld-search">{t('landing.demo.search')}</div>
+					<span class="ld-space">{t('spaces.some', { count: 2 })}</span>
+				</div>
 				<div class="ld-chips">
 					{#each FILTERS as name (name)}
 						{#if name === 'error'}
@@ -103,7 +106,7 @@
 					{#each rows as row (row.id)}
 						<li class="ld-row" class:ld-new={row.id === INCOMING.id} transition:grow={{ duration: 380 }}>
 							{#if !compact}<span class="ld-time">{row.time}</span>{/if}
-							{#if !compact}<span class="ld-app">{row.app}</span>{/if}
+							<span class="ld-app">{row.app}</span>
 							<LevelBadge level={row.level} />
 							{#if row.message}
 								<span class="ld-msg">{row.message}</span>
@@ -115,17 +118,7 @@
 				</ul>
 			</div>
 		</Window>
-		<Terminal style={compact ? 'top:388px;left:12px;width:334px;height:160px' : 'top:276px;left:520px;width:392px;height:180px'}>
-			<div class="ld-line"><span class="ld-dim">~ $</span> {typed}{#if tail.length === 0}<Caret />{/if}</div>
-			{#each tail as line, i (i)}
-				<div class="ld-line" in:fade={{ duration: 200 }}>
-					{#if !compact}<span class="ld-dim">{line.time}</span>{/if}
-					<span class="ld-dim">{line.app}</span>
-					<span class="ld-level" data-level={line.level}>{line.level.toUpperCase()}</span>
-					{line.message}
-				</div>
-			{/each}
-		</Terminal>
+		<LogTail {typed} {tail} {compact} />
 		<Cursor {cursor} />
 	{/snippet}
 </Stage>
@@ -159,12 +152,25 @@
 		padding: 8px 18px 0;
 		font-family: var(--font-fc-body);
 	}
-	.ld-search {
+	.ld-top {
+		display: flex;
+		gap: 8px;
+	}
+	.ld-search,
+	.ld-space {
 		padding: 9px 14px;
 		border-radius: 999px;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+	.ld-search {
+		flex: 1;
+		min-width: 0;
 		background: var(--color-fc-field);
 		color: var(--color-fc-fg-muted);
-		font-size: 13px;
+	}
+	.ld-space {
+		background: var(--color-fc-surface);
 	}
 	.ld-chips {
 		display: flex;
@@ -227,22 +233,5 @@
 		text-overflow: ellipsis;
 		font-family: var(--font-fc-mono);
 		font-size: 12px;
-	}
-	.ld-line {
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-	.ld-dim {
-		color: var(--color-fc-on-inverse-muted);
-	}
-	.ld-level[data-level='warn'] {
-		color: color-mix(in oklab, var(--color-fc-warning), var(--color-fc-on-inverse) 30%);
-	}
-	.ld-level[data-level='error'] {
-		color: color-mix(in oklab, var(--color-fc-danger), var(--color-fc-on-inverse) 30%);
-	}
-	.ld-level[data-level='info'] {
-		color: color-mix(in oklab, var(--color-fc-info), var(--color-fc-on-inverse) 30%);
 	}
 </style>

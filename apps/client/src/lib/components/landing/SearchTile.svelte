@@ -10,10 +10,10 @@
 	const QUERY = 'timeout';
 
 	const HITS: { app: string; level: LogLevel; before: string }[] = [
-		{ app: 'nuage', level: 'error', before: 'upload ' },
-		{ app: 'courrier', level: 'warn', before: 'smtp ' },
-		{ app: 'agenda', level: 'error', before: 'caldav ' },
-		{ app: 'plume', level: 'warn', before: 'export ' }
+		{ app: 'worker', level: 'error', before: 'upload ' },
+		{ app: 'mailer', level: 'warn', before: 'smtp ' },
+		{ app: 'web', level: 'error', before: 'db ' },
+		{ app: 'api', level: 'warn', before: 'export ' }
 	];
 
 	let typed = $state('');

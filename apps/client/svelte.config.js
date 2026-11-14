@@ -15,7 +15,7 @@ const config = {
 					'sha256-Xeng4whxN8ZlXgd5IUoCjxu9AGt/iFyk3tQDEbwHda4='
 				],
 				'style-src': ['self', 'unsafe-inline'],
-				'connect-src': ['self'],
+				'connect-src': ['self', 'https://api-ardoise.facile.studio'],
 				'img-src': ['self', 'data:', 'https:'],
 				'object-src': ['none'],
 				'base-uri': ['self']
