@@ -53,6 +53,13 @@ export const landing = {
 		'Los source maps devuelven los marcos minificados a tu código.',
 		'Source Maps machen aus minifizierten Frames wieder deinen Code.'
 	],
+	'landing.features.heading': ['Built for the whole suite', 'Pensé pour toute la suite', 'Pensado para toda la suite', 'Für die ganze Suite gebaut'],
+	'landing.features.intro': [
+		'Plug in an app and its logs follow.',
+		'Branchez une app, ses journaux suivent.',
+		'Conecta una app y sus registros llegan.',
+		'App anbinden, ihre Logs folgen.'
+	],
 	'landing.features.collect.title': ['Collect without code', 'Collecte sans code', 'Recogida sin código', 'Sammeln ohne Code'],
 	'landing.features.collect.body': [
 		'A Docker collector ships container logs, and SDKs cover Go and the browser.',
