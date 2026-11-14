@@ -8,6 +8,7 @@
 	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { takeReturn } from '$lib/return-path';
+	import Landing from '$lib/components/landing/Landing.svelte';
 	import { setContext } from 'svelte';
 
 	let { children } = $props();
@@ -17,6 +18,7 @@
 	let user = $state<AuthUser | null>(null);
 	let invitations = $state<{ count: number; href: string } | null>(null);
 	let ready = $state(false);
+	let guest = $state(false);
 	let collapsed = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
 
@@ -59,7 +61,11 @@
 				if (back) void goto(back, { replaceState: true });
 			})
 			.catch(() => {
-				const next = page.url.pathname === '/' ? '' : `?next=${encodeURIComponent(page.url.pathname + page.url.search)}`;
+				if (page.url.pathname === '/') {
+					guest = true;
+					return;
+				}
+				const next = `?next=${encodeURIComponent(page.url.pathname + page.url.search)}`;
 				void goto(`/login${next}`);
 			});
 	});
@@ -149,6 +155,8 @@
 
 		<MobileNav items={navPages} user={navUser} profileHref="/settings" profileActive={onSettings} {userMenu} />
 	</div>
+{:else if guest}
+	<Landing />
 {:else}
 	<div class="flex h-dvh w-full items-center justify-center bg-fc-page">
 		<Spinner />
