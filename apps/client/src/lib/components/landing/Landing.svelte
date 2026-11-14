@@ -134,6 +134,7 @@
 			suiteNote={t('landing.pricing.suite')}
 			ctaHref={OPEN_TO_NEW_ACCOUNTS ? undefined : SUITE_PRICING}
 			freeLabel={OPEN_TO_NEW_ACCOUNTS ? undefined : t('landing.hero.offers')}
+			ctaLabel={OPEN_TO_NEW_ACCOUNTS ? undefined : t('landing.hero.offers')}
 			freeHref={OPEN_TO_NEW_ACCOUNTS ? undefined : SUITE_PRICING}
 		/>
 
