@@ -170,3 +170,14 @@ func TestCollectMinLevel(t *testing.T) {
 		t.Fatal("empty config dropped a line")
 	}
 }
+
+func TestKeepEntryDropsBlankLines(t *testing.T) {
+	for _, message := range []string{"", "   ", "\t"} {
+		if keepEntry(nil, entry{App: "a", Level: "info", Message: message}) {
+			t.Fatalf("kept blank message %q, the API rejects the whole batch with 400", message)
+		}
+	}
+	if !keepEntry(nil, entry{App: "a", Level: "info", Message: "x"}) {
+		t.Fatal("dropped a real line")
+	}
+}

@@ -76,10 +76,9 @@ func (t *tailer) handleLine(stream byte, raw []byte) {
 		t.lastTS = ts
 	}
 	e := mapLine(t.app, t.id, stream, ts, message)
-	if belowMinLevel(t.mins, e.App, e.Level) {
-		return
+	if keepEntry(t.mins, e) {
+		t.ship.add(e)
 	}
-	t.ship.add(e)
 }
 
 func sinceParam(t time.Time) string {

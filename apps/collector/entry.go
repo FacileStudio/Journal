@@ -76,6 +76,10 @@ func detectLevel(message string, stream byte) string {
 	return "info"
 }
 
+func keepEntry(mins map[string]string, e entry) bool {
+	return strings.TrimSpace(e.Message) != "" && !belowMinLevel(mins, e.App, e.Level)
+}
+
 func parseMinLevels(raw string) map[string]string {
 	out := map[string]string{}
 	for _, pair := range strings.Split(raw, ",") {

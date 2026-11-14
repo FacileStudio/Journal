@@ -53,6 +53,7 @@ In production, set `COMPOSE_PROFILES=collector` in the deploy environment.
   catch-all answers everything else with `200` + `index.html`. A base URL missing the prefix
   therefore looks like a successful ingest to the shipper, and every line is dropped in
   silence.
+- **Blank lines are not shipped**: the API rejects an empty `message` with `400` and drops the whole batch, so the collector skips whitespace-only lines.
 - **Restart loss**: on collector restart, tailing starts at "now" — lines logged while the
   collector was down are not backfilled. Within a running session, tails reconnect from the
   last seen timestamp. Batches are buffered in memory (max 5000 entries, oldest dropped) and
