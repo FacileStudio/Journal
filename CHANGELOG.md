@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-11-14
+
+### Fixed
+
+- While `OPEN_TO_NEW_ACCOUNTS` is false, the Pro and Studio buttons read "Voir les offres" (fr, en, es, de) like the free one, instead of "Choisir Pro" next to a link to the Suite plans. muse v0.26.0 `ctaLabel`; open again, the labels go back to the defaults and every button opens `https://sso.facile.studio/signup?lang=<locale>`.
+
 ## [0.11.2] - 2026-11-14
 
 ### Fixed
