@@ -74,9 +74,10 @@ Deleting a saved query or an alert rule never runs on the model's word alone:
 
 Either way the action runs once. A target edited after the question is not deleted and the
 action closes. A saved query that an alert rule watches cannot be deleted. A person who lost
-administrator rights cannot confirm an alert rule's deletion. Only the person's own browser
+administrator rights cannot confirm an alert rule's deletion: the page shows a 412
+`failed_precondition` with the reason, not the sign-in prompt. Only the person's own browser
 session confirms (porte `mcpauth.RequireOwnSession`): a bearer, a delegated (Bulle) token, a CLI
-session or a session minted before porte v0.20.0 gets a 403, and the page asks the person to sign
+session or a session minted before porte v0.20.0 gets a 403 `permission_denied`, and the page asks the person to sign
 in again in the browser. Every write call and confirmation event is logged without arguments, with
 the client id. Erasing an account, through Registre or from Settings, deletes its pending
 actions in the same transaction.

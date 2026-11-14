@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { ApiError } from '@facile/client';
 	import { Alert, Button, EmptyState, Skeleton, icons, toast } from '@facile/muse';
 	import { backend, ssoLoginUrl, type PendingAction } from '$lib/backend';
 	import { rememberReturn } from '$lib/return-path';
+	import { refusesOwnSession } from '$lib/session-refusal';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import PendingCard from '$lib/components/PendingCard.svelte';
 	import { useT } from '$lib/i18n';
@@ -26,7 +26,7 @@
 
 	/** Reports whether err is the refusal of a session no browser sign-in opened. */
 	function refusedSession(err: unknown) {
-		notOwnSession = err instanceof ApiError && err.status === 403;
+		notOwnSession = refusesOwnSession(err);
 		return notOwnSession;
 	}
 

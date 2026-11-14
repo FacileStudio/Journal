@@ -25,10 +25,10 @@ func pendingDelete(t *testing.T, f *fixture, subject, tool string, args map[stri
 	return actionID(out.ConfirmURL)
 }
 
-// onPage calls a confirm page route as subject's own browser session, or as
-// a delegated token when actor is set. An empty route lists the actions.
-func onPage(f *fixture, subject, route, id, actor string) *httptest.ResponseRecorder {
-	return onPageAs(f, porte.Identity{UserID: f.users[subject], SessionID: 1, BrowserSession: true, Actor: actor}, route, id, "")
+// onPage calls a confirm page route as subject's own browser session. An
+// empty route lists the actions.
+func onPage(f *fixture, subject, route, id string) *httptest.ResponseRecorder {
+	return onPageAs(f, porte.Identity{UserID: f.users[subject], SessionID: 1, BrowserSession: true}, route, id, "")
 }
 
 // onPageAs calls a confirm page route as identity, with an Authorization
@@ -51,35 +51,49 @@ func onPageAs(f *fixture, identity porte.Identity, route, id, bearer string) *ht
 }
 
 // TestConfirmPageDeletesQueryOnce checks the person confirms in Journal, the
-// query goes once, a second confirmation finds nothing, only the person's own
-// browser session confirms and another person does not see it.
+// query goes once, a second confirmation finds nothing and another person
+// does not see it.
 func TestConfirmPageDeletesQueryOnce(t *testing.T) {
 	f := newFixture(t)
 	q := f.query(t, "To delete")
 	id := pendingDelete(t, f, memberSub, toolDeleteQuery, map[string]any{"query_id": q.ID})
-	if got := onPage(f, memberSub, "confirm", id, "bulle"); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
-		t.Fatalf("a delegated token must not confirm, got %d", got.Code)
-	}
-	cli := porte.Identity{UserID: f.users[memberSub], SessionID: 1}
-	if got := onPageAs(f, cli, "confirm", id, ""); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
-		t.Fatalf("a session no browser login minted must not confirm, got %d", got.Code)
-	}
-	browser := porte.Identity{UserID: f.users[memberSub], SessionID: 1, BrowserSession: true}
-	if got := onPageAs(f, browser, "confirm", id, "token"); got.Code != http.StatusForbidden || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
-		t.Fatalf("a request carrying a bearer must not confirm, got %d", got.Code)
-	}
-	if other := onPage(f, adminSub, "", "", ""); strings.Contains(other.Body.String(), id) {
+	if other := onPage(f, adminSub, "", ""); strings.Contains(other.Body.String(), id) {
 		t.Fatalf("another person must not see the action, got %s", other.Body)
 	}
-	list := onPage(f, memberSub, "", "", "")
+	list := onPage(f, memberSub, "", "")
 	if !strings.Contains(list.Body.String(), `"state":"ready"`) || !strings.Contains(list.Body.String(), `"query":{"id":`+strconv.FormatInt(q.ID, 10)) {
 		t.Fatalf("want one ready action with its query, got %d %s", list.Code, list.Body)
 	}
-	if got := onPage(f, memberSub, "confirm", id, ""); got.Code != http.StatusOK || f.count(&schemas.SavedQuery{}, q.ID) != 0 {
+	if got := onPage(f, memberSub, "confirm", id); got.Code != http.StatusOK || f.count(&schemas.SavedQuery{}, q.ID) != 0 {
 		t.Fatalf("want the query deleted, got %d %s", got.Code, got.Body)
 	}
-	if again := onPage(f, memberSub, "confirm", id, ""); again.Code != http.StatusNotFound {
+	if again := onPage(f, memberSub, "confirm", id); again.Code != http.StatusNotFound {
 		t.Fatalf("a confirmation is single use, got %d", again.Code)
+	}
+}
+
+// TestConfirmPageRefusesOtherSessions checks only the person's own browser
+// session confirms, and that every other session gets the 403
+// permission_denied the page answers with "sign in again".
+func TestConfirmPageRefusesOtherSessions(t *testing.T) {
+	f := newFixture(t)
+	q := f.query(t, "To keep")
+	id := pendingDelete(t, f, memberSub, toolDeleteQuery, map[string]any{"query_id": q.ID})
+	user := f.users[memberSub]
+	cases := []struct {
+		name     string
+		identity porte.Identity
+		bearer   string
+	}{
+		{"a delegated token", porte.Identity{UserID: user, SessionID: 1, BrowserSession: true, Actor: "bulle"}, ""},
+		{"a session no browser login minted", porte.Identity{UserID: user, SessionID: 1}, ""},
+		{"a request carrying a bearer", porte.Identity{UserID: user, SessionID: 1, BrowserSession: true}, "token"},
+	}
+	for _, c := range cases {
+		got := onPageAs(f, c.identity, "confirm", id, c.bearer)
+		if got.Code != http.StatusForbidden || !strings.Contains(got.Body.String(), `"code":"permission_denied"`) || f.count(&schemas.SavedQuery{}, q.ID) != 1 {
+			t.Fatalf("%s must not confirm, got %d %s", c.name, got.Code, got.Body)
+		}
 	}
 }
 
@@ -92,16 +106,17 @@ func TestEditedOrDemotedNeverDeletes(t *testing.T) {
 	edited := f.alert(t, "Edited", q.ID)
 	id := pendingDelete(t, f, adminSub, toolDeleteAlert, map[string]any{"alert_id": edited.ID})
 	must(t, f.db.Model(&schemas.AlertRule{}).Where("id = ?", edited.ID).Update("threshold", 99).Error)
-	if got := onPage(f, adminSub, "confirm", id, ""); got.Code != http.StatusPreconditionFailed || f.count(&schemas.AlertRule{}, edited.ID) != 1 {
+	if got := onPage(f, adminSub, "confirm", id); got.Code != http.StatusPreconditionFailed || f.count(&schemas.AlertRule{}, edited.ID) != 1 {
 		t.Fatalf("want 412 and the rule kept, got %d %s", got.Code, got.Body)
 	}
 	kept := f.alert(t, "Kept", q.ID)
 	id = pendingDelete(t, f, adminSub, toolDeleteAlert, map[string]any{"alert_id": kept.ID})
 	must(t, f.db.Exec(`UPDATE users SET is_admin = false WHERE id = ?`, f.users[adminSub]).Error)
-	if got := onPage(f, adminSub, "confirm", id, ""); got.Code == http.StatusOK || f.count(&schemas.AlertRule{}, kept.ID) != 1 {
-		t.Fatalf("a demoted person must not delete the rule, got %d %s", got.Code, got.Body)
+	got := onPage(f, adminSub, "confirm", id)
+	if got.Code != http.StatusPreconditionFailed || !strings.Contains(got.Body.String(), `"code":"failed_precondition","message":"only a Journal administrator can delete an alert rule"`) || f.count(&schemas.AlertRule{}, kept.ID) != 1 {
+		t.Fatalf("a demoted person must get the admin refusal and keep the rule, got %d %s", got.Code, got.Body)
 	}
-	if list := onPage(f, adminSub, "", "", ""); strings.Contains(list.Body.String(), `"alert":`) {
+	if list := onPage(f, adminSub, "", ""); strings.Contains(list.Body.String(), `"alert":`) {
 		t.Fatalf("a demoted person must not read the rule on the page, got %s", list.Body)
 	}
 }

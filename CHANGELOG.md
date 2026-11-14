@@ -4,10 +4,11 @@
 
 ### Changed
 
-- The MCP confirm page accepts only the person's own browser session (porte v0.20.0 `mcpauth.RequireOwnSession`). A bearer, CLI or delegated session gets a 403 and the page asks the person to sign in again in the browser. Everyone signs in once after this release before confirming.
+- The MCP confirm page accepts only the person's own browser session (porte v0.20.0 `mcpauth.RequireOwnSession`). A bearer, CLI or delegated session gets a 403 `permission_denied` and the page asks the person to sign in again in the browser. Everyone signs in once after this release before confirming.
+- An admin who lost administrator rights before confirming an alert rule's deletion now gets a 412 `failed_precondition` with the reason, shown as is on the page, instead of a 403 that looked like a session problem and sent them to sign in again in a loop.
 - `journal_set_alert_enabled` is annotated destructive: pausing a rule silences its alert.
 - The MCP state key comes from tronc `mcp.StateKey` (byte-identical), the confirm page API mounts through `PendingPage.Mount`, and the waiting text is tronc's standard one.
-- build(deps): porte v0.20.0, porte/mcpauth v0.3.0, porte/forfait v0.1.3.
+- build(deps): porte v0.20.0, porte/mcpauth v0.3.0, porte/forfait v0.1.3, tronc v0.23.1 (MCP confirmation dedupe matches the client id).
 
 ## [0.7.0] - 2026-11-14
 

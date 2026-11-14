@@ -20,7 +20,7 @@ const (
 
 var (
 	errTarget     = errors.NotFound("this action names no saved query or alert rule")
-	errAdminGone  = errors.Forbidden("only a Journal administrator can delete an alert rule")
+	errAdminGone  = errors.Failed("only a Journal administrator can delete an alert rule")
 	errStillWatch = errors.Failed("an alert rule now watches this saved query, so it cannot be deleted")
 )
 
