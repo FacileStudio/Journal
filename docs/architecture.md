@@ -86,6 +86,40 @@ scoped to one `app`, so an entry whose `app` differs is rejected with `400`. Rev
 redeploying the shipper, then revoking the old one. The legacy `INGEST_TOKEN` is compared in
 constant time and is unscoped, so every entry must carry its own `app`.
 
+## Workspaces
+
+Every row of `log_entries`, `api_keys`, `saved_queries`, `alert_rules` and `source_maps`
+carries a `workspace_id`, and an account reads only the workspaces it belongs to
+(`workspace_members`, role `owner` or `member`).
+
+- **Workspace 1** is the instance workspace. It held every row before tenancy (migration
+  00004 gave existing rows `workspace_id = 1` as a metadata-only default, then dropped the
+  default), and migration 00003 made the accounts that existed then its members: admins as
+  owners, the others as members. It is plan-exempt.
+- **Personal workspaces.** An account that belongs to no workspace gets one on its first
+  authenticated request, dashboard, CLI or MCP alike, created under an advisory lock on the user
+  id. Deleting the account deletes it, with its keys, saved queries, alert rules and source
+  maps (foreign keys `ON DELETE CASCADE`); a trigger queues its id in `workspace_purges`, and
+  the retention job then deletes its log entries in batches.
+- **Routed workspaces.** `INGEST_ROUTES` (`slug:Name:prefix|prefix`, comma-separated) sends the
+  instance workspace's entries whose app name starts with a prefix to a workspace of their own,
+  created at boot, plan-exempt, with the instance workspace's members. Only the legacy token and
+  keys of workspace 1 are routed; a tenant's key always writes to its own workspace.
+- **Reads.** `internal/workspace.Middleware` runs after porte's `RequireAuth` and stores the
+  caller's memberships and the requested `?workspace=` ids (default: all of them). Every log
+  read goes through `logfilter.Scoped` or `logfilter.Apply`, which put `workspace_id IN (...)`
+  first; an empty scope matches nothing. Lookups by id use `id AND workspace_id`, and a foreign
+  id answers 404. `TestEveryLogQueryIsScoped` fails the build when code reads `log_entries`
+  around logfilter or writes an entry without its workspace.
+- **Owners** manage keys, alert rules and source maps; `is_admin` keeps only the instance
+  settings (Antenne) and grants no cross-workspace read. Only workspace 1 may use the Antenne
+  provider and the `WEBHOOK_ALLOWED_HOSTS` trusted client.
+- **Plans.** A personal workspace reads `journal.entries_daily` (free default 10,000) and
+  `journal.retention_days` (free default 7) from the directory snapshot Journal pulls from
+  Registre every five minutes, through porte's forfait store. Until a snapshot carries
+  entitlements, the free defaults apply rather than forfait's fail-open. Ingest charges
+  `workspace_usage` before writing and answers 429 over the cap.
+
 ## Data model
 
 | Table | Columns of note |
@@ -94,11 +128,14 @@ constant time and is unscoped, so every entry must carry its own `app`.
 | `porte_identities` | `(provider, subject)` primary key, `user_id`, the IdP tokens and the cached roles claim |
 | `porte_login_codes` | one-time codes bridging a browser login to a CLI |
 | `users.avatar_url` | the identity provider's https `picture` URL, rendered as is; empty when the provider sends none |
-| `log_entries` | `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
+| `workspaces` | `name`, `slug` (routed), `personal_of` → `users(id)`, `plan_exempt` |
+| `workspace_members` | `(workspace_id, user_id)` primary key, `role` (`owner` or `member`) |
+| `workspace_usage` | `(workspace_id, day)` primary key, `count`: entries admitted per UTC day |
+| `log_entries` | `workspace_id` (no foreign key: validating one would scan the table), `app`, `level`, `message`, `meta` jsonb, `created_at`, `received_at`, generated `search` tsvector |
 | `users` | `email` unique, `name`, `password_hash`, `is_admin` |
 | `api_keys` | `app`, `kind` (`secret`\|`public`), `prefix`, `key_hash` unique, `allowed_origins` jsonb, `daily_quota`, `revoked_at` |
 | `api_key_usage` | `(api_key_id, day)` primary key, `count` — one row per public key per UTC day, incremented before the write |
-| `saved_queries` | `name` unique, `params` jsonb (`app`, `levels`, `q`, `request_id`) |
+| `saved_queries` | `workspace_id`, `(workspace_id, name)` unique, `params` jsonb (`app`, `levels`, `q`, `request_id`) |
 | `alert_rules` | `saved_query_id` FK, `threshold`, `window_minutes`, `webhook_url`, `webhook_header`, `webhook_secret`, `enabled`, `last_fired_at` |
 
 `created_at` is the log's own time — the client `ts` when supplied, otherwise server receipt

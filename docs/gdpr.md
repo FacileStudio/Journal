@@ -84,8 +84,10 @@ transaction, the person's MCP actions waiting on the confirm page (`mcp_actions`
   gone from Registre. It logs a warning when no administrator is left, and an operator then
   promotes another account in the database. Run one replica: the poller assumes it is alone.
 
-Journal keeps no other per-person row. Ingest keys, saved queries, alert rules and source maps
-belong to the instance, not to a person, so they stay.
+Both paths also delete the account's personal workspace, with its ingest keys, saved queries,
+alert rules and source maps, in the same transaction, and queue it in `workspace_purges`; the
+retention job deletes its log entries within the hour. The instance workspace and the routed
+workspaces belong to the instance, not to a person, so they stay.
 
 **Log entries are not scrubbed.** Journal does not search log text for a person, and building
 that is out of scope. Entries are keyed by app and carry no user identifier of their own, but
@@ -106,6 +108,14 @@ the deleted rows, so:
    of backups on roughly the same clock as logs do.
 2. If an erasure request arrives mid-cycle and cannot wait for rotation, restore-scrub-reseed
    or accept the documented delay — decide before it happens, not during.
+
+## Tenants
+
+Once the Registre gate is open, any Facile account can ship its own logs to its personal
+workspace. For those logs Facile acts as a processor for the account holder, who is the
+controller: the CGU and a DPA must say so before the gate opens. A tenant's retention follows
+its plan (`journal.retention_days`, 7 days on the free plan) and never exceeds
+`RETENTION_DAYS`.
 
 ## When this instance processes client data
 

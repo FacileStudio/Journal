@@ -24,7 +24,7 @@ A tool call sees exactly what the same person sees in the dashboard:
 
 - every account reads the logs, the app list and the saved queries, and may save or delete a
   saved query;
-- only an administrator (`users.is_admin`) reads, creates, pauses or deletes alert rules;
+- only an owner of a workspace reads, creates, pauses or deletes its alert rules, and every tool reads only the workspaces the account belongs to (`journal_list_workspaces`);
 - API keys, source map uploads and the Antenne settings have no tool: they hold or mint
   secrets.
 
@@ -39,10 +39,10 @@ A tool call sees exactly what the same person sees in the dashboard:
 | `journal_list_saved_queries` | Saved queries with their filters | read-only |
 | `journal_save_query` | Save a named filter for everyone | write |
 | `journal_delete_saved_query` | Delete a saved query; always confirmed | destructive |
-| `journal_list_alerts` | Alert rules, a webhook named by its host only (admin) | read-only |
-| `journal_create_alert` | Add an alert rule on a saved query, Antenne by default (admin) | write, open world |
-| `journal_set_alert_enabled` | Pause or resume an alert rule (admin) | destructive (pausing silences the alert), idempotent |
-| `journal_delete_alert` | Delete an alert rule; always confirmed (admin) | destructive |
+| `journal_list_alerts` | Alert rules, a webhook named by its host only (owner) | read-only |
+| `journal_create_alert` | Add an alert rule on a saved query, Antenne by default (owner) | write, open world |
+| `journal_set_alert_enabled` | Pause or resume an alert rule (owner) | destructive (pausing silences the alert), idempotent |
+| `journal_delete_alert` | Delete an alert rule; always confirmed (owner) | destructive |
 
 `since` and `until` take an RFC 3339 time or a duration back from now (`15m`, `6h`, `7d`).
 
@@ -74,7 +74,7 @@ Deleting a saved query or an alert rule never runs on the model's word alone:
 
 Either way the action runs once. A target edited after the question is not deleted and the
 action closes. A saved query that an alert rule watches cannot be deleted. A person who lost
-administrator rights cannot confirm an alert rule's deletion: the page shows a 412
+owner rights on the rule's workspace cannot confirm its deletion: the page shows a 412
 `failed_precondition` with the reason, not the sign-in prompt. Only the person's own browser
 session confirms (porte `mcpauth.RequireOwnSession`): a bearer, a delegated (Bulle) token, a CLI
 session or a session minted before porte v0.20.0 gets a 403 `permission_denied`, and the page asks the person to sign

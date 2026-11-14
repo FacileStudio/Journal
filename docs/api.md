@@ -22,9 +22,19 @@ router.
 |---|---|
 | public | No credential |
 | session | Dashboard session token |
-| admin | Session token whose user has `is_admin` |
+| admin | Session token whose user has `is_admin` (instance settings only) |
+| owner | Session token whose user owns the target workspace |
 | ingest | Per-app **secret** API key, or the legacy `INGEST_TOKEN` |
 | browser | Per-app **public** API key, plus an allowed `Origin` |
+
+## Workspaces
+
+Every session read accepts `workspace`, a comma-separated list of workspace ids, and covers
+every workspace of the caller without it. An id the caller does not belong to answers `404`.
+`GET /api/workspaces` lists the caller's workspaces with `id`, `name`, `role`, `personal` and
+`plan_exempt`. Writes that create something take `workspace_id` in the body when the caller
+belongs to several eligible workspaces; keys need the owner role. Entries, keys, saved
+queries, alert rules and source-map releases carry their `workspace_id`.
 
 ## Health
 
@@ -211,9 +221,9 @@ by most recently seen, which is what the filter rail reads.
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/api/apikeys` | admin |
-| POST | `/api/apikeys` | admin |
-| DELETE | `/api/apikeys/{id}` | admin |
+| GET | `/api/apikeys` | owner |
+| POST | `/api/apikeys` | owner |
+| DELETE | `/api/apikeys/{id}` | owner |
 
 `POST` takes `{"app"}`, which must match `^[a-z0-9][a-z0-9-]{0,63}$`, and returns
 `201 {"key","token"}`. The `token` is the only time the full credential is visible; the row
@@ -245,10 +255,10 @@ it — checked explicitly and again through the `ON DELETE RESTRICT` foreign key
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/api/alerts` | admin |
-| POST | `/api/alerts` | admin |
-| PATCH | `/api/alerts/{id}` | admin |
-| DELETE | `/api/alerts/{id}` | admin |
+| GET | `/api/alerts` | owner |
+| POST | `/api/alerts` | owner |
+| PATCH | `/api/alerts/{id}` | owner |
+| DELETE | `/api/alerts/{id}` | owner |
 
 A rule fires when its saved query matches at least `threshold` entries within the last
 `window_minutes`. `POST` takes

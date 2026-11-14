@@ -11,7 +11,7 @@ Docker-deployed.
 | API | Go 1.26, tronc v0.21.0, porte v0.18.2, Chi router, GORM, PostgreSQL 16 (full-text search via `tsvector` + GIN) |
 | Client | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, Bun, adapter-static (served by the Go binary) |
 | Design system | [muse](https://github.com/FacileStudio/muse) (`@facile/muse`, pinned to `#v0.21.0`) — owns the palette, Goga, the `fc-*` tokens, dark mode and every primitive |
-| Auth | Dashboard: sign-in through Registre only (porte OIDC), DB-backed sessions (30-day token); no sign-up and no password route. Ingest: per-app API keys (SHA256-hashed, admin-managed) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
+| Auth | Dashboard: sign-in through Registre only (porte OIDC), DB-backed sessions (30-day token); no sign-up and no password route. Ingest: per-app API keys (SHA256-hashed, managed by workspace owners) in two kinds — **secret** for servers, **public** for browsers — with optional legacy static `INGEST_TOKEN`. Mirrors the Nuage pattern. |
 | Infra | Docker Compose, Traefik (production), Dokploy |
 
 ## Key Commands
@@ -93,9 +93,9 @@ Journal/
         ingest/                    # POST /api/ingest (single + batch, gzip), per-app key or legacy token
                                    # + POST /api/ingest/browser (public key, origin-checked, quotaed)
         logs/                      # GET /api/logs, /api/logs/histogram, /api/logs/{id}/context, GET /api/apps — session-protected
-        apikeys/                   # /api/apikeys CRUD — session + admin only
+        apikeys/                   # /api/apikeys CRUD — session + workspace owner
         queries/                   # /api/queries CRUD (saved filter sets) — session-protected
-        alerts/                    # /api/alerts CRUD + 60s webhook evaluator — session + admin only
+        alerts/                    # /api/alerts CRUD + 60s webhook evaluator — session + workspace owner
         mcp/                       # remote MCP server at /mcp (tronc/mcp) + /api/mcp/pending confirm page API — see docs/mcp.md
     collector/                     # optional sidecar: tails all Docker containers via docker.sock, ships to /api/ingest
     client/
@@ -116,8 +116,8 @@ Journal/
           (app)/logs/+page.svelte  # explorer: filters (URL-synced), histogram drill-down, live tail, pivots, context drawer
           (app)/apps/+page.svelte  # sources with counts and last-seen
           (app)/queries/+page.svelte # saved filter sets
-          (app)/alerts/+page.svelte  # alert rules (admin only)
-          (app)/settings/          # +layout (Tabs) + Profile / appearance / api (keys, admin) / advanced
+          (app)/alerts/+page.svelte  # alert rules (workspace owners)
+          (app)/settings/          # +layout (Tabs) + Profile / appearance / api (keys, workspace owners) / advanced
       static/                      # favicon, logo — fonts and iconify come from the muse package
   sdk/
     journal/                       # Go SDK: batching client + slog tee handler (stdlib-only, go-gettable)
@@ -173,6 +173,7 @@ developer loop, not the bootstrap tier.
 | `PORT` | API listen port | `4010` |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `INGEST_TOKEN` | Legacy shared ingest token (unscoped). Empty disables it — per-app API keys are the primary ingest auth | — (empty) |
+| `INGEST_ROUTES` | Sends the legacy token's apps to workspaces of their own by app name prefix: comma-separated `slug:Name:prefix\|prefix` entries. Each workspace is created at boot with the instance workspace's members | — |
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
 | `RETENTION_MAX_ENTRIES` | Keep at most N log entries; above it the oldest received (lowest `id`) go first; `0` removes the ceiling | `10000000` |
 | `OIDC_ISSUER` | Enables single sign-on through porte; makes the next four required | — |
@@ -245,8 +246,10 @@ same issuer is never linked.
 - `GET /me/invitations` (session) → `{ count, href? }`, the signed-in user's pending Registre space invitations, from `porte/kit`'s `MountInvitations`. Registered only with an `OIDC_ISSUER`; never fails (Registre down answers `{ count: 0 }`). The user menu shows a row only when `href` is set.
 - `/auth/register` and `/auth/login` do not exist; there is no password sign-in.
 
-`GET /logs*` and `GET /apps` require a valid Bearer session token; `/apikeys*` additionally
-requires `is_admin`. `/health` and `/ready` stay public and rate-limit exempt.
+`GET /logs*` and `GET /apps` require a valid Bearer session token and read only the caller's
+workspaces (`?workspace=` narrows them); `/apikeys*`, `/alerts*` and the source-map admin routes
+additionally require the owner role on the target workspace, and `/settings/antenne` requires
+`is_admin`. See `docs/architecture.md`, "Workspaces". `/health` and `/ready` stay public and rate-limit exempt.
 
 Rate limits: login/register 20/min per IP per endpoint; ingest 600/min per token hash;
 browser ingest 60/min per (key, IP) under a 600/min per-key ceiling; session routes 300/min
@@ -375,7 +378,7 @@ empty buckets and zero levels omitted (client fills gaps).
 Unfiltered stream around one entry (defaults 50, max 200 each; 404 unknown id). Response:
 `{ "entries": [...], "anchor_id" }` sorted `created_at desc, id desc`, anchor included.
 
-### `/apikeys` (session + admin)
+### `/apikeys` (session + workspace owner)
 
 - `GET /apikeys` → `{ "keys": [ { "id", "app", "kind", "prefix", "allowed_origins", "daily_quota", "used_today", "created_at", "revoked_at" } ] }`
 - `POST /apikeys` body `{ "app", "kind"?, "allowed_origins"?, "daily_quota"? }` (app `^[a-z0-9][a-z0-9-]{0,63}$`) → 201 `{ "key", "token" }` — full token shown once, only its SHA256 stored. Multiple active keys per app allowed (zero-downtime rotation: add new → redeploy app → revoke old). `kind: "public"` requires 1–8 `allowed_origins` and a `daily_quota` ≥ 1; origins are normalized on save (scheme + host lowercased, default port dropped, no path, no wildcard) so they match what a browser sends byte for byte.
@@ -394,8 +397,8 @@ Makes a browser stack trace readable: `chunk-A1B2.js:1:48291` becomes
   is refused, or one shipper's token could overwrite another app's resolution.
 - `GET /sourcemaps?release=` (ingest) → `{release, files}`. An uploader reads this and sends only
   the difference.
-- `GET /sourcemaps/releases` (session + admin) → what is stored, per app and release.
-- `DELETE /sourcemaps?app=&release=` (session + admin) → 204, and evicts the parsed-map cache so
+- `GET /sourcemaps/releases` (session + workspace owner) → what is stored, per app and release.
+- `DELETE /sourcemaps?app=&release=&workspace_id=` (session + workspace owner) → 204, and evicts the parsed-map cache so
   a rollback stops resolving against the build that was rolled back.
 
 **Resolution happens on read**, per entry, via `GET /logs/{id}/stack` — not at ingest. The stored
@@ -417,7 +420,7 @@ fields. A rule over `{ source: "browser", levels: ["error"] }` is how browser er
 - `POST /queries` body `{ "name", "params" }` → 201 `{ "query" }`; duplicate name → 409
 - `DELETE /queries/{id}` → 204; referenced by alert rules → 409 "delete dependent alert rules first"
 
-### `/alerts` (session + admin)
+### `/alerts` (session + workspace owner)
 
 Rules reference a saved query (FK `ON DELETE RESTRICT`) and fire a webhook when the query
 matches ≥ `threshold` entries in the last `window_minutes`. A 60s evaluator goroutine skips
@@ -478,7 +481,7 @@ Response: `{ "apps": [ { "name", "count", "last_seen" } ] }` — for the filter 
   preflight is answered by the app-wide CORS middleware from `CORS_ALLOWED_ORIGINS` — which
   knows nothing about a key's allowed origins — so it 403s before the route is ever reached.
   The SDK does this already; hand-rolled callers get a confusing failure.
-- Ingest auth is per-app API keys (created under **Settings → API**, admin only; the page used to
+- Ingest auth is per-app API keys (created under **Settings → API** by workspace owners, one workspace per key; the page used to
   live at `/keys`). The legacy
   `INGEST_TOKEN` still works if set; empty (the default) disables it — with no keys and no legacy
   token, every `/api/ingest` is rejected.

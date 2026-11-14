@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
+### Added
+
+- Workspaces. Every log entry, API key, saved query, alert rule and source map belongs to one, and an account reads only the workspaces it is a member of: dashboard, CLI, live tail, MCP and keys alike. A new account gets a personal workspace on its first request. The existing data is workspace 1, whose members are the accounts that existed at upgrade.
+- A space filter on Overview, Logs, Apps, Queries and Alerts: read one workspace or tick several to read them side by side; rows then name their workspace.
+- `INGEST_ROUTES` sends the legacy token's apps by name prefix to workspaces of their own.
+- Plan limits for personal workspaces from Registre's forfait entitlements `journal.entries_daily` and `journal.retention_days`, with free defaults of 10,000 entries a day and 7 days.
+- MCP tool `journal_list_workspaces`, and `workspace_id` on the read and save tools.
+
+### Changed
+
+- API keys, alert rules and source maps are managed by workspace owners instead of administrators; `is_admin` keeps only the Antenne settings.
+- Saved-query names are unique per workspace. Deleting an alert rule, key or saved query of another workspace answers 404.
+- Migrations 00003 to 00005 add the workspace tables, a `workspace_id` column on five tables and the `(workspace_id, created_at, id)` index. Roll forward only: v0.9.x cannot write log entries after 00004.
+
 ## [0.9.1] - 2026-11-14
 
 ### Fixed
