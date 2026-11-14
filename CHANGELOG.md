@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-14
+
+### Added
+
+- Collector: `COLLECT_MIN_LEVEL` (`app=level,app=level`) drops lines below an app's minimum level before shipping. A key matches the exact app name or any name starting with `<key>-`.
+- Collector: levels from Postgres (`LOG:`, `NOTICE:`, `WARNING:`, `ERROR:`, `FATAL:`, `PANIC:`), logfmt (`level=`) and bracketed (`[ERROR]`) lines.
+
+### Changed
+
+- Collector: a bare stderr line with no recognizable level is `warn`, not `error`.
+
+### Fixed
+
+- Collector: blank lines are no longer shipped. The API answers 400 to an empty message and dropped the whole batch.
+- The inline theme script's sha256 is in the client CSP, so the enforced meta CSP no longer blocks it. A test fails when an inline script in `app.html` has no hash in `svelte.config.js`.
+
 ## [0.11.3] - 2026-11-14
 
 ### Fixed
