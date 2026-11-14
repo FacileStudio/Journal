@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-14
+
+### Fixed
+
+- The confirm page asks to sign in again only for porte's own-session refusal (403 `permission_denied` with "only the person's own session can confirm actions"). Any other 403, such as a lost administrator right the confirmed run checks, now shows the server's message instead of a sign-in notice that cannot fix it.
+
 ## [0.8.1] - 2026-11-14
 
 ### Security
