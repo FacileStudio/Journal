@@ -13,6 +13,12 @@ export const landing = {
 		'Encuentra la causa de un fallo con una búsqueda, en todas tus apps, y sigue los errores en directo. Gratis para empezar.',
 		'Finden Sie die Ursache eines Absturzes mit einer Suche, über alle Apps, und verfolgen Sie Fehler live. Kostenlos starten.'
 	],
+	'landing.metaSoon': [
+		'Find why it crashed in one search, across all your apps, and follow errors live.',
+		'Retrouvez la cause d’un plantage en une recherche, sur toutes vos apps, et suivez les erreurs en direct.',
+		'Encuentra la causa de un fallo con una búsqueda, en todas tus apps, y sigue los errores en directo.',
+		'Finden Sie die Ursache eines Absturzes mit einer Suche, über alle Apps, und verfolgen Sie Fehler live.'
+	],
 	'landing.nav.features': ['Features', 'Fonctions', 'Funciones', 'Funktionen'],
 	'landing.nav.pricing': ['Pricing', 'Offres', 'Planes', 'Tarife'],
 	'landing.nav.developers': ['Developers', 'Développeurs', 'Desarrolladores', 'Entwickler'],

@@ -9,6 +9,7 @@
 		SignInWithFacile,
 		TextElevate,
 		WorksWith,
+		getI18n,
 		icons,
 		type DeveloperRow,
 		type FeatureItem,
@@ -24,6 +25,11 @@
 	import StackTile from './StackTile.svelte';
 
 	const t = useT();
+	const i18n = getI18n();
+
+	$effect(() => {
+		document.querySelector('meta[name="description"]')?.setAttribute('content', t(OPEN_TO_NEW_ACCOUNTS ? 'landing.meta' : 'landing.metaSoon'));
+	});
 
 	const REPO = 'https://github.com/FacileStudio/Journal';
 	const width = 'mx-auto w-full max-w-5xl px-4 sm:px-6';
@@ -129,7 +135,7 @@
 		/>
 
 		<div id="developers" class="{width} scroll-mt-20 py-12">
-			<ForDevelopers rows={developers} description={t('landing.dev.line')} selfHostHref="https://suite.facile.studio/auto-hebergement" />
+			<ForDevelopers rows={developers} description={t('landing.dev.line')} selfHostHref={`https://suite.facile.studio/${i18n.locale === 'fr' ? '' : `${i18n.locale}/`}auto-hebergement`} />
 		</div>
 
 		<section class="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6">

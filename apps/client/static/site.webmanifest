@@ -1,7 +1,7 @@
 {
   "name": "Journal",
   "short_name": "Journal",
-  "description": "Collects Docker logs, searches them instantly, spots errors and sends an alert before your users notice.",
+  "description": "Find why it crashed in one search, across all your apps, and follow errors live.",
   "icons": [
     {
       "src": "/icon-192.png",
