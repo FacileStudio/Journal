@@ -60,7 +60,7 @@
 
 	<SettingsSection title={t('advanced.retention')} description={t('advanced.retentionHint')}>
 		<SettingsRow label={t('advanced.where')} description={t('advanced.whereHint')}>
-			<span class="font-fc-mono text-fc-sm text-fc-fg-muted">RETENTION_DAYS</span>
+			<span class="font-fc-mono text-fc-sm text-fc-fg-muted">RETENTION_DAYS · RETENTION_MAX_ENTRIES</span>
 		</SettingsRow>
 	</SettingsSection>
 

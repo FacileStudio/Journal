@@ -62,10 +62,10 @@ export const settings = {
 	'advanced.signInValue': ['Facile account', 'Compte Facile', 'Cuenta Facile', 'Facile-Konto'],
 	'advanced.retention': ['Retention', 'Conservation', 'Retención', 'Aufbewahrung'],
 	'advanced.retentionHint': [
-		'Entries older than RETENTION_DAYS are deleted by an hourly job on the server; 0 keeps them forever. It is a deploy-time setting, not a dashboard one.',
-		'Les entrées plus anciennes que RETENTION_DAYS sont supprimées par une tâche horaire sur le serveur ; 0 les conserve indéfiniment. C’est un réglage de déploiement, pas du tableau de bord.',
-		'Las entradas más antiguas que RETENTION_DAYS las elimina una tarea horaria en el servidor; 0 las conserva para siempre. Es un ajuste de despliegue, no del panel.',
-		'Einträge, die älter als RETENTION_DAYS sind, löscht ein stündlicher Job auf dem Server; 0 behält sie für immer. Das ist eine Einstellung beim Deployment, keine des Dashboards.'
+		'An hourly job on the server deletes entries older than RETENTION_DAYS (90 by default) and keeps at most RETENTION_MAX_ENTRIES (10 million by default), oldest first. 0 turns a limit off. These are deploy-time settings, not dashboard ones.',
+		'Une tâche horaire sur le serveur supprime les entrées plus anciennes que RETENTION_DAYS (90 par défaut) et en conserve au plus RETENTION_MAX_ENTRIES (10 millions par défaut), les plus anciennes d’abord. 0 désactive une limite. Ce sont des réglages de déploiement, pas du tableau de bord.',
+		'Una tarea horaria en el servidor elimina las entradas más antiguas que RETENTION_DAYS (90 por defecto) y conserva como máximo RETENTION_MAX_ENTRIES (10 millones por defecto), las más antiguas primero. 0 desactiva un límite. Son ajustes de despliegue, no del panel.',
+		'Ein stündlicher Job auf dem Server löscht Einträge, die älter als RETENTION_DAYS sind (standardmäßig 90), und behält höchstens RETENTION_MAX_ENTRIES (standardmäßig 10 Millionen), die ältesten zuerst. 0 schaltet ein Limit ab. Das sind Einstellungen beim Deployment, keine des Dashboards.'
 	],
 	'advanced.where': ['Where to change it', 'Où la modifier', 'Dónde cambiarlo', 'Wo es geändert wird'],
 	'advanced.whereHint': [

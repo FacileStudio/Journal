@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"github.com/FacileStudio/Journal/apps/api/internal/retention"
 	"github.com/FacileStudio/porte"
 	troncenv "github.com/FacileStudio/tronc/env"
 )
@@ -13,7 +14,7 @@ import (
 type Config struct {
 	troncenv.Core
 	IngestToken         string
-	RetentionDays       int
+	Retention           retention.Policy
 	WebhookAllowedHosts []string
 
 	// Porte is the suite's OIDC contract, unchanged: OIDC_ISSUER enables
@@ -62,11 +63,8 @@ func Load() (Config, error) {
 		MCPResource:         troncenv.String("MCP_RESOURCE", ""),
 	}
 
-	if cfg.RetentionDays, err = troncenv.Int("RETENTION_DAYS", 90); err != nil {
+	if cfg.Retention, err = retention.Load(); err != nil {
 		return Config{}, err
-	}
-	if cfg.RetentionDays < 0 {
-		return Config{}, fmt.Errorf("RETENTION_DAYS must be a non-negative integer")
 	}
 
 	cfg.Porte = porte.Config{

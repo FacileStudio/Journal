@@ -15,6 +15,7 @@ import (
 	docs "github.com/FacileStudio/Journal/apps/api/internal/documentation"
 	"github.com/FacileStudio/Journal/apps/api/internal/env"
 	"github.com/FacileStudio/Journal/apps/api/internal/middleware"
+	"github.com/FacileStudio/Journal/apps/api/internal/retention"
 	"github.com/FacileStudio/Journal/apps/api/migrations"
 	"github.com/FacileStudio/Journal/apps/api/modules/alerts"
 	"github.com/FacileStudio/Journal/apps/api/modules/antenne"
@@ -39,6 +40,7 @@ import (
 	"github.com/FacileStudio/tronc/httpjson"
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 	"github.com/FacileStudio/tronc/migrate"
 	"github.com/FacileStudio/tronc/spa"
@@ -155,11 +157,8 @@ func run() int {
 		appLogger.Info("single sign-on enabled", slog.String("issuer", appEnv.Porte.Issuer))
 	}
 
-	if appEnv.RetentionDays > 0 {
-		go runRetention(shutdownSignal, db, appEnv.RetentionDays, appLogger)
-	} else {
-		appLogger.Warn("RETENTION_DAYS is 0: log entries are kept forever, which needs a written justification under GDPR storage-limitation rules; set it to a positive number of days unless you have one")
-	}
+	go retention.Run(shutdownSignal, sqlDB, appEnv.Retention, appLogger)
+	go mcpkit.KeepPruned(shutdownSignal, mcpkit.PostgresPending{DB: sqlDB}, 0, 0, appLogger)
 	go sweepSessions(shutdownSignal, sessions, appLogger)
 
 	var sso ssoRoutes
@@ -394,29 +393,6 @@ func sweepSessions(ctx context.Context, sessions *session.Manager, logger *slog.
 			}
 		} else if deleted > 0 {
 			logger.Info("session sweep deleted expired sessions", slog.Int64("deleted", deleted))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-func runRetention(ctx context.Context, db *gorm.DB, days int, logger *slog.Logger) {
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-	for {
-		result := db.WithContext(ctx).Exec("DELETE FROM log_entries WHERE created_at < now() - (? * interval '1 day')", days)
-		if result.Error != nil {
-			if ctx.Err() == nil {
-				logger.Error("retention delete failed", slog.Any("error", result.Error))
-			}
-		} else if result.RowsAffected > 0 {
-			logger.Info("retention deleted old log entries",
-				slog.Int64("deleted", result.RowsAffected),
-				slog.Int("retention_days", days),
-			)
 		}
 		select {
 		case <-ctx.Done():

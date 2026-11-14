@@ -7,7 +7,7 @@ require (
 	github.com/FacileStudio/porte v0.19.0
 	github.com/FacileStudio/porte/directory v0.5.0
 	github.com/FacileStudio/porte/mcpauth v0.2.1
-	github.com/FacileStudio/tronc v0.22.1
+	github.com/FacileStudio/tronc v0.23.0
 	github.com/FacileStudio/tronc/migrate v0.1.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
@@ -35,7 +35,6 @@ require (
 	github.com/sethvargo/go-retry v0.4.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect

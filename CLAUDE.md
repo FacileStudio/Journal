@@ -75,7 +75,7 @@ Journal/
   .env.example                     # production env template
   apps/
     api/
-      main.go                      # entrypoint, router + middleware stack, retention job, route registration under /api, SPA catch-all
+      main.go                      # entrypoint, router + middleware stack, background jobs, route registration under /api, SPA catch-all
       internal/
         env/                       # config loading from env vars
         database/                  # GORM Postgres connection (pool: 10 open / 5 idle / 30m lifetime)
@@ -85,6 +85,7 @@ Journal/
         authcrypto/                # Argon2id password hashing + session/API token gen/hash, strict Bearer parsing
         authcontext/               # request-scoped ingest key scope (the signed-in identity is porte/kit's)
         middleware/                # CORS, security headers, request logging, realip, ingest auth, RequireAdmin
+        retention/                 # hourly batched delete: RETENTION_DAYS rolling window + RETENTION_MAX_ENTRIES ceiling
       migrations/                  # ordered goose SQL, embedded and applied at boot by tronc/migrate
       schemas/                     # GORM models (log_entry, user, api_key, saved_query, alert_rule, ...), query layer only
       modules/
@@ -173,6 +174,7 @@ developer loop, not the bootstrap tier.
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `INGEST_TOKEN` | Legacy shared ingest token (unscoped). Empty disables it — per-app API keys are the primary ingest auth | — (empty) |
 | `RETENTION_DAYS` | Delete log entries older than N days (hourly job); `0` keeps forever | `90` |
+| `RETENTION_MAX_ENTRIES` | Keep at most N log entries; above it the oldest received (lowest `id`) go first; `0` removes the ceiling | `10000000` |
 | `OIDC_ISSUER` | Enables single sign-on through porte; makes the next four required | — |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | Provider credentials | — |
 | `OIDC_REDIRECT_URL` / `OIDC_SUCCESS_URL` | Callback and landing URLs | — |
@@ -532,7 +534,8 @@ override the app name. On restart it resumes from "now" (small loss accepted). S
 ## Later drawer (see ROADMAP.md §3 for triggers)
 
 - **Partitioning**: monthly partitions + drop-partition retention once `log_entries` reaches
-  ~10GB (the `RETENTION_DAYS` delete job covers current volume).
+  ~10GB. `RETENTION_MAX_ENTRIES` (default 10M, about 11 GB at the 1.1 KB an entry measured in
+  production) holds the table at that size until then, so the batched delete job stays enough.
 - **OTLP `/v1/logs`** when a real OTel-instrumented app needs it.
 - **ClickHouse/VictoriaLogs migration path**: once volume outgrows Postgres (~100M rows), keep
   the same HTTP contract so the client and shippers don't change.

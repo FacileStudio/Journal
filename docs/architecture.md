@@ -120,9 +120,23 @@ The schema is ordered SQL in `apps/api/migrations/`, applied at boot by `tronc/m
 
 ## Background jobs
 
-**Retention.** When `RETENTION_DAYS > 0`, a goroutine deletes `log_entries` older than that
-many days, immediately at boot and then hourly, logging the row count when it removes
-anything.
+**Retention.** `retention.Run` (`internal/retention`) enforces two bounds on `log_entries`,
+immediately at boot and then hourly, and logs what it removed:
+
+- the rolling window: entries whose `created_at` is older than `RETENTION_DAYS` (default 90);
+- the ceiling: when more than `RETENTION_MAX_ENTRIES` (default 10,000,000) entries are left,
+  the oldest received go first. Ids come from one sequence in arrival order, so the job keeps
+  `id > max(id) - RETENTION_MAX_ENTRIES`: one primary-key lookup, where `count(*)` or an
+  `OFFSET` over millions of rows would scan the table every hour.
+
+Both delete in batches of 10,000 rows, so a backlog after either bound is lowered never becomes
+one long transaction, and a shutdown stops the job between two batches. Postgres reuses the
+freed space after autovacuum; the files do not shrink, so the table plateaus at the size the
+bounds allow rather than growing with ingest. Zero disables a bound; both zero logs a GDPR
+warning and starts no job.
+
+**MCP actions.** tronc's `mcp.KeepPruned` deletes `mcp_actions` resolved or expired more than
+30 days ago, at boot and then hourly. Open actions are never touched.
 
 **Session sweep.** Independently of the retention window — expired credentials are worthless
 rows, not data worth keeping — a second hourly goroutine deletes expired `porte_sessions` via

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- feat(api): `RETENTION_MAX_ENTRIES` (default 10,000,000, `0` turns it off) caps `log_entries`: above it the hourly retention job deletes the oldest received entries first, so one chatty producer cannot fill the disk inside the 90-day window. Production took in about 800,000 entries a day on 2026-11-14, which a 90-day window alone would let grow to about 80 GB. The bound keeps `id > max(id) - N`, one primary-key lookup per hour. The compose file forwards the variable.
+- feat(api): resolved or expired MCP confirmations (`mcp_actions`) are deleted 30 days later, hourly, through tronc's `mcp.KeepPruned`.
+
+### Changed
+
+- refactor(api): the retention job moves from `main.go` to `internal/retention` and deletes in batches of 10,000 rows, so a backlog after lowering `RETENTION_DAYS` is never one long transaction, and a shutdown stops it between batches. The boot log also warns when `RETENTION_DAYS` is above 365 (CNIL deliberation 2021-122) or when `RETENTION_MAX_ENTRIES` is `0`.
+- build(api): tronc v0.23.0 (was v0.22.1), which brings `mcp.KeepPruned` and v0.22.2's chi v5.5.0 security fixes.
+- docs: `docs/gdpr.md` no longer says IP addresses are stored nowhere. Request lines shipped by the collector, Journal's own included, carry `client_ip` and `user_agent` into `log_entries`; the page now lists them, cites GDPR Article 5(1)(e), recital 39 and CNIL deliberation 2021-122, and explains the 90-day choice.
+
 ## [0.5.6] - 2026-11-14
 
 ### Fixed

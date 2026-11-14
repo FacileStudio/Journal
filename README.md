@@ -19,7 +19,8 @@ Live at [journal.facile.studio](https://journal.facile.studio).
 - Searches by app, level, free text, `request_id`, and time range, with keyset pagination
 - Renders a level histogram and pulls the surrounding lines for any entry
 - Saves named queries and turns them into threshold alerts delivered to a webhook
-- Prunes entries older than `RETENTION_DAYS` every hour
+- Prunes entries older than `RETENTION_DAYS` every hour, and keeps the table under
+  `RETENTION_MAX_ENTRIES` so a noisy producer cannot fill the disk
 - Ships a Go SDK (`sdk/journal`), a browser SDK (`sdk/browser`, `@facile/journal`) and a Docker
   log collector sidecar (`apps/collector`)
 
@@ -96,7 +97,8 @@ cd apps/client && bun install && bun run dev
 | `PORT` | HTTP listen port, `4010` in the shipped compose file |
 | `INGEST_TOKEN` | Legacy unscoped ingest token; empty disables it |
 | `OIDC_ISSUER` | Enables single sign-on; four companion `OIDC_*` variables become required with it |
-| `RETENTION_DAYS` | Delete entries older than N days; `0` keeps forever |
+| `RETENTION_DAYS` | Delete entries older than N days (default `90`); `0` keeps forever |
+| `RETENTION_MAX_ENTRIES` | Keep at most N entries, oldest received deleted first (default `10000000`); `0` removes the ceiling |
 | `CORS_ALLOWED_ORIGINS` | Allowed cross-origin callers; unset denies every one of them |
 | `WEBHOOK_ALLOWED_HOSTS` | Hostnames alert webhooks may reach on the private network |
 
