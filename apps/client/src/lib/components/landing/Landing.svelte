@@ -4,7 +4,10 @@
 	import { CLI_CHECKSUMS_URL, CLI_RELEASES_URL, cliCommands } from '$lib/cli';
 	import { JOURNAL_ICON } from '$lib/icons';
 	import { useT } from '$lib/i18n';
+	import AlertTile from './AlertTile.svelte';
 	import LogDemo from './LogDemo.svelte';
+	import SearchTile from './SearchTile.svelte';
+	import StackTile from './StackTile.svelte';
 
 	const t = useT();
 
@@ -57,6 +60,17 @@
 
 		<section class="mx-auto max-w-5xl px-4 pb-8 sm:px-6">
 			<LogDemo />
+		</section>
+
+		<section class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20">
+			<h2 class="mb-10 text-center font-fc-title text-2xl font-bold tracking-tight text-fc-fg sm:text-3xl">
+				{t('landing.cards.title')}
+			</h2>
+			<div class="grid gap-6 md:grid-cols-3">
+				<SearchTile />
+				<AlertTile />
+				<StackTile />
+			</div>
 		</section>
 
 		<section id="features" class="mx-auto max-w-5xl scroll-mt-20 px-4 py-12 sm:px-6">

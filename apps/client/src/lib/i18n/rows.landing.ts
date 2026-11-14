@@ -30,6 +30,29 @@ export const landing = {
 	],
 	'landing.demo.search': ['Search logs', 'Chercher dans les journaux', 'Buscar registros', 'Logs durchsuchen'],
 	'landing.demo.all': ['all', 'tout', 'todo', 'alle'],
+	'landing.cards.title': ['From a crash to its cause', 'Du plantage à sa cause', 'Del fallo a su causa', 'Vom Absturz zur Ursache'],
+	'landing.cards.search.title': ['Search every app', 'Chercher dans chaque app', 'Busca en cada app', 'Jede App durchsuchen'],
+	'landing.cards.search.body': [
+		'One query reads the logs of the whole suite.',
+		'Une seule recherche lit les journaux de toute la suite.',
+		'Una sola búsqueda lee los registros de toda la suite.',
+		'Eine Suche liest die Logs der ganzen Suite.'
+	],
+	'landing.cards.alert.title': ['Alerts on spikes', 'Alertes sur les pics', 'Alertas en los picos', 'Warnungen bei Spitzen'],
+	'landing.cards.alert.body': [
+		'A rule fires when errors pass its threshold.',
+		'Une règle se déclenche quand les erreurs dépassent son seuil.',
+		'Una regla salta cuando los errores pasan su umbral.',
+		'Eine Regel löst aus, wenn Fehler ihre Schwelle überschreiten.'
+	],
+	'landing.cards.alert.note': ['Alert fired', 'Alerte déclenchée', 'Alerta disparada', 'Warnung ausgelöst'],
+	'landing.cards.stack.title': ['Readable stack traces', 'Traces lisibles', 'Trazas legibles', 'Lesbare Stacktraces'],
+	'landing.cards.stack.body': [
+		'Source maps turn minified frames back into your code.',
+		'Les source maps ramènent les cadres minifiés à votre code.',
+		'Los source maps devuelven los marcos minificados a tu código.',
+		'Source Maps machen aus minifizierten Frames wieder deinen Code.'
+	],
 	'landing.features.collect.title': ['Collect without code', 'Collecte sans code', 'Recogida sin código', 'Sammeln ohne Code'],
 	'landing.features.collect.body': [
 		'A Docker collector ships container logs, and SDKs cover Go and the browser.',
