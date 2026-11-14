@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-14
+
+### Fixed
+
+- The compose file forwards `COLLECT_MIN_LEVEL` to the collector, and the collector service pulls its image on every deploy (`pull_policy: always`). Before, a new collector image stayed unused because the host kept the one it had pulled in September.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added
