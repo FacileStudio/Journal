@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-14
+
+### Fixed
+
+- The link preview image and the manifest carry the suite catalog pitch ("Every log, one place.", find why it crashed in one search) instead of the old "Collects Docker logs" line.
+- The landing sets the meta description in the visitor's language. While `OPEN_TO_NEW_ACCOUNTS` is false it leaves out "Free to start" (`landing.metaSoon`); the flag switches it back to `landing.meta`.
+- The "Self-host" link opens the Suite page in the visitor's language.
+
+### Changed
+
+- `@facile/muse` v0.25.1: the CLI install command wraps instead of scrolling.
+
 ## [0.11.0] - 2026-11-14
 
 ### Changed
