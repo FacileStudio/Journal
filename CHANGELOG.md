@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-15
+
+### Changed
+
+- Collector: a container that Compose named `<project>-<service>-<n>` ships as `<project>-<service>`. The replica number grows on every rolling deploy, so one app had piled up 19 names (Sablier) and the apps list held 13,650 rows for 137 live apps. Containers with an explicit `container_name` keep their name. Entries already stored keep their old name.
+
+### Fixed
+
+- The apps summary on the dashboard, the apps page and the logs filter took about 32 s on production: it counted every entry by reading the whole 8.5 GB table and sorting 7.4M rows on disk. Migration 00006 adds `idx_log_entries_workspace_app_created_at (workspace_id, app, created_at)`, built concurrently, so the summary is an index-only scan in order: 1.2 s on the same data. The migration also lowers the `log_entries` autovacuum and analyze thresholds, so the visibility map and the planner statistics stay fresh on a table this busy (the last analyze was a day old and the planner misjudged the 24 h histogram by 380x).
+
 ## [0.12.3] - 2026-11-15
 
 ### Fixed
