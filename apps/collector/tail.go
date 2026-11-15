@@ -11,7 +11,7 @@ import (
 type tailer struct {
 	docker *dockerClient
 	ship   *shipper
-	mins   map[string]string
+	keep   filters
 	log    *slog.Logger
 	id     string
 	app    string
@@ -76,7 +76,7 @@ func (t *tailer) handleLine(stream byte, raw []byte) {
 		t.lastTS = ts
 	}
 	e := mapLine(t.app, t.id, stream, ts, message)
-	if keepEntry(t.mins, e) {
+	if keepEntry(t.keep, e) {
 		t.ship.add(e)
 	}
 }

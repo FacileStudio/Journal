@@ -85,6 +85,7 @@ services:
       JOURNAL_URL: http://journal-api:4010/api
       JOURNAL_TOKEN: ${INGEST_TOKEN:-}
       COLLECT_MIN_LEVEL: ${COLLECT_MIN_LEVEL:-}
+      COLLECT_SDK_APPS: ${COLLECT_SDK_APPS:-}
     labels:
       journal.ignore: 'true'
     depends_on:

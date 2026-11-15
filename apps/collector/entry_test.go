@@ -173,11 +173,32 @@ func TestCollectMinLevel(t *testing.T) {
 
 func TestKeepEntryDropsBlankLines(t *testing.T) {
 	for _, message := range []string{"", "   ", "\t"} {
-		if keepEntry(nil, entry{App: "a", Level: "info", Message: message}) {
+		if keepEntry(filters{}, entry{App: "a", Level: "info", Message: message}) {
 			t.Fatalf("kept blank message %q, the API rejects the whole batch with 400", message)
 		}
 	}
-	if !keepEntry(nil, entry{App: "a", Level: "info", Message: "x"}) {
+	if !keepEntry(filters{}, entry{App: "a", Level: "info", Message: "x"}) {
 		t.Fatal("dropped a real line")
+	}
+}
+
+func TestCollectSDKAppsDropsOnlyShippedSlogLines(t *testing.T) {
+	f := filters{sdkApps: parseAppList(" facile-sablier-lbgdwy-api , ,vision")}
+	slog := `{"time":"2026-11-15T19:59:32Z","level":"INFO","msg":"Reminder sent","sent":0}`
+	cases := []struct {
+		app, message string
+		keep         bool
+	}{
+		{"facile-sablier-lbgdwy-api-19", slog, false},
+		{"vision", slog, false},
+		{"facile-sablier-lbgdwy-api-19", "panic: runtime error: index out of range", true},
+		{"facile-sablier-lbgdwy-api-19", `{"event":"boot"}`, true},
+		{"facile-sablier-lbgdwy-db-1", slog, true},
+		{"visionary", slog, true},
+	}
+	for _, tc := range cases {
+		if got := keepEntry(f, entry{App: tc.app, Level: "info", Message: tc.message}); got != tc.keep {
+			t.Fatalf("keepEntry(%s, %q) = %v, want %v", tc.app, tc.message, got, tc.keep)
+		}
 	}
 }

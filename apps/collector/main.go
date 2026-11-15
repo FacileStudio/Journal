@@ -16,6 +16,7 @@ type config struct {
 	dockerSock       string
 	discoverInterval time.Duration
 	minLevels        map[string]string
+	sdkApps          []string
 }
 
 func loadConfig() config {
@@ -25,6 +26,7 @@ func loadConfig() config {
 		dockerSock:       envOr("DOCKER_SOCK", "/var/run/docker.sock"),
 		discoverInterval: 30 * time.Second,
 		minLevels:        parseMinLevels(os.Getenv("COLLECT_MIN_LEVEL")),
+		sdkApps:          parseAppList(os.Getenv("COLLECT_SDK_APPS")),
 	}
 	if raw := os.Getenv("DISCOVER_INTERVAL"); raw != "" {
 		if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
@@ -67,10 +69,11 @@ func main() {
 		"docker_sock", cfg.dockerSock,
 		"discover_interval", cfg.discoverInterval.String(),
 		"min_levels", cfg.minLevels,
+		"sdk_apps", cfg.sdkApps,
 		"hostname", hostname,
 	)
 
-	runDiscovery(ctx, docker, ship, cfg.minLevels, hostname, cfg.discoverInterval, log)
+	runDiscovery(ctx, docker, ship, filters{minLevels: cfg.minLevels, sdkApps: cfg.sdkApps}, hostname, cfg.discoverInterval, log)
 	<-shipDone
 
 	flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

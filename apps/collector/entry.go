@@ -76,8 +76,53 @@ func detectLevel(message string, stream byte) string {
 	return "info"
 }
 
-func keepEntry(mins map[string]string, e entry) bool {
-	return strings.TrimSpace(e.Message) != "" && !belowMinLevel(mins, e.App, e.Level)
+type filters struct {
+	minLevels map[string]string
+	sdkApps   []string
+}
+
+func keepEntry(f filters, e entry) bool {
+	if strings.TrimSpace(e.Message) == "" || belowMinLevel(f.minLevels, e.App, e.Level) {
+		return false
+	}
+	return !(matchesAnyApp(f.sdkApps, e.App) && isSlogJSON(e.Message))
+}
+
+func parseAppList(raw string) []string {
+	var out []string
+	for _, app := range strings.Split(raw, ",") {
+		if app = strings.TrimSpace(app); app != "" {
+			out = append(out, app)
+		}
+	}
+	return out
+}
+
+func appMatches(key, app string) bool {
+	return app == key || strings.HasPrefix(app, key+"-")
+}
+
+func matchesAnyApp(keys []string, app string) bool {
+	for _, key := range keys {
+		if appMatches(key, app) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSlogJSON(message string) bool {
+	trimmed := strings.TrimSpace(message)
+	if !strings.HasPrefix(trimmed, "{") {
+		return false
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal([]byte(trimmed), &obj) != nil {
+		return false
+	}
+	_, hasMsg := obj["msg"]
+	_, hasLevel := obj["level"]
+	return hasMsg && hasLevel
 }
 
 func parseMinLevels(raw string) map[string]string {
@@ -98,7 +143,7 @@ func belowMinLevel(mins map[string]string, app, level string) bool {
 	if !ok {
 		longest := 0
 		for key, value := range mins {
-			if strings.HasPrefix(app, key+"-") && len(key) > longest {
+			if appMatches(key, app) && len(key) > longest {
 				min, ok, longest = value, true, len(key)
 			}
 		}

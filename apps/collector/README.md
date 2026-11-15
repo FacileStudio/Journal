@@ -46,6 +46,7 @@ In production, set `COMPOSE_PROFILES=collector` in the deploy environment.
 | `DOCKER_SOCK` | Docker Engine socket path | `/var/run/docker.sock` |
 | `DISCOVER_INTERVAL` | Container discovery interval, seconds | `30` |
 | `COLLECT_MIN_LEVEL` | Per-app minimum level, `app=level,app=level`. Lines below it are dropped before shipping. Levels: `debug`, `info`, `warn`, `error`. An `app` key matches the exact app name, or any app name that starts with `<key>-` (so `labparasite-apppupille` covers `labparasite-apppupille-6bypjx-api-1`). Invalid pairs are ignored. | unset (ship everything) |
+| `COLLECT_SDK_APPS` | Apps that already ship their logs with the Journal SDK, comma-separated, matched like `COLLECT_MIN_LEVEL` keys. For these apps the collector drops slog JSON lines (an object with `msg` and `level`), because the SDK sent the same record with its structured fields. Panics, plain-text lines and other JSON stay collected, so crash output is never lost. | unset (collect everything) |
 
 ## Caveats
 
