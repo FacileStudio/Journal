@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-15
+
+### Fixed
+
+- Collector: `COLLECT_SDK_APPS` stops duplicate logs. An app that ships through the Journal SDK also prints each record to stdout, which the collector shipped a second time under the container name. For the listed apps the collector now drops those slog JSON lines and keeps panics, plain-text lines and other JSON. The compose file forwards the variable.
+
 ## [0.12.2] - 2026-11-14
 
 ### Fixed
