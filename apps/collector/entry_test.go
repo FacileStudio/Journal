@@ -138,6 +138,13 @@ func TestAppName(t *testing.T) {
 	if got := appName(named); got != "my-container" {
 		t.Fatalf("appName = %q", got)
 	}
+	compose := map[string]string{"com.docker.compose.project": "facile-sablier-lbgdwy", "com.docker.compose.service": "api", "com.docker.compose.container-number": "19"}
+	if got := appName(containerSummary{ID: "0123456789abcdef", Names: []string{"/facile-sablier-lbgdwy-api-19"}, Labels: compose}); got != "facile-sablier-lbgdwy-api" {
+		t.Fatalf("replica appName = %q, want the name without the replica number", got)
+	}
+	if got := appName(containerSummary{ID: "0123456789abcdef", Names: []string{"/casier-api"}, Labels: compose}); got != "casier-api" {
+		t.Fatalf("container_name appName = %q", got)
+	}
 	anonymous := containerSummary{ID: "0123456789abcdef", Labels: map[string]string{}}
 	if got := appName(anonymous); got != "0123456789ab" {
 		t.Fatalf("appName = %q", got)

@@ -97,7 +97,19 @@ func appName(c containerSummary) string {
 		return v
 	}
 	if len(c.Names) > 0 && c.Names[0] != "" {
-		return strings.TrimPrefix(c.Names[0], "/")
+		return stableComposeName(c, strings.TrimPrefix(c.Names[0], "/"))
 	}
 	return shortID(c.ID)
+}
+
+func stableComposeName(c containerSummary, name string) string {
+	project, service := c.Labels["com.docker.compose.project"], c.Labels["com.docker.compose.service"]
+	number := c.Labels["com.docker.compose.container-number"]
+	if project == "" || service == "" || number == "" {
+		return name
+	}
+	if stable := project + "-" + service; name == stable+"-"+number {
+		return stable
+	}
+	return name
 }

@@ -56,14 +56,19 @@ func Up(ctx context.Context, cfg migrate.Config) error {
 			return err
 		}
 	}
-	if err := dropInvalidIndex(ctx, cfg.DB, workspaceIndex); err != nil {
-		return err
+	for _, name := range concurrentIndexes {
+		if err := dropInvalidIndex(ctx, cfg.DB, name); err != nil {
+			return err
+		}
 	}
 	return migrate.Run(ctx, cfg)
 }
 
-// workspaceIndex is the index 00005 builds concurrently.
-const workspaceIndex = "idx_log_entries_workspace_created_at_id"
+// concurrentIndexes are the indexes migrations build concurrently: 00005 and 00006.
+var concurrentIndexes = []string{
+	"idx_log_entries_workspace_created_at_id",
+	"idx_log_entries_workspace_app_created_at",
+}
 
 // dropInvalidIndex drops name when a concurrent build of it was interrupted.
 // Such a build leaves an INVALID index behind, and the migration's CREATE

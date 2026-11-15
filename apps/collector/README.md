@@ -35,7 +35,7 @@ In production, set `COMPOSE_PROFILES=collector` in the deploy environment.
 | Label | Effect |
 |---|---|
 | `journal.ignore=true` | Container is never tailed (the collector labels itself with this) |
-| `journal.app=<name>` | Overrides the `app` field (default: container name) |
+| `journal.app=<name>` | Overrides the `app` field. The default is the container name, without the replica number Compose appends (`facile-sablier-lbgdwy-api-19` ships as `facile-sablier-lbgdwy-api`), so an app keeps one name across rolling deploys. An explicit `container_name` is kept as is. |
 
 ## Configuration
 

@@ -74,14 +74,14 @@ func assertVersions(t *testing.T, db *gorm.DB, want ...int64) {
 // version through every migration in order, and that a second run is a no-op.
 func TestUpBuildsAnEmptyDatabase(t *testing.T) {
 	db := testdb.Migrated(t)
-	assertVersions(t, db, 1, 2, 3, 4, 5)
+	assertVersions(t, db, 1, 2, 3, 4, 5, 6)
 	if got := columnDefault(t, db, "log_entries", "received_at"); got != "now()" {
 		t.Fatalf("log_entries.received_at default %q, want now()", got)
 	}
 	if err := testdb.Up(db); err != nil {
 		t.Fatalf("a second run is not a no-op: %v", err)
 	}
-	assertVersions(t, db, 1, 2, 3, 4, 5)
+	assertVersions(t, db, 1, 2, 3, 4, 5, 6)
 }
 
 // TestUpStampsADatabaseBuiltByAutoMigrate rebuilds production's shape, the
@@ -116,7 +116,7 @@ func assertStampsLegacy(t *testing.T, ledger string) {
 	if err := testdb.Up(db); err != nil {
 		t.Fatalf("up on a legacy database: %v", err)
 	}
-	assertVersions(t, db, 1, 2, 3, 4, 5)
+	assertVersions(t, db, 1, 2, 3, 4, 5, 6)
 	if got := columnDefault(t, db, "log_entries", "received_at"); got != "now()" {
 		t.Fatalf("log_entries.received_at default %q, want now()", got)
 	}
@@ -245,20 +245,25 @@ func TestLibrarySchemasAreInTheBaseline(t *testing.T) {
 }
 
 // TestUpRebuildsAnIndexAnInterruptedBuildLeftInvalid marks the concurrent
-// index invalid, as a boot killed during 00005 leaves it, and checks the next
-// Up drops it before migrating, so the index is never recorded while unusable.
+// indexes invalid, as a boot killed during 00005 leaves them, and checks the
+// next Up drops them before migrating, so neither is recorded while unusable.
 func TestUpRebuildsAnIndexAnInterruptedBuildLeftInvalid(t *testing.T) {
 	db := testdb.Migrated(t)
-	if err := db.Exec(`UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass('idx_log_entries_workspace_created_at_id')`).Error; err != nil {
-		t.Skipf("the test role cannot mark an index invalid: %v", err)
+	concurrentIndexes := []string{"idx_log_entries_workspace_created_at_id", "idx_log_entries_workspace_app_created_at"}
+	for _, name := range concurrentIndexes {
+		if err := db.Exec(`UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass(?)`, name).Error; err != nil {
+			t.Skipf("the test role cannot mark an index invalid: %v", err)
+		}
 	}
-	exec(t, db, `DELETE FROM goose_db_version WHERE version_id = 5`)
+	exec(t, db, `DELETE FROM goose_db_version WHERE version_id >= 5`)
 	if err := testdb.Up(db); err != nil {
 		t.Fatalf("up: %v", err)
 	}
-	var valid bool
-	if err := db.Raw(`SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass('idx_log_entries_workspace_created_at_id')`).Scan(&valid).Error; err != nil || !valid {
-		t.Fatalf("the index is still invalid after Up: %v", err)
+	for _, name := range concurrentIndexes {
+		var valid bool
+		if err := db.Raw(`SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass(?)`, name).Scan(&valid).Error; err != nil || !valid {
+			t.Fatalf("%s is still invalid after Up: %v", name, err)
+		}
 	}
-	assertVersions(t, db, 1, 2, 3, 4, 5)
+	assertVersions(t, db, 1, 2, 3, 4, 5, 6)
 }
