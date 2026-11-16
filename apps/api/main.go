@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	stderrors "errors"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -23,17 +21,21 @@ import (
 	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
+	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
 
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/healthcheck"
+	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	mcpkit "github.com/FacileStudio/tronc/mcp"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 	"github.com/FacileStudio/tronc/migrate"
 	"github.com/FacileStudio/tronc/spa"
 )
+
+var version = "dev"
 
 func main() {
 	if healthcheck.Handle(os.Args) {
@@ -92,12 +94,12 @@ func run() int {
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	identityStore, err := newPorteStore(sqlDB)
+	identityStore, err := portepg.NewFromEnv(sqlDB)
 	if err != nil {
 		appLogger.Error("failed to configure porte token sealing", slog.Any("error", err))
 		return 1
 	}
-	resealInBackground(shutdownSignal, identityStore, appLogger)
+	portepg.ResealInBackground(shutdownSignal, identityStore, appLogger)
 	users, err := auth.NewUserStore(shutdownSignal, sqlDB)
 	if err != nil {
 		appLogger.Error("failed to read the users table", slog.Any("error", err))
@@ -121,18 +123,24 @@ func run() int {
 		ClientID:     appEnv.Porte.ClientID,
 		ClientSecret: appEnv.Porte.ClientSecret,
 	}
-	erasures := deletions.NewService(db, registre, deletions.Store{
-		EraseAccount: users.EraseAccount,
-		Erase:        identityStore.EraseIdentity,
-		Holds:        identityStore.HoldsIdentity,
-	}, appLogger)
+	erasure := deletions.NewService(db, users.EraseAccount, appLogger)
+	erasures, err := kit.NewDeletions(kit.DeletionsConfig{
+		OIDC:            appEnv.Porte,
+		Store:           identityStore,
+		OnPersonDeleted: erasure.ErasePerson,
+		Logger:          appLogger,
+	})
+	if err != nil {
+		appLogger.Error("failed to configure the erasure receiver", slog.Any("error", err))
+		return 1
+	}
 
 	oidcKit, err := oidc.New(shutdownSignal, appEnv.Porte, oidc.Deps{
 		Users:      users,
 		Identities: identityStore.Identities(),
 		Sessions:   sessions,
 		Codes:      identityStore.LoginCodes(),
-		Erased:     erasures,
+		Erased:     kit.ErasedGuard(erasures),
 		Logger:     appLogger,
 	})
 	if err != nil {
@@ -181,36 +189,15 @@ func run() int {
 		return 1
 	}
 
-	addr := ":" + strconv.Itoa(appEnv.Port)
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- server.ListenAndServe()
-	}()
-
-	appLogger.Info("server starting", slog.String("addr", addr))
-	select {
-	case err := <-serverErrCh:
-		if !stderrors.Is(err, http.ErrServerClosed) {
-			appLogger.Error("server stopped", slog.Any("error", err))
-			return 1
-		}
-	case <-shutdownSignal.Done():
-		appLogger.Info("server shutting down")
-		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownContext); err != nil {
-			appLogger.Error("server shutdown failed", slog.Any("error", err))
-			return 1
-		}
-		appLogger.Info("server stopped")
+	err = httpx.Serve(shutdownSignal, router, httpx.ServeConfig{
+		Addr:         ":" + strconv.Itoa(appEnv.Port),
+		Logger:       appLogger,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	})
+	if err != nil {
+		appLogger.Error("server stopped", slog.Any("error", err))
+		return 1
 	}
 
 	return 0

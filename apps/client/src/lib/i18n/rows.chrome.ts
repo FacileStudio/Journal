@@ -1,4 +1,4 @@
-import type { Row } from './rows';
+import type { Row } from '@facile/muse';
 
 export const chrome = {
 	'app.tagline': [
@@ -21,8 +21,6 @@ export const chrome = {
 	'common.saving': ['Saving…', 'Enregistrement…', 'Guardando…', 'Speichern…'],
 	'common.creating': ['Creating…', 'Création…', 'Creando…', 'Wird erstellt…'],
 	'common.loading': ['Loading…', 'Chargement…', 'Cargando…', 'Wird geladen…'],
-	'common.copy': ['Copy', 'Copier', 'Copiar', 'Kopieren'],
-	'common.copied': ['Copied', 'Copié', 'Copiado', 'Kopiert'],
 	'common.done': ['Done', 'Terminé', 'Listo', 'Fertig'],
 	'common.never': ['never', 'jamais', 'nunca', 'nie'],
 	'common.actions': ['Actions', 'Actions', 'Acciones', 'Aktionen'],
@@ -45,12 +43,6 @@ export const chrome = {
 		'Impossible de copier dans le presse-papiers.',
 		'No se pudo copiar al portapapeles.',
 		'Kopieren in die Zwischenablage fehlgeschlagen.'
-	],
-	'clipboard.unavailable': [
-		'Clipboard is not available in this browser.',
-		'Le presse-papiers n’est pas disponible dans ce navigateur.',
-		'El portapapeles no está disponible en este navegador.',
-		'Die Zwischenablage ist in diesem Browser nicht verfügbar.'
 	],
 	'overview.title': ['Overview', 'Aperçu', 'Resumen', 'Übersicht'],
 	'overview.description': [

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import {
@@ -9,6 +9,7 @@
 		Icon,
 		Input,
 		Modal,
+		SearchField,
 		Select,
 		StatusDot,
 		Tabs,
@@ -95,7 +96,6 @@
 	 */
 	let loadGen = 0;
 	let pollCount = 0;
-	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const activeCount = $derived(
 		(selectedApp ? 1 : 0) +
@@ -261,7 +261,6 @@
 		void loadHistogram();
 	});
 
-	onDestroy(() => clearTimeout(searchTimer));
 
 	$effect(() => {
 		if (!spaces.version) return;
@@ -277,11 +276,6 @@
 		const timer = setInterval(() => void poll(), POLL_MS);
 		return () => clearInterval(timer);
 	});
-
-	function onSearchInput() {
-		clearTimeout(searchTimer);
-		searchTimer = setTimeout(apply, 300);
-	}
 
 	function toggleLevel(level: LogLevel) {
 		selectedLevels = selectedLevels.includes(level)
@@ -416,13 +410,7 @@
 
 <section class="flex flex-col gap-4">
 	<Card class="flex flex-col gap-4">
-		<Input
-			type="search"
-			bind:value={query}
-			oninput={onSearchInput}
-			placeholder={t('logs.search')}
-			aria-label={t('logs.searchLabel')}
-		/>
+		<SearchField bind:value={query} onSearch={apply} debounce={300} placeholder={t('logs.search')} label={t('logs.searchLabel')} />
 
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 			<label class="flex flex-col gap-1">

@@ -1,4 +1,4 @@
-import type { Row } from './rows';
+import type { Row } from '@facile/muse';
 
 export const spaces = {
 	'spaces.label': ['Spaces', 'Espaces', 'Espacios', 'Bereiche'],

@@ -78,7 +78,12 @@ func testRouter(t *testing.T, appEnv env.Config) chi.Router {
 	var sso ssoRoutes
 	if oidcKit.Enabled() {
 		registre := directory.Client{Issuer: appEnv.Porte.Issuer, ClientID: "journal", ClientSecret: "secret"}
-		sso.erasures = deletions.NewService(nil, registre, deletions.Store{}, slog.New(slog.DiscardHandler))
+		erasure := deletions.NewService(nil, nil, slog.New(slog.DiscardHandler))
+		receiver, err := kit.NewDeletions(kit.DeletionsConfig{OIDC: appEnv.Porte, Store: portepg.New(nil), OnPersonDeleted: erasure.ErasePerson})
+		if err != nil {
+			t.Fatalf("erasure receiver: %v", err)
+		}
+		sso.erasures = receiver
 		sso.invitations = &kit.InvitationsConfig{Directory: registre, Identities: portepg.New(nil).Identities()}
 	}
 	return built(t)(buildRouter(nil, oidcKit, sessions, users, appEnv, slog.New(slog.DiscardHandler), nil, sso, nil, tenancy{}))

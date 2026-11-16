@@ -1,26 +1,14 @@
-import { browser } from '$app/environment';
-import { LOCALE_COOKIE, matchLocale, resolveLocale, type Locale } from '@facile/muse';
+import { LOCALES, type Locale } from '@facile/muse';
+import { rememberLocale as storeLocale, resolveClientLocale } from '@facile/client/locale';
 
-function readCookie(): string | null {
-	const match = document.cookie.split('; ').find((entry) => entry.startsWith(`${LOCALE_COOKIE}=`));
-	return match ? decodeURIComponent(match.slice(LOCALE_COOKIE.length + 1)) : null;
-}
+const resolved = resolveClientLocale({ supported: LOCALES });
 
-function initial(): Locale {
-	if (!browser) return 'en';
-	return matchLocale(readCookie()) ?? resolveLocale(navigator.languages?.join(',') ?? navigator.language);
-}
+/** `locale` formats dates and numbers. `hint` is what `provideLocale` takes: null until a source names a locale. */
+export const session = $state<{ locale: Locale; hint: Locale | null }>({ locale: resolved.locale, hint: resolved.hint });
 
-export const session = $state<{ locale: Locale }>({ locale: initial() });
-
+/** Applies a locale the person chose and stores it in the suite-wide cookie. */
 export function rememberLocale(locale: Locale) {
 	session.locale = locale;
-	if (browser) {
-		document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=31536000; samesite=lax`;
-	}
-}
-
-export function adoptLocale(locale: Locale) {
-	if (browser && readCookie()) return;
-	session.locale = locale;
+	session.hint = locale;
+	storeLocale(locale);
 }

@@ -1,4 +1,4 @@
-import type { Row } from './rows';
+import type { Row } from '@facile/muse';
 
 export const ingest = {
 	'alerts.title': ['Alerts', 'Alertes', 'Alertas', 'Warnungen'],

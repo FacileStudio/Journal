@@ -1,4 +1,4 @@
-import { createApi, redirectToLogin } from '@facile/client';
+import { authConfig, createApi, redirectToLogin } from '@facile/client';
 
 const backendBaseUrl = '/api';
 
@@ -48,11 +48,6 @@ export type MeResponse = {
 export type InvitationsAnswer = {
 	count: number;
 	href?: string;
-};
-
-export type AuthConfig = {
-	sso_only: boolean;
-	oidc_enabled: boolean;
 };
 
 // Where the browser goes to start single sign-on. It is a navigation, not a
@@ -304,7 +299,7 @@ export const backend = {
 	baseUrl: backendBaseUrl,
 
 	authConfig() {
-		return apiFetch<AuthConfig>('/auth/config', {}, { quiet: true });
+		return authConfig(apiFetch);
 	},
 
 	logout() {
