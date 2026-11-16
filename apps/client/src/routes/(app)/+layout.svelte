@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, type Locale, type Theme } from '@facile/muse';
+	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
 	import { JOURNAL_ICON } from '$lib/icons';
-	import { rememberLocale, session } from '$lib/session.svelte';
-	import { theme } from '$lib/theme.svelte';
+	import { session } from '$lib/session.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { takeReturn } from '$lib/return-path';
 	import { spaces } from '$lib/workspaces.svelte';
@@ -107,13 +106,8 @@
 		avatar: user?.avatar_url || undefined
 	}));
 	const userMenu = $derived({
-		subscription: { plan: 'Gratuit', href: 'https://sso.facile.studio/spaces' },
 		helpHref: 'https://github.com/FacileStudio/Journal/tree/main/docs',
 		onSignOut: logout,
-		locale: session.locale,
-		onLocaleChange: (next: Locale) => rememberLocale(next),
-		theme: theme.mode,
-		onThemeChange: (next: Theme) => theme.set(next),
 		invitations
 	});
 </script>
