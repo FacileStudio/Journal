@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-16
+
+### Security
+
+- The client loads the Vision tracker from its own origin, as a pinned copy at `/vision-tracker.js`, instead of `https://vision.facile.studio/s.js`. A remote script ran with full access to the page and the signed-in session. The response CSP drops `https://vision.facile.studio` from `script-src`; the tracker's image beacons still pass `img-src https:`.
+
 ## [0.13.0] - 2026-11-15
 
 ### Changed
