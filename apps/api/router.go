@@ -91,7 +91,7 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 	})
 
 	health.Mount(router, checks...)
-	router.Get("/version", versionHandler)
+	router.Get("/version", health.Version(version))
 	apiref.Mount(router, referenceConfig())
 	if mcpService != nil {
 		mcp.RegisterRoutes(router, mcpService)
@@ -139,7 +139,7 @@ func buildRouter(db *gorm.DB, oidcKit *oidc.Kit, sessions *session.Manager, user
 // ssoRoutes are the routes that exist only with an OIDC issuer: Registre's
 // signed deletion push, and the user menu's pending space invitations.
 type ssoRoutes struct {
-	erasures    *deletions.Service
+	erasures    *directory.Deletions
 	invitations *kit.InvitationsConfig
 }
 
@@ -147,7 +147,7 @@ type ssoRoutes struct {
 // signs it and holds no session, and the invitations behind the session.
 func (sso ssoRoutes) register(signedIn, api chi.Router, appLogger *slog.Logger) {
 	if sso.erasures != nil {
-		deletions.RegisterRoutes(api, sso.erasures)
+		deletions.RegisterRoutes(api, sso.erasures.Handler())
 	}
 	if sso.invitations == nil {
 		return

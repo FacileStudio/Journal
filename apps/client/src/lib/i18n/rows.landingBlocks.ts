@@ -1,4 +1,4 @@
-import type { Row } from './rows';
+import type { Row } from '@facile/muse';
 
 export const landingBlocks = {
 	'landing.with.line': [

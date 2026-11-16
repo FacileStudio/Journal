@@ -1,4 +1,4 @@
-import type { Row } from './rows';
+import type { Row } from '@facile/muse';
 
 export const pending = {
 	'pending.title': ['Pending actions', 'Actions en attente', 'Acciones pendientes', 'Ausstehende Aktionen'],
@@ -22,7 +22,6 @@ export const pending = {
 		'Gespeicherte Abfrage löschen'
 	],
 	'pending.deleteAlert': ['Delete alert rule', 'Supprimer l’alerte', 'Eliminar alerta', 'Warnregel löschen'],
-	'pending.askedBy': ['Asked by {client}', 'Demandé par {client}', 'Pedido por {client}', 'Angefragt von {client}'],
 	'pending.sharedQuery': [
 		'Everyone in Journal loses this saved query.',
 		'Tout le monde dans Journal perd cette requête enregistrée.',
@@ -37,7 +36,6 @@ export const pending = {
 	],
 	'pending.alertOff': ['Disabled', 'Désactivée', 'Desactivada', 'Deaktiviert'],
 	'pending.confirmDelete': ['Delete', 'Supprimer', 'Eliminar', 'Löschen'],
-	'pending.dismiss': ['Dismiss', 'Ignorer', 'Descartar', 'Verwerfen'],
 	'pending.changed': [
 		'This changed after the request. Ask the AI client again.',
 		'Cet élément a changé après la demande. Redemandez au client IA.',

@@ -3,7 +3,7 @@
 Stdlib-only client for shipping logs to Journal from any Go app.
 
 ```sh
-go get github.com/FacileStudio/Journal/sdk/journal@main
+go get github.com/FacileStudio/Journal/sdk/journal@latest
 ```
 
 ## Direct use

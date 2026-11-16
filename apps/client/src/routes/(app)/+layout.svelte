@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, resolveLocale, type Locale, type Theme } from '@facile/muse';
+	import { MobileNav, PageTransition, SideBar, Spinner, Topbar, icons, type Locale, type Theme } from '@facile/muse';
 	import { backend, type AuthUser } from '$lib/backend';
 	import { JOURNAL_ICON } from '$lib/icons';
-	import { adoptLocale, rememberLocale, session } from '$lib/session.svelte';
+	import { rememberLocale, session } from '$lib/session.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import { useT, type Key } from '$lib/i18n';
 	import { takeReturn } from '$lib/return-path';
@@ -55,7 +55,6 @@
 			.me()
 			.then(async (res) => {
 				user = res.user;
-				adoptLocale(resolveLocale(res.user.locale));
 				await spaces.load().catch(() => undefined);
 				ready = true;
 				loadInvitations();

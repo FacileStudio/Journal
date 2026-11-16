@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { Badge, Button, Card, icons } from '@facile/muse';
+	import { Badge, PendingCard as Shell, icons } from '@facile/muse';
 	import type { PendingAction } from '$lib/backend';
-	import { formatDate } from '$lib/format';
 	import { useT } from '$lib/i18n';
 
 	let {
@@ -27,28 +26,21 @@
 		if (query.q) parts.push(`q:${query.q}`);
 		return parts.join(' · ');
 	});
-
-	/** Names the client that asked: Bulle, the host of a client URL, else its id. */
-	function clientName(clientId: string): string {
-		if (clientId === 'bulle') return 'Bulle';
-		try {
-			return new URL(clientId).host;
-		} catch {
-			return clientId || '?';
-		}
-	}
 </script>
 
-<Card class="flex flex-col gap-4">
-	<div class="flex flex-wrap items-center justify-between gap-2">
-		<Badge tone="danger">
-			{action.kind === 'delete_alert' ? t('pending.deleteAlert') : t('pending.deleteQuery')}
-		</Badge>
-		<span class="text-fc-xs text-fc-fg-muted">
-			{t('pending.askedBy', { client: clientName(action.client_id) })} · {formatDate(action.created_at)}
-		</span>
-	</div>
-
+<Shell
+	kind={action.kind === 'delete_alert' ? t('pending.deleteAlert') : t('pending.deleteQuery')}
+	client={action.client_id}
+	createdAt={action.created_at}
+	state={action.state}
+	{busy}
+	confirmLabel={t('pending.confirmDelete')}
+	confirmIcon={icons.remove}
+	changedLabel={t('pending.changed')}
+	missingLabel={t('pending.missing')}
+	onConfirm={() => onconfirm(action)}
+	onDismiss={() => ondismiss(action)}
+>
 	{#if action.query}
 		<div class="flex flex-col gap-1 rounded-fc-md bg-fc-surface p-4">
 			<p class="text-fc-md font-medium break-words text-fc-fg">{action.query.name}</p>
@@ -76,27 +68,4 @@
 	{:else}
 		<p class="text-fc-sm break-words text-fc-fg-muted">{action.summary}</p>
 	{/if}
-
-	{#if action.state === 'changed'}
-		<p class="text-fc-sm text-fc-warning">{t('pending.changed')}</p>
-	{:else if action.state === 'missing'}
-		<p class="text-fc-sm text-fc-warning">{t('pending.missing')}</p>
-	{/if}
-
-	<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-		<Button variant="ghost" class="w-full sm:w-auto" disabled={busy} onclick={() => ondismiss(action)}>
-			{t('pending.dismiss')}
-		</Button>
-		{#if action.state === 'ready'}
-			<Button
-				variant="danger"
-				class="w-full sm:w-auto"
-				disabled={busy}
-				icon={icons.remove}
-				onclick={() => onconfirm(action)}
-			>
-				{t('pending.confirmDelete')}
-			</Button>
-		{/if}
-	</div>
-</Card>
+</Shell>

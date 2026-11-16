@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { browser } from '$app/environment';
+	import { forgetLegacyTokens } from '@facile/client';
 	import { Toaster, provideLocale } from '@facile/muse';
 	import { registerAppIcons } from '$lib/icons';
 	import { theme } from '$lib/theme.svelte';
@@ -8,24 +9,13 @@
 
 	let { children } = $props();
 
-	provideLocale(() => session.locale);
+	provideLocale(() => session.hint);
 
 	registerAppIcons();
 
 	if (browser) {
 		theme.restore();
-		forgetLegacyToken();
-	}
-
-	/* The dashboard once kept a bearer session token in localStorage. The session is the HttpOnly
-	   cookie now and nothing reads the key, so a stored token is only a credential left lying in
-	   script-readable storage. */
-	function forgetLegacyToken() {
-		try {
-			localStorage.removeItem('journal.token');
-		} catch {
-			return;
-		}
+		forgetLegacyTokens(['journal.token']);
 	}
 </script>
 

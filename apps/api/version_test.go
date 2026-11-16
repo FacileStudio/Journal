@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/FacileStudio/tronc/health"
 )
 
 func TestVersionIsTheReleaseVersion(t *testing.T) {
@@ -24,7 +26,7 @@ func TestVersionIsTheReleaseVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	versionHandler(recorder, httptest.NewRequest(http.MethodGet, "/version", nil))
+	health.Version(version)(recorder, httptest.NewRequest(http.MethodGet, "/version", nil))
 	want := `{"version":"v` + pkg.Version + `"}`
 	if strings.TrimSpace(recorder.Body.String()) != want {
 		t.Errorf("GET /version = %q, want %q", recorder.Body.String(), want)

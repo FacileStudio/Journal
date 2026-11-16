@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { refusesOwnSession } from '@facile/client';
 	import { Alert, Button, EmptyState, Skeleton, icons, toast } from '@facile/muse';
 	import { backend, ssoLoginUrl, type PendingAction } from '$lib/backend';
 	import { rememberReturn } from '$lib/return-path';
-	import { refusesOwnSession } from '$lib/session-refusal';
-	import PageHeader from '$lib/components/PageHeader.svelte';
+		import PageHeader from '$lib/components/PageHeader.svelte';
 	import PendingCard from '$lib/components/PendingCard.svelte';
 	import { useT } from '$lib/i18n';
 

@@ -14,7 +14,9 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/testdb"
 	"github.com/FacileStudio/Journal/apps/api/modules/auth"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
+	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte/kit"
 	portepg "github.com/FacileStudio/porte/pg"
 	"gorm.io/gorm"
 )
@@ -33,10 +35,11 @@ func count(t *testing.T, db *gorm.DB, query string, args ...any) int64 {
 type fixture struct {
 	db          *gorm.DB
 	service     *Service
+	receiver    *directory.Deletions
 	gone, other int64
 	personal    int64
 	issuer      string
-	store       Store
+	cfg         kit.DeletionsConfig
 	deleted     []directory.Deleted
 }
 
@@ -65,15 +68,28 @@ func seed(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("sql handle: %v", err)
 	}
-	client := directory.Client{Issuer: f.issuer, ClientID: "journal", ClientSecret: "s3cret"}
 	users, err := auth.NewUserStore(context.Background(), sqlDB)
 	if err != nil {
 		t.Fatalf("user store: %v", err)
 	}
-	identities := portepg.New(sqlDB)
-	f.store = Store{EraseAccount: users.EraseAccount, Erase: identities.EraseIdentity, Holds: identities.HoldsIdentity}
-	f.service = NewService(f.db, client, f.store, quietLogger())
+	f.service = NewService(f.db, users.EraseAccount, quietLogger())
+	f.cfg = kit.DeletionsConfig{
+		OIDC:            porte.Config{Issuer: f.issuer, ClientID: "journal", ClientSecret: "s3cret", RedirectURL: f.issuer + "/cb"},
+		Store:           portepg.New(sqlDB),
+		OnPersonDeleted: f.service.ErasePerson,
+		Logger:          quietLogger(),
+	}
+	f.receiver = f.newReceiver(t)
 	return f
+}
+
+func (f *fixture) newReceiver(t *testing.T) *directory.Deletions {
+	t.Helper()
+	receiver, err := kit.NewDeletions(f.cfg)
+	if err != nil || receiver == nil {
+		t.Fatalf("NewDeletions = %v, %v", receiver, err)
+	}
+	return receiver
 }
 
 func (f *fixture) assertErased(t *testing.T) {
@@ -136,7 +152,7 @@ func TestPollErasesTheListedPersonOnce(t *testing.T) {
 	f := seed(t)
 	f.deleted = []directory.Deleted{{Subject: "sub-gone", DeletedAt: time.Now().Add(-time.Minute)}}
 
-	if err := f.service.receiver.Poll(context.Background()); err != nil {
+	if err := f.receiver.Poll(context.Background()); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 	f.assertErased(t)
@@ -144,8 +160,7 @@ func TestPollErasesTheListedPersonOnce(t *testing.T) {
 		t.Fatalf("the receiver state was not persisted: %d rows", got)
 	}
 
-	restarted := NewService(f.db, f.service.receiver.Client, f.store, quietLogger())
-	if err := restarted.receiver.Poll(context.Background()); err != nil {
+	if err := f.newReceiver(t).Poll(context.Background()); err != nil {
 		t.Fatalf("second poll: %v", err)
 	}
 	f.assertErased(t)
@@ -157,40 +172,25 @@ func TestPollErasesTheListedPersonOnce(t *testing.T) {
 func TestARecreatedAccountForAnErasedSubjectIsErasedAgain(t *testing.T) {
 	f := seed(t)
 	f.deleted = []directory.Deleted{{Subject: "sub-gone", DeletedAt: time.Now().Add(-time.Minute)}}
-	if err := f.service.receiver.Poll(context.Background()); err != nil {
+	if err := f.receiver.Poll(context.Background()); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 
-	erased, err := f.service.Erased(context.Background(), f.issuer, "sub-gone")
+	erased, err := f.receiver.Erased(context.Background(), f.issuer, "sub-gone")
 	if err != nil || !erased {
 		t.Fatalf("Erased(sub-gone) = %v, %v; want true: sign-in and provisioning would not be refused", erased, err)
 	}
-	if erased, err := f.service.Erased(context.Background(), f.issuer, "sub-other"); err != nil || erased {
+	if erased, err := f.receiver.Erased(context.Background(), f.issuer, "sub-other"); err != nil || erased {
 		t.Fatalf("Erased(sub-other) = %v, %v; want false", erased, err)
 	}
 
 	f.gone = seedPerson(t, f.db, f.issuer, "again@facile.studio", "sub-gone", false)
-	if err := f.service.receiver.Poll(context.Background()); err != nil {
+	if err := f.receiver.Poll(context.Background()); err != nil {
 		t.Fatalf("second poll: %v", err)
 	}
 	f.assertErased(t)
 	if got := count(t, f.db, `SELECT count(*) FROM users WHERE email = 'again@facile.studio'`); got != 0 {
 		t.Fatal("the re-created account survived the next poll")
-	}
-}
-
-func TestDeletionStateSurvivesARestart(t *testing.T) {
-	st := state{orm: testdb.Migrated(t)}
-	if saved, err := st.Load(context.Background()); err != nil || saved != nil {
-		t.Fatalf("empty Load = %q, %v; want nil", saved, err)
-	}
-	for _, blob := range []string{"one", "two"} {
-		if err := st.Save(context.Background(), []byte(blob)); err != nil {
-			t.Fatalf("save: %v", err)
-		}
-	}
-	if saved, err := st.Load(context.Background()); err != nil || string(saved) != "two" {
-		t.Fatalf("Load = %q, %v; want two", saved, err)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestPushWithoutASignatureIsRefused(t *testing.T) {
 	f := seed(t)
 	request := httptest.NewRequest(http.MethodPost, directory.DeletionsPath, nil)
 	recorder := httptest.NewRecorder()
-	f.service.Handler().ServeHTTP(recorder, request)
+	f.receiver.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unsigned push = %d, want 400", recorder.Code)
 	}

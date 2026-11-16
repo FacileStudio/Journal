@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Alert, Button, Drawer, Icon, Spinner, icons, toast } from '@facile/muse';
+	import { Alert, CopyButton, Drawer, Spinner, toast } from '@facile/muse';
 	import { useT } from '$lib/i18n';
 	import { formatDate } from '$lib/format';
 
@@ -72,17 +72,10 @@
 		return lines.join('\n');
 	}
 
-	function copyEntry() {
-		if (!entry) return;
-		const text = contextText(entry);
-		if (navigator.clipboard && navigator.clipboard.writeText) {
-			navigator.clipboard
-				.writeText(text)
-				.then(() => toast.success(t('clipboard.copied')))
-				.catch(() => toast.danger(t('clipboard.failed')));
-		} else {
-			toast.danger(t('clipboard.unavailable'));
-		}
+	/** Toasts the outcome of copying the entry. */
+	function copied(ok: boolean) {
+		if (ok) toast.success(t('clipboard.copied'));
+		else toast.danger(t('clipboard.failed'));
 	}
 </script>
 
@@ -94,10 +87,8 @@
 >
 	{#snippet footer()}
 		{#if entry}
-			<Button class="w-full" variant="secondary" onclick={copyEntry}>
-				<Icon icon={icons.copy} size={16} />
-				{t('drawer.copyContext')}
-			</Button>
+			{@const shown = entry}
+			<CopyButton showLabel class="w-full" label={t('drawer.copyContext')} text={() => contextText(shown)} onCopy={copied} />
 		{/if}
 	{/snippet}
 

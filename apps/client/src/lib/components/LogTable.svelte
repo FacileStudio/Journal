@@ -1,6 +1,6 @@
 <script lang="ts">
 	import SpaceTag from '$lib/components/SpaceTag.svelte';
-	import { Icon, Button, EmptyState, Spinner, Table, Tooltip, icons, toast } from '@facile/muse';
+	import { Icon, Button, CopyButton, EmptyState, Spinner, Table, Tooltip, icons, toast } from '@facile/muse';
 	import { backend, type LogEntry, type LogLevel, type ResolvedStack, type StackFrame } from '$lib/backend';
 	import { formatClock, formatTime } from '$lib/format';
 	import LevelBadge from './LevelBadge.svelte';
@@ -35,7 +35,6 @@
 	} = $props();
 
 	let expandedId = $state<number | null>(null);
-	let copiedId = $state<number | null>(null);
 
 	const gaps = $derived(new Set(gapIds));
 
@@ -145,20 +144,10 @@
 		return lines.join('\n');
 	}
 
-	function copyEntry(entry: LogEntry) {
-		const text = contextText(entry);
-		if (navigator.clipboard && navigator.clipboard.writeText) {
-			navigator.clipboard
-				.writeText(text)
-				.then(() => {
-					copiedId = entry.id;
-					toast.success(t('clipboard.copied'));
-					setTimeout(() => (copiedId = null), 2000);
-				})
-				.catch(() => toast.danger(t('clipboard.failed')));
-		} else {
-			toast.danger(t('clipboard.unavailable'));
-		}
+	/** Toasts the outcome of copying one entry. */
+	function copied(ok: boolean) {
+		if (ok) toast.success(t('clipboard.copied'));
+		else toast.danger(t('clipboard.failed'));
 	}
 </script>
 
@@ -304,16 +293,7 @@
 											{t('table.context')}
 										</Button>
 									{/if}
-									<Button
-										size="sm"
-										variant="secondary"
-										icon={copiedId === entry.id ? icons.check : icons.copy}
-										onclick={() => copyEntry(entry)}
-										disabled={copiedId === entry.id}
-										class="transition-colors duration-200"
-									>
-										{copiedId === entry.id ? t('common.copied') : t('common.copy')}
-									</Button>
+									<CopyButton showLabel size="sm" text={() => contextText(entry)} onCopy={copied} />
 									{#if sourceOf(entry) && onPivotSource}
 										<Button
 											size="sm"

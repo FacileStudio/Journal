@@ -71,16 +71,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	cfg.Porte = porte.Config{
-		ClaimsScope:  troncenv.String("OIDC_CLAIMS_SCOPE", ""),
-		Issuer:       troncenv.String("OIDC_ISSUER", ""),
-		ClientID:     troncenv.String("OIDC_CLIENT_ID", ""),
-		ClientSecret: troncenv.String("OIDC_CLIENT_SECRET", ""),
-		RedirectURL:  troncenv.String("OIDC_REDIRECT_URL", ""),
-		SuccessURL:   troncenv.String("OIDC_SUCCESS_URL", ""),
-		CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
-	}
-	if err := cfg.Porte.Validate(); err != nil {
+	if cfg.Porte, err = porte.ConfigFromEnv(nil, porte.Config{}); err != nil {
 		return Config{}, err
 	}
 

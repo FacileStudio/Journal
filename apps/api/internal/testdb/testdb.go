@@ -2,118 +2,53 @@
 //
 // Postgres is the only database in this suite, tests included: a test on
 // SQLite builds a different schema from the same struct tags and then passes,
-// proving nothing about the DDL that ships — and it cannot run what does ship,
-// which here is a generated tsvector column, to_regclass and an ON CONFLICT.
+// proving nothing about the DDL that ships. It wraps tronc/testdb, which gives
+// every call a schema of its own.
 package testdb
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/FacileStudio/Journal/apps/api/migrations"
+	troncdb "github.com/FacileStudio/tronc/testdb"
 
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// Open returns a migrated database scoped to a schema of this test's own, or
-// skips when JOURNAL_TEST_DATABASE_URL is unset.
-//
-// Every caller gets its own PostgreSQL schema rather than a reset of public.
-// go test runs one binary per package concurrently, so two of them dropping
-// and recreating the same schema race in a way that surfaces as a nonsense
-// error a long way from the cause — a missing log_entries table, a duplicate
-// key in pg_type — and blames whichever test happened to lose. The search path
-// is put in the connection string rather than a SET, because GORM hands out
-// pooled connections and a SET reaches exactly the one it ran on, so half the
-// test would silently address public instead.
-func Open(t *testing.T) *gorm.DB {
+const envVar = "JOURNAL_TEST_DATABASE_URL"
+
+func open(t *testing.T, migrate func(*gorm.DB) error) *gorm.DB {
 	t.Helper()
-	url := os.Getenv("JOURNAL_TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("JOURNAL_TEST_DATABASE_URL is unset")
+	url, ok := troncdb.URLFrom(envVar)
+	if !ok {
+		t.Skip(envVar + " is unset")
 	}
+	return troncdb.OpenIsolated(t, url, troncdb.Config{Prefix: "journal_test", Migrate: migrate})
+}
 
-	name := schemaName(t.Name())
-	admin, err := gorm.Open(postgres.Open(url), &gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := admin.Exec(`DROP SCHEMA IF EXISTS ` + name + ` CASCADE`).Error; err != nil {
-		t.Fatalf("drop the test schema: %v", err)
-	}
-	if err := admin.Exec(`CREATE SCHEMA ` + name).Error; err != nil {
-		t.Fatalf("create the test schema: %v", err)
-	}
-
-	db, err := gorm.Open(postgres.Open(withSearchPath(url, name)), &gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		t.Fatalf("open with the search path: %v", err)
-	}
-	t.Cleanup(func() {
-		if handle, err := db.DB(); err == nil {
-			_ = handle.Close()
-		}
-		_ = admin.Exec(`DROP SCHEMA IF EXISTS ` + name + ` CASCADE`).Error
-		if handle, err := admin.DB(); err == nil {
-			_ = handle.Close()
-		}
-	})
-	return db
+// Open returns an empty database scoped to a schema of this test's own, or
+// skips when JOURNAL_TEST_DATABASE_URL is unset.
+func Open(t *testing.T) *gorm.DB {
+	return open(t, func(*gorm.DB) error { return nil })
 }
 
 // Migrated is Open plus the app's migrations, which is what most tests want.
 func Migrated(t *testing.T) *gorm.DB {
-	t.Helper()
-	db := Open(t)
-	if err := Up(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
+	return open(t, Up)
 }
 
 // Up applies the migrations to db as the binary does at boot, under an
-// advisory lock of the test schema's own. The lock is per database, and every
-// test package migrates a schema of the same database at once, so the boot's
-// single lock would queue them behind each other.
+// advisory lock of the test schema's own, so test packages migrating at once
+// do not queue behind the boot's single lock.
 func Up(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
 	cfg := migrations.Config(sqlDB, nil)
-	if err := db.Raw(`SELECT hashtext(current_schema())`).Scan(&cfg.LockID).Error; err != nil {
+	if cfg.LockID, err = troncdb.LockID(db); err != nil {
 		return err
 	}
 	return migrations.Up(context.Background(), cfg)
-}
-
-// withSearchPath points a connection string at one schema.
-func withSearchPath(url, schema string) string {
-	separator := "?"
-	if strings.Contains(url, "?") {
-		separator = "&"
-	}
-	return url + separator + "search_path=" + schema
-}
-
-// schemaName turns a test name into a legal, unquoted identifier.
-func schemaName(test string) string {
-	safe := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r + ('a' - 'A')
-		default:
-			return '_'
-		}
-	}, test)
-	if len(safe) > 40 {
-		safe = safe[:40]
-	}
-	return "test_" + safe
 }
