@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestSecurityConfigOpensWhatTheLandingFetchesAndLoads(t *testing.T) {
 		t.Fatalf("connect-src = %v, want the Ardoise catalog origin", cfg.CSPSources["connect-src"])
 	}
 	scripts := cfg.CSPSources["script-src"]
-	if !slices.Contains(scripts, visionOrigin) || len(scripts) < 2 {
-		t.Fatalf("script-src = %v, want the inline script hash and the Vision origin", scripts)
+	if len(scripts) == 0 || slices.ContainsFunc(scripts, func(s string) bool { return strings.HasPrefix(s, "https:") }) {
+		t.Fatalf("script-src = %v, want inline script hashes and no remote origin", scripts)
 	}
 }

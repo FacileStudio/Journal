@@ -216,17 +216,13 @@ func run() int {
 	return 0
 }
 
-// visionOrigin serves the Vision tracker that app.html loads on the production host.
-const visionOrigin = "https://vision.facile.studio"
-
 // ardoiseCatalogOrigin serves the plan catalog the landing's pricing block fetches.
 const ardoiseCatalogOrigin = "https://api-ardoise.facile.studio"
 
 // securityConfig extends tronc's default security headers with the inline
 // scripts adapter-static writes into the built client, which script-src 'self'
-// would otherwise block, and with the Vision tracker's origin. A client
-// directory that cannot be hashed is logged and leaves the default script
-// policy, which only reports.
+// would otherwise block. A client directory that cannot be hashed is logged and
+// leaves the default script policy, which only reports.
 func securityConfig(clientDir string, appLogger *slog.Logger) troncmiddleware.SecurityConfig {
 	if !spa.Available(clientDir) {
 		return troncmiddleware.SecurityConfig{}
@@ -237,7 +233,7 @@ func securityConfig(clientDir string, appLogger *slog.Logger) troncmiddleware.Se
 		return troncmiddleware.SecurityConfig{}
 	}
 	return troncmiddleware.SecurityConfig{CSPSources: map[string][]string{
-		"script-src":  append(hashes, visionOrigin),
+		"script-src":  hashes,
 		"connect-src": {ardoiseCatalogOrigin},
 	}}
 }
