@@ -3,7 +3,7 @@ package alerts
 import (
 	"context"
 	stderrors "errors"
-	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -11,6 +11,7 @@ import (
 	"github.com/FacileStudio/Journal/apps/api/internal/workspace"
 	"github.com/FacileStudio/Journal/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/netguard"
 
 	"gorm.io/gorm"
 )
@@ -145,7 +146,7 @@ func validateRule(name string, threshold, windowMinutes int, webhookURL string, 
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return errors.Invalid("webhook_url must be a valid http or https URL")
 	}
-	if ip := net.ParseIP(parsed.Hostname()); ip != nil && isBlockedIP(ip) {
+	if ip, err := netip.ParseAddr(parsed.Hostname()); err == nil && netguard.IsInternal(ip) {
 		return errors.Invalid("webhook_url must not point at a private, loopback, or metadata address")
 	}
 	return nil
