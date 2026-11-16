@@ -2,40 +2,45 @@ package alerts
 
 import (
 	"context"
-	stderrors "errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/FacileStudio/tronc/netguard"
 )
 
-func TestIsBlockedIP(t *testing.T) {
+func TestValidateRuleRefusesInternalLiterals(t *testing.T) {
 	cases := []struct {
 		name    string
-		ip      string
+		host    string
 		blocked bool
 	}{
 		{"loopback v4", "127.0.0.1", true},
-		{"loopback v6", "::1", true},
+		{"loopback v6", "[::1]", true},
 		{"metadata", "169.254.169.254", true},
 		{"private 10", "10.0.0.5", true},
 		{"private 172", "172.16.0.1", true},
 		{"private 192", "192.168.1.1", true},
-		{"ula v6", "fc00::1", true},
+		{"ula v6", "[fc00::1]", true},
 		{"multicast", "224.0.0.1", true},
 		{"unspecified", "0.0.0.0", true},
+		{"cgnat", "100.64.0.1", true},
+		{"cgnat alibaba metadata", "100.100.100.200", true},
+		{"reserved 240/4", "240.0.0.1", true},
+		{"this network 0/8", "0.1.2.3", true},
+		{"nat64 of metadata", "[64:ff9b::a9fe:a9fe]", true},
+		{"6to4 of loopback", "[2002:7f00:1::1]", true},
+		{"mapped loopback", "[::ffff:127.0.0.1]", true},
 		{"public google", "8.8.8.8", false},
 		{"public cloudflare", "1.1.1.1", false},
+		{"nat64 of public", "[64:ff9b::808:808]", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ip := net.ParseIP(tc.ip)
-			if ip == nil {
-				t.Fatalf("ParseIP(%q) = nil", tc.ip)
-			}
-			if got := isBlockedIP(ip); got != tc.blocked {
-				t.Fatalf("isBlockedIP(%s) = %v, want %v", tc.ip, got, tc.blocked)
+			err := validateRule("rule", 1, 5, "https://"+tc.host+"/hook", "webhook")
+			if (err != nil) != tc.blocked {
+				t.Fatalf("validateRule(%s) error = %v, want blocked=%v", tc.host, err, tc.blocked)
 			}
 		})
 	}
@@ -73,8 +78,8 @@ func TestGuardedClientRefusesLoopback(t *testing.T) {
 	}
 	if _, err := guarded.Do(request); err == nil {
 		t.Fatal("guarded client reached loopback server, want dial error")
-	} else if !stderrors.Is(err, errBlockedWebhookTarget) {
-		t.Logf("guarded dial rejected as expected: %v", err)
+	} else if _, ok := netguard.AsBlocked(err); !ok {
+		t.Fatalf("guarded client error = %v, want a netguard refusal", err)
 	}
 
 	trusted := trustedClient(2 * time.Second)
