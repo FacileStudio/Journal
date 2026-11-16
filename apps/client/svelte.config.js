@@ -11,8 +11,7 @@ const config = {
 			directives: {
 				'script-src': [
 					'self',
-					'https://vision.facile.studio',
-					'sha256-Xeng4whxN8ZlXgd5IUoCjxu9AGt/iFyk3tQDEbwHda4=',
+					'sha256-0T6cfH+fUhn5orKAp2IkbCejpY1EdL0lAMTgbJZblwY=',
 					'sha256-2q02c/nBkodKd5cpYD9CqDcLRNS56rPl/l9WRua0vQU='
 				],
 				'style-src': ['self', 'unsafe-inline'],
