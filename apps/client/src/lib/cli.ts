@@ -10,7 +10,7 @@ export const CLI_CHECKSUMS_URL = `${REPO}/releases/latest/download/checksums.txt
 export function cliCommands(t: Translator<Record<Key, string>>): CliCommand[] {
 	return [
 		{ label: t('downloads.install.script'), command: 'curl -fsSL https://raw.githubusercontent.com/FacileStudio/journal-cli/main/install.sh | bash' },
-		{ label: t('downloads.install.facile'), command: 'facile install journal' },
+		{ label: t('downloads.install.kit'), command: 'kit add journal' },
 		{ label: t('downloads.install.brew'), command: 'brew install --cask FacileStudio/tap/journal' }
 	];
 }
