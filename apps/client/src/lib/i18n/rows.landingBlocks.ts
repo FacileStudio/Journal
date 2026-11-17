@@ -92,6 +92,6 @@ export const landingBlocks = {
 		'Die journal-CLI auf macOS oder Linux installieren.'
 	],
 	'downloads.install.script': ['Install script', 'Script d’installation', 'Script de instalación', 'Installationsskript'],
-	'downloads.install.facile': ['With the facile CLI', 'Avec la CLI facile', 'Con la CLI facile', 'Mit der facile-CLI'],
+	'downloads.install.kit': ['With kit', 'Avec kit', 'Con kit', 'Mit kit'],
 	'downloads.install.brew': ['Homebrew', 'Homebrew', 'Homebrew', 'Homebrew']
 } as const satisfies Record<string, Row>;
