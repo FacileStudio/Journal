@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-11-17
+
+### Changed
+
+- Vision tracker v0.15.0: sends bot-detection flags and a first-gesture engagement beacon.
+
 ## [0.13.2] - 2026-11-16
 
 ### Changed
